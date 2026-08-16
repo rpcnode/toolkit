@@ -8,7 +8,7 @@ import {
 } from '../lib/nodeLifecycle'
 import { supportsSnapshotStep } from '../lib/network'
 import type { LifecycleInfo, LifecycleStep, StatusPayload } from '../types'
-import { pct } from '../lib/format'
+import { formatSyncPct, parseSyncPctFromDetail, pct } from '../lib/format'
 
 type Props = {
   status?: StatusPayload | null
@@ -39,13 +39,6 @@ function stepColor(s: LifecycleStep): string {
 function syncBarFill(progress: number, _syncing?: boolean): number {
   if (progress > 0) return Math.min(100, progress)
   return 0
-}
-
-function formatSyncPctLabel(progress: number): string {
-  if (progress >= 100) return '100%'
-  if (progress >= 10) return `${Math.round(progress)}%`
-  const one = Math.round(progress * 10) / 10
-  return `${one}%`
 }
 
 function synthesizeSteps(
@@ -287,7 +280,7 @@ export function LifecycleStepper({
     status?.rpc?.verification_pct ??
     status?.sync?.dump_pct ??
     status?.snapshot?.pct
-  const progress =
+  let progress =
     progressRaw == null || progressRaw === ''
       ? 0
       : pct(typeof progressRaw === 'number' ? progressRaw : String(progressRaw))
@@ -319,6 +312,12 @@ export function LifecycleStepper({
       status?.ui_phase ||
       'Loading…'
   const detail = displayCurrent?.detail || lc?.detail || active?.detail || ''
+  if (progress <= 0) {
+    const fromDetail = parseSyncPctFromDetail(detail)
+    if (fromDetail != null && fromDetail > 0) {
+      progress = fromDetail
+    }
+  }
   const heightVal = lc?.height ?? status?.rpc?.node_height ?? null
 
   if (compact) {
@@ -365,7 +364,7 @@ export function LifecycleStepper({
               color="yellow"
             />
             <Text size="xs" c="dimmed" className="mono" style={{ flexShrink: 0 }}>
-              {progress > 0 ? formatSyncPctLabel(progress) : '…'}
+              {progress > 0 ? formatSyncPct(progress) : '…'}
             </Text>
           </Group>
         )}
@@ -386,7 +385,7 @@ export function LifecycleStepper({
                   : `${Number(heightVal).toLocaleString()} blk`
                 : progress > 0 || syncingBar
                   ? progress > 0
-                    ? formatSyncPctLabel(progress)
+                    ? formatSyncPct(progress)
                     : '…'
                   : ''}
             </Text>
@@ -501,7 +500,7 @@ export function LifecycleStepper({
           />
           {(progress > 0 || syncingBar) && (
             <Text size="sm" c="dimmed" className="mono" style={{ flexShrink: 0 }}>
-              {progress > 0 ? formatSyncPctLabel(progress) : '…'}
+              {progress > 0 ? formatSyncPct(progress) : '…'}
             </Text>
           )}
         </Group>

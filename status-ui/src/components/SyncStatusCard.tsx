@@ -2,7 +2,7 @@ import { Badge, Card, Group, Progress, Text, Title } from '@mantine/core'
 import { IconServer } from '@tabler/icons-react'
 import type { StatusPayload, SyncInfo } from '../types'
 import { CopyMaskedUrl } from './CopyMaskedUrl'
-import { formatNodeWhen, num } from '../lib/format'
+import { formatNodeWhen, formatSyncPct, num } from '../lib/format'
 import { maskHostname } from '../lib/maskHost'
 import {
   isBitcoinRegtestEnv,
@@ -74,7 +74,7 @@ export function resolveSyncProgressPct(status?: StatusPayload | null): number | 
   if (snapBusy && snapPct != null) return snapPct
   // XRPL: always compute from complete_ledgers — agent used to floor <0.1% to 0.1.
   if (isXrplNetwork(resolveNetwork(status))) {
-    const win = parseXrplComplete(sync?.complete_ledgers)
+    const win = parseXrplComplete(sync?.complete_ledgers) || parseXrplComplete(sync?.detail)
     const seq =
       (typeof sync?.ledger_seq === 'number' && sync.ledger_seq > 0
         ? sync.ledger_seq
@@ -316,7 +316,9 @@ export function SyncStatusCard({
   const ton = isTonNetwork(net)
   const tron = isTronNetwork(net)
   const xrpl = isXrplNetwork(net)
-  const xrplWin = xrpl ? parseXrplComplete(sync?.complete_ledgers) : null
+  const xrplWin = xrpl
+    ? parseXrplComplete(sync?.complete_ledgers) || parseXrplComplete(sync?.detail)
+    : null
   const xrplSeq =
     (typeof sync?.ledger_seq === 'number' && sync.ledger_seq > 0
       ? sync.ledger_seq
@@ -545,9 +547,9 @@ export function SyncStatusCard({
                   </Text>
                 </>
               ) : xrpl && xrplHistPct != null ? (
-                `${xrplHistPct < 1 ? xrplHistPct.toFixed(3) : xrplHistPct.toFixed(1)}%`
+                formatSyncPct(xrplHistPct)
               ) : progress != null ? (
-                `${progress.toFixed(1)}%`
+                formatSyncPct(progress)
               ) : syncing ? (
                 '…'
               ) : (
@@ -580,9 +582,7 @@ export function SyncStatusCard({
               />
               <Text size="xs" c="dimmed" mb={2}>
                 History toward genesis
-                {xrplHistPct != null
-                  ? ` · ${xrplHistPct < 1 ? xrplHistPct.toFixed(3) : xrplHistPct.toFixed(1)}%`
-                  : ''}
+                {xrplHistPct != null ? ` · ${formatSyncPct(xrplHistPct)}` : ''}
               </Text>
               <Progress
                 value={xrplHistPct ?? 0}

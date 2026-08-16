@@ -24,6 +24,25 @@ export function pct(raw: string | number | undefined): number {
   return Math.max(0, Math.min(100, n))
 }
 
+/** Sync label: 0.017% stays visible (do not toFixed(1) → 0.0%). */
+export function formatSyncPct(progress: number): string {
+  if (!Number.isFinite(progress) || progress <= 0) return '0%'
+  if (progress >= 99.95) return '100%'
+  if (progress < 1) return `${progress.toFixed(3)}%`
+  if (progress < 10) return `${progress.toFixed(1)}%`
+
+  return `${Math.round(progress)}%`
+}
+
+export function parseSyncPctFromDetail(detail?: string | null): number | null {
+  const m = String(detail || '').match(/(\d+(?:\.\d+)?)\s*%/)
+  if (!m) return null
+  const n = Number(m[1])
+  if (!Number.isFinite(n)) return null
+
+  return Math.max(0, Math.min(100, n))
+}
+
 export function chartSeries(points: MetricPoint[] | undefined, key: string) {
   if (!points?.length) return []
   return points.map((p) => ({

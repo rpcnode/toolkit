@@ -10,7 +10,7 @@ export function xrplGenesisForEnv(env?: string | null): number {
 export function parseXrplComplete(raw?: string | null): { lo: number; hi: number } | null {
   const s = String(raw || '').trim()
   if (!s || s === 'empty' || s === '<nil>') return null
-  const m = s.match(/^(\d+)\s*-\s*(\d+)/)
+  const m = s.match(/(?:^|complete\s+)(\d+)\s*-\s*(\d+)/i)
   if (!m) return null
   const lo = Number(m[1])
   const hi = Number(m[2])

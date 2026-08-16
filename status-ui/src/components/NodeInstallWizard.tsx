@@ -43,7 +43,7 @@ import type { StatusPayload } from '../types'
 import { CopyMaskedUrl } from './CopyMaskedUrl'
 import { copyText } from '../lib/copyText'
 import { agentVersionOutdated } from '../lib/agentVersion'
-import { pct } from '../lib/format'
+import { formatSyncPct, pct } from '../lib/format'
 import { maskHostname } from '../lib/maskHost'
 import {
   agentLifecycleStepAcked,
@@ -1906,12 +1906,12 @@ export function NodeInstallWizard({
                         </Text>
                         {syncProgress != null ? (
                           <Text span size="sm" c="dimmed" fw={600} ml={8}>
-                            · {syncProgress.toFixed(1)}% lag closed
+                            · {formatSyncPct(syncProgress)} lag closed
                           </Text>
                         ) : null}
                       </>
                     ) : syncProgress != null ? (
-                      `${syncProgress.toFixed(1)}%`
+                      formatSyncPct(syncProgress)
                     ) : syncingInWizard ? (
                       '…'
                     ) : (
