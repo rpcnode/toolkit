@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os/exec"
 	"path/filepath"
@@ -27,8 +28,8 @@ type xrplServerInfo struct {
 }
 
 // collectXRPL — stock xrpld lifecycle.
-// Synced only when live tip (server_state full|proposing|validating) AND
-// complete_ledgers reaches genesis. server_state=full alone is tip-live, not history.
+// Synced = live tip (server_state full|proposing|validating) AND the chosen
+// history window (full → genesis; otherwise complete span ≥ ledger_history).
 func collectXRPL(cfg Config) map[string]any {
 	network := cfg.Network
 	if network == "" {
@@ -55,11 +56,12 @@ func collectXRPL(cfg Config) map[string]any {
 	rpcOK := info.OK
 	completeLo, completeHi := parseXRPLCompleteLedgers(info.Complete)
 	live := info.Synced
-	historyOK := xrplHistoryCaughtUp(cfg.Env, completeLo, completeHi, info.Seq)
-	// Synced = live tip AND history from genesis. server_state=full alone is not enough.
+	histPol := resolveXRPLHistoryPolicy(cfg.EtcDir)
+	historyOK := xrplHistoryOK(cfg.Env, completeLo, completeHi, info.Seq, histPol)
+	// Synced = live tip AND chosen history window. server_state=full alone is not enough.
 	info.Synced = live && historyOK
 	syncing := rpcOK && !info.Synced
-	verifyPct := xrplVerificationPct(live, historyOK, completeLo, completeHi, info.Seq, xrplGenesisLedger(cfg.Env))
+	verifyPct := xrplVerificationPct(live, historyOK, completeLo, completeHi, info.Seq, xrplGenesisLedger(cfg.Env), int64(histPol.Ledgers))
 	if !rpcOK {
 		verifyPct = 0
 	}
@@ -268,6 +270,8 @@ func collectXRPL(cfg Config) map[string]any {
 		"updated_at":       updatedAt,
 		"log_tail":         logTail,
 		"verification_pct": verifyPct,
+		"history_mode":     histPol.Mode,
+		"history_ledgers":  histPol.Ledgers,
 		"detail":           "",
 	}
 	if completeLo > 0 {
@@ -464,10 +468,37 @@ func xrplGenesisLedger(env string) int64 {
 }
 
 func xrplHistoryCaughtUp(env string, lo, hi, seq int64) bool {
-	return historyWindowCaughtUp(lo, hi, seq, xrplGenesisLedger(env), 16)
+	return xrplHistoryOK(env, lo, hi, seq, parseXRPLHistoryMode("full"))
 }
 
-func xrplVerificationPct(live, historyOK bool, lo, hi, seq, genesis int64) float64 {
+func xrplVerificationPct(live, historyOK bool, lo, hi, seq, genesis, target int64) float64 {
+	if target > 0 {
+		if live && historyOK {
+			return 100
+		}
+
+		if !live {
+			return historyWindowPct(false, false, lo, hi, seq, genesis)
+		}
+
+		if lo <= 0 || hi <= 0 {
+			return 0
+		}
+
+		have := hi - lo + 1
+		pct := float64(have) / float64(target) * 100
+		out := math.Round(pct*1000) / 1000
+		if out < 0.001 && have > 0 {
+			return 0.001
+		}
+
+		if out >= 100 && !historyOK {
+			return 99.9
+		}
+
+		return out
+	}
+
 	return historyWindowPct(live, historyOK, lo, hi, seq, genesis)
 }
 

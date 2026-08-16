@@ -738,6 +738,7 @@ export const api = {
     accounts_dir?: string
     snapshots_dir?: string
     disk_layout?: ProvisionDiskLayout
+    xrpl_history?: string
   }) => {
     const res = await fetch('/api/workloads/provision', {
       method: 'POST',

@@ -38,11 +38,11 @@ advisory_delete=0
 		t.Fatal(err)
 	}
 	body := string(b)
-	if strings.Contains(body, "online_delete") {
-		t.Fatalf("online_delete must be stripped:\n%s", body)
+	if !strings.Contains(body, "online_delete=256") {
+		t.Fatalf("windowed cfg must keep matching online_delete:\n%s", body)
 	}
-	if !strings.Contains(body, "[ledger_history]\nfull") {
-		t.Fatalf("want ledger_history=full:\n%s", body)
+	if !strings.Contains(body, "[ledger_history]\n256") {
+		t.Fatalf("heal must not force full when cfg is 256:\n%s", body)
 	}
 	if !strings.Contains(body, "[node_size]\nmedium") {
 		t.Fatalf("empty ledger must bootstrap medium:\n%s", body)
@@ -73,6 +73,46 @@ advisory_delete=0
 	want := xrplNodeSizeForRAMGiB(float64(ramGB()))
 	if want != "medium" && !changed {
 		t.Fatal("after first ledger must promote node_size from medium")
+	}
+}
+
+func TestHealXRPLCfgFileHonorsHistoryJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "xrpld.cfg")
+	src := `[node_size]
+medium
+
+[node_db]
+type=NuDB
+path=/data/xrpl/mainnet/db/nudb
+advisory_delete=0
+
+[ledger_history]
+full
+`
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeXRPLHistoryPolicy(dir, parseXRPLHistoryMode("weeks")); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := healXRPLCfgFile(path, "mainnet", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected history.json weeks to rewrite cfg")
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(b)
+	if !strings.Contains(body, "[ledger_history]\n300000") {
+		t.Fatalf("want weeks window:\n%s", body)
+	}
+	if !strings.Contains(body, "online_delete=300000") {
+		t.Fatalf("want online_delete=300000:\n%s", body)
 	}
 }
 

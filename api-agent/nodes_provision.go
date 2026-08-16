@@ -44,6 +44,8 @@ type nodeProvisionRequest struct {
 	AccountsDir  string              `json:"accounts_dir,omitempty"`
 	SnapshotsDir string              `json:"snapshots_dir,omitempty"`
 	DiskLayout   *solanaDiskLayoutIn `json:"disk_layout,omitempty"`
+	// XRPL: stock | day | weeks | full (default weeks ≈ 2 weeks / 300k ledgers).
+	XRPLHistory string `json:"xrpl_history,omitempty"`
 }
 
 // solanaDiskLayoutIn — panel/wizard confirmed mounts or absolute dirs.

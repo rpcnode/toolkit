@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -17,8 +18,8 @@ type ethereumRPCResult struct {
 	OK            bool
 	Syncing       bool
 	Block         int64
-	CurrentBlock  int64 // eth_syncing.currentBlock (0 when synced / unknown)
-	HighestBlock  int64 // eth_syncing.highestBlock (0 when synced / unknown)
+	CurrentBlock  int64   // eth_syncing.currentBlock (0 when synced / unknown)
+	HighestBlock  int64   // eth_syncing.highestBlock (0 when synced / unknown)
 	SyncProgress  float64 // 0..1 from current/highest; 1 when eth_syncing=false
 	Peers         int64
 	ChainID       string
@@ -373,6 +374,71 @@ func nitroPublicTipBlock(network, env string) int64 {
 	return h
 }
 
+func ethereumPublicTipRPC(cfg Config) string {
+	if v := strings.TrimSpace(os.Getenv("ETHEREUM_PUBLIC_TIP_RPC")); v != "" {
+		return v
+	}
+
+	if cfg.EtcDir != "" {
+		if b, err := os.ReadFile(filepath.Join(cfg.EtcDir, "public_tip.url")); err == nil {
+			if u := strings.TrimSpace(string(b)); u != "" {
+				return u
+			}
+		}
+	}
+
+	switch normalizeEnvName(cfg.Env) {
+	case "sepolia", "testnet":
+		return "https://ethereum-sepolia-rpc.publicnode.com"
+	default:
+		return "https://ethereum-rpc.publicnode.com"
+	}
+}
+
+func ethereumPublicTipBlock(cfg Config) int64 {
+	url := ethereumPublicTipRPC(cfg)
+	if url == "" {
+		return 0
+	}
+
+	raw, err := jsonRPCPost(url, "eth_blockNumber", nil)
+	if err != nil {
+		return 0
+	}
+
+	var hex string
+	if json.Unmarshal(raw, &hex) != nil {
+		return 0
+	}
+
+	h, err := parseHexInt64(hex)
+	if err != nil || h <= 0 {
+		return 0
+	}
+
+	return h
+}
+
+// ethereumDisplayHeights — local block + network tip for Sync "blocks / headers".
+// eth_syncing=false leaves highestBlock=0; then use public tip, else local.
+func ethereumDisplayHeights(rpc ethereumRPCResult, publicTip int64) (blocks, headers int64) {
+	blocks = rpc.Block
+	if rpc.Syncing && rpc.CurrentBlock > 0 {
+		blocks = rpc.CurrentBlock
+	}
+
+	headers = rpc.HighestBlock
+	if publicTip > headers {
+		headers = publicTip
+	}
+
+	if headers <= 0 {
+		headers = blocks
+	}
+
+	return blocks, headers
+}
+
 func nitroPublicTipRPC(network, env string) string {
 	n := strings.ToLower(strings.TrimSpace(network))
 	e := strings.ToLower(strings.TrimSpace(env))
@@ -422,10 +488,10 @@ func probeLighthouseSync(beaconPort int) (syncing bool, detail string) {
 	}
 	var envelope struct {
 		Data struct {
-			IsSyncing     bool   `json:"is_syncing"`
-			IsOptimistic  bool   `json:"is_optimistic"`
-			HeadSlot      string `json:"head_slot"`
-			SyncDistance  string `json:"sync_distance"`
+			IsSyncing    bool   `json:"is_syncing"`
+			IsOptimistic bool   `json:"is_optimistic"`
+			HeadSlot     string `json:"head_slot"`
+			SyncDistance string `json:"sync_distance"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(b, &envelope); err != nil {

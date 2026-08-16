@@ -1082,6 +1082,7 @@ func (s *Server) handleWorkloadProvision(w http.ResponseWriter, r *http.Request)
 		AccountsDir  string         `json:"accounts_dir,omitempty"`
 		SnapshotsDir string         `json:"snapshots_dir,omitempty"`
 		DiskLayout   map[string]any `json:"disk_layout,omitempty"`
+		XrplHistory  string         `json:"xrpl_history,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_json"})
@@ -1165,6 +1166,9 @@ func (s *Server) handleWorkloadProvision(w http.ResponseWriter, r *http.Request)
 	}
 	if diskLayout != nil {
 		payloadMap["disk_layout"] = diskLayout
+	}
+	if h := strings.TrimSpace(body.XrplHistory); h != "" {
+		payloadMap["xrpl_history"] = h
 	}
 	payload, _ := json.Marshal(payloadMap)
 	url := strings.TrimRight(srv.AgentURL, "/") + "/api/v1/nodes/provision" // server host agent

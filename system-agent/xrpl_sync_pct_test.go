@@ -35,18 +35,37 @@ func TestXRPLHistoryCaughtUp(t *testing.T) {
 func TestXRPLVerificationPct(t *testing.T) {
 	genesis := int64(32570)
 	// server_state=full + recent window only — Syncing, not 100.
-	got := xrplVerificationPct(true, false, 106326475, 106333417, 106333417, genesis)
+	got := xrplVerificationPct(true, false, 106326475, 106333417, 106333417, genesis, 0)
 	if got < 0.006 || got > 0.007 {
 		t.Fatalf("history backfill start=%v", got)
 	}
-	if xrplVerificationPct(true, true, 32570, 106333417, 106333417, genesis) != 100 {
+	if xrplVerificationPct(true, true, 32570, 106333417, 106333417, genesis, 0) != 100 {
 		t.Fatal("live + genesis coverage must be 100")
 	}
-	got = xrplVerificationPct(false, false, 100, 50_000_000, 100_000_000, genesis)
+	got = xrplVerificationPct(false, false, 100, 50_000_000, 100_000_000, genesis, 0)
 	if got < 49.9 || got > 50.1 {
 		t.Fatalf("mid tip catch-up=%v", got)
 	}
-	if got := xrplVerificationPct(false, false, 0, 0, 0, genesis); got != 0 {
+	if got := xrplVerificationPct(false, false, 0, 0, 0, genesis, 0); got != 0 {
 		t.Fatalf("empty=%v", got)
+	}
+}
+
+func TestXRPLHistoryWindowWeeks(t *testing.T) {
+	weeks := parseXRPLHistoryMode("weeks")
+	lo := int64(106333417 - 300000 + 1)
+	if !xrplHistoryOK("mainnet", lo, 106333417, 106333417, weeks) {
+		t.Fatal("300k window at tip is weeks-complete")
+	}
+	if xrplHistoryOK("mainnet", 106326475, 106333417, 106333417, weeks) {
+		t.Fatal("7k window is not 300k")
+	}
+
+	got := xrplVerificationPct(true, false, 106326475, 106333417, 106333417, 32570, 300000)
+	if got < 2.3 || got > 2.4 {
+		t.Fatalf("weeks fill %% = %v", got)
+	}
+	if xrplVerificationPct(true, true, lo, 106333417, 106333417, 32570, 300000) != 100 {
+		t.Fatal("weeks + tip must be 100")
 	}
 }

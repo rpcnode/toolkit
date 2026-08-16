@@ -148,8 +148,7 @@ func healXRPLCfgFile(path, env string, hasLedger bool) (bool, error) {
 	s := orig
 	size := xrplNodeSize(float64(ramGB()), hasLedger)
 	s = xrplNodeSizeRe.ReplaceAllString(s, "[node_size]\n"+size)
-	s = xrplLedgerHistoryRe.ReplaceAllString(s, "[ledger_history]\nfull")
-	s = xrplOnlineDeleteRe.ReplaceAllString(s, "")
+	s = applyXRPLHistoryHeal(s, filepath.Dir(path))
 	s = xrplEnsurePeersMax(s)
 	s = xrplEnsureFetchDepthFull(s)
 	if normalizeEnvName(env) != "testnet" {
@@ -163,6 +162,48 @@ func healXRPLCfgFile(path, env string, hasLedger bool) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func applyXRPLHistoryHeal(s, etc string) string {
+	if p, ok := loadXRPLHistoryPolicy(etc); ok {
+		return applyXRPLHistoryPolicy(s, p)
+	}
+
+	if p, ok := parseXRPLHistoryFromCfg(s); ok {
+		_ = writeXRPLHistoryPolicy(etc, p)
+
+		return applyXRPLHistoryPolicy(s, p)
+	}
+
+	return s
+}
+
+func applyXRPLHistoryPolicy(s string, pol xrplHistoryPolicy) string {
+	histVal := "full"
+	if pol.Mode != "full" && pol.Ledgers > 0 {
+		histVal = strconv.Itoa(pol.Ledgers)
+	}
+
+	if xrplLedgerHistoryRe.MatchString(s) {
+		s = xrplLedgerHistoryRe.ReplaceAllString(s, "[ledger_history]\n"+histVal)
+	} else {
+		s = strings.TrimRight(s, "\n") + "\n\n[ledger_history]\n" + histVal + "\n"
+	}
+
+	if pol.Mode == "full" || pol.Ledgers <= 0 {
+		return xrplOnlineDeleteRe.ReplaceAllString(s, "")
+	}
+
+	od := fmt.Sprintf("online_delete=%d\n", pol.Ledgers)
+	if xrplOnlineDeleteRe.MatchString(s) {
+		return xrplOnlineDeleteRe.ReplaceAllString(s, od)
+	}
+
+	if strings.Contains(s, "advisory_delete=") {
+		return strings.Replace(s, "advisory_delete=", od+"advisory_delete=", 1)
+	}
+
+	return strings.TrimRight(s, "\n") + "\n" + od
 }
 
 func xrplEnsurePeersMax(s string) string {

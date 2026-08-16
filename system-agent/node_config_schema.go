@@ -334,7 +334,7 @@ func bscConfigFields() []nodeConfigFieldDef {
 func xrplConfigFields() []nodeConfigFieldDef {
 	return []nodeConfigFieldDef{
 		{Key: "port", Label: "port", Help: "Locked — catalog listen port.", Type: "string", Group: "ports", Protected: true},
-		{Key: "online_delete", Label: "online_delete", Help: "Must stay unset / 0 — RpcNode is full history.", Type: "int", Group: "history"},
+		{Key: "online_delete", Label: "online_delete", Help: "Matches ledger_history when a window is chosen (stock/day/weeks). Unset only for full (genesis) history.", Type: "int", Group: "history"},
 		{Key: "node_size", Label: "node_size", Help: "tiny/small/medium/huge from host RAM. huge needs ≥32–64 GiB. Hardcoding huge stalls LoadManager on a VPS.", Type: "string", Group: "performance"},
 	}
 }

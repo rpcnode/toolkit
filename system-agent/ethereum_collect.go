@@ -37,6 +37,11 @@ func collectEthereum(cfg Config) map[string]any {
 	rpcOK := rpc.OK
 	elSyncing := rpcOK && rpc.Syncing
 	syncing := elSyncing || lhSyncing
+	publicTip := int64(0)
+	if rpcOK {
+		publicTip = ethereumPublicTipBlock(cfg)
+	}
+	dispBlocks, dispHeaders := ethereumDisplayHeights(rpc, publicTip)
 	syncDetail := rpc.SyncDetail
 	verifyPct := ethSyncVerificationPct(rpc.CurrentBlock, rpc.HighestBlock, elSyncing)
 	if !rpcOK {
@@ -115,12 +120,9 @@ func collectEthereum(cfg Config) map[string]any {
 		Progress:       prog,
 	}
 	if rpcOK {
-		lcIn.Height = rpc.Block
-		if elSyncing && rpc.HighestBlock > 0 {
-			lcIn.Headers = rpc.HighestBlock
-			if rpc.CurrentBlock > 0 {
-				lcIn.Height = rpc.CurrentBlock
-			}
+		lcIn.Height = dispBlocks
+		if dispHeaders > 0 {
+			lcIn.Headers = dispHeaders
 		}
 		lcIn.VerifyPct = verifyPct / 100
 	}
@@ -146,10 +148,12 @@ func collectEthereum(cfg Config) map[string]any {
 	} else if rpcOK && syncing {
 		chainDetail = syncDetail
 		if chainDetail == "" {
-			chainDetail = fmt.Sprintf("Syncing · block %d · peers %d", rpc.Block, rpc.Peers)
+			chainDetail = fmt.Sprintf("Syncing · block %d · tip %d · peers %d",
+				dispBlocks, dispHeaders, rpc.Peers)
 		}
 	} else if rpcOK {
-		chainDetail = fmt.Sprintf("Synced · block %d · peers %d", rpc.Block, rpc.Peers)
+		chainDetail = fmt.Sprintf("Synced · block %d · tip %d · peers %d",
+			dispBlocks, dispHeaders, rpc.Peers)
 		if rpc.ChainID != "" {
 			chainDetail += " · chain " + rpc.ChainID
 		}
@@ -237,8 +241,9 @@ func collectEthereum(cfg Config) map[string]any {
 		"process_up": nodeActive,
 		"port_open":  nodePortOpen,
 		"syncing":    syncing,
-		"height":     rpc.Block,
-		"blocks":     rpc.Block,
+		"height":     dispBlocks,
+		"blocks":     dispBlocks,
+		"headers":    dispHeaders,
 		"peers":      rpc.Peers,
 		"chain_id":   rpc.ChainID,
 		"detail":     syncDetail,
@@ -261,10 +266,12 @@ func collectEthereum(cfg Config) map[string]any {
 	if rpcOK {
 		rpcBlock["initialblockdownload"] = syncing
 		rpcBlock["verification_pct"] = verifyPct
-		if elSyncing && rpc.HighestBlock > 0 {
-			rpcBlock["blocks"] = rpc.CurrentBlock
-			rpcBlock["headers"] = rpc.HighestBlock
-			rpcBlock["height"] = rpc.CurrentBlock
+		if dispBlocks > 0 {
+			rpcBlock["blocks"] = dispBlocks
+			rpcBlock["height"] = dispBlocks
+		}
+		if dispHeaders > 0 {
+			rpcBlock["headers"] = dispHeaders
 		}
 	}
 
@@ -272,8 +279,9 @@ func collectEthereum(cfg Config) map[string]any {
 		"ok":               rpcOK && !syncing,
 		"syncing":          syncing,
 		"ibd":              syncing,
-		"block":            rpc.Block,
-		"blocks":           rpc.Block,
+		"block":            dispBlocks,
+		"blocks":           dispBlocks,
+		"headers":          dispHeaders,
 		"peers":            rpc.Peers,
 		"detail":           chainDetail,
 		"network":          network,
@@ -284,11 +292,6 @@ func collectEthereum(cfg Config) map[string]any {
 			"syncing": lhSyncing,
 			"detail":  lhDetail,
 		},
-	}
-	if rpcOK && elSyncing && rpc.HighestBlock > 0 {
-		syncBlock["blocks"] = rpc.CurrentBlock
-		syncBlock["headers"] = rpc.HighestBlock
-		syncBlock["block"] = rpc.CurrentBlock
 	}
 
 	procCmd := strings.TrimSpace(gethCmd)
@@ -305,18 +308,18 @@ func collectEthereum(cfg Config) map[string]any {
 		"version":        agentVersion(),
 		"client_version": clientVer,
 		"network":        network,
-		"env":           cfg.Env,
-		"agent_env":     cfg.Env,
-		"view_env":      cfg.Env,
-		"hostname":      host,
-		"updated_at":    updatedAt,
-		"health":        health,
-		"degraded":      degraded,
-		"ui_phase":      uiPhase,
-		"node_status":   nodeStatus,
-		"lifecycle":     lifecycle,
-		"setup_steps":   setupSteps,
-		"start_error":   startErr,
+		"env":            cfg.Env,
+		"agent_env":      cfg.Env,
+		"view_env":       cfg.Env,
+		"hostname":       host,
+		"updated_at":     updatedAt,
+		"health":         health,
+		"degraded":       degraded,
+		"ui_phase":       uiPhase,
+		"node_status":    nodeStatus,
+		"lifecycle":      lifecycle,
+		"setup_steps":    setupSteps,
+		"start_error":    startErr,
 		"disk_gate": map[string]any{
 			"ok": diskOK, "free_gib": freeGiB, "need_gib": needGiB, "detail": diskDetail,
 		},
@@ -341,12 +344,12 @@ func collectEthereum(cfg Config) map[string]any {
 			"instance_registered": instRegistered,
 		},
 		"services": map[string]any{
-			"node":         nodeSvcEffective,
-			"node_unit":    cfg.NodeService,
-			"lighthouse":   lhState,
+			"node":            nodeSvcEffective,
+			"node_unit":       cfg.NodeService,
+			"lighthouse":      lhState,
 			"lighthouse_unit": lhUnit,
-			"api_agent":    apiSvc,
-			"system_agent": "active",
+			"api_agent":       apiSvc,
+			"system_agent":    "active",
 		},
 		"ports": map[string]any{
 			"public":   publicPort,

@@ -23,6 +23,7 @@ import {
   xrplGenesisForEnv,
   xrplHistoryPct,
   xrplTipLive,
+  xrplWindowPct,
 } from '../lib/xrplSync'
 
 /** lifecycle.pct or run-step pct (older agents often only set steps[].pct). */
@@ -82,6 +83,11 @@ export function resolveSyncProgressPct(status?: StatusPayload | null): number | 
       (typeof sync?.headers === 'number' && sync.headers > 0 ? sync.headers : null) ??
       (typeof sync?.blocks === 'number' && sync.blocks > 0 ? sync.blocks : null)
     if (win && seq) {
+      const target = typeof sync?.history_ledgers === 'number' ? sync.history_ledgers : 0
+      if (target > 0) {
+        return xrplWindowPct(win.lo, win.hi, target)
+      }
+
       return xrplHistoryPct(win.lo, seq, xrplGenesisForEnv(resolveEnv(status)))
     }
   }
@@ -326,9 +332,13 @@ export function SyncStatusCard({
     (typeof sync?.headers === 'number' && sync.headers > 0 ? sync.headers : null) ??
     (typeof sync?.blocks === 'number' && sync.blocks > 0 && !xrplWin ? sync.blocks : null)
   const xrplTipOk = xrpl && xrplTipLive(sync?.server_state, sync?.detail)
+  const xrplTarget =
+    xrpl && typeof sync?.history_ledgers === 'number' ? sync.history_ledgers : 0
   const xrplHistPct =
     xrpl && xrplWin && xrplSeq
-      ? xrplHistoryPct(xrplWin.lo, xrplSeq, xrplGenesisForEnv(resolveEnv(status)))
+      ? xrplTarget > 0
+        ? xrplWindowPct(xrplWin.lo, xrplWin.hi, xrplTarget)
+        : xrplHistoryPct(xrplWin.lo, xrplSeq, xrplGenesisForEnv(resolveEnv(status)))
       : xrpl
         ? progress
         : null
@@ -380,7 +390,9 @@ export function SyncStatusCard({
       : blocks != null
         ? tipLedger != null || tipHeaders != null
           ? `${num(blocks, 0)} / ${num(tipLedger ?? tipHeaders ?? 0, 0)}`
-          : `${num(blocks, 0)} / —`
+          : !syncing
+            ? `${num(blocks, 0)} / ${num(blocks, 0)}`
+            : `${num(blocks, 0)} / —`
         : '—'
 
   const kv: { k: string; v: string }[] = []
@@ -581,7 +593,9 @@ export function SyncStatusCard({
                 striped={!xrplTipOk}
               />
               <Text size="xs" c="dimmed" mb={2}>
-                History toward genesis
+                {xrplTarget > 0
+                  ? `History window · ${num(xrplTarget, 0)} ledgers`
+                  : 'History toward genesis'}
                 {xrplHistPct != null ? ` · ${formatSyncPct(xrplHistPct)}` : ''}
               </Text>
               <Progress

@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestBitcoinRunStepIBDNotDone(t *testing.T) {
 	step := buildRunStep(nodeLifecycleInput{
@@ -13,6 +16,23 @@ func TestBitcoinRunStepIBDNotDone(t *testing.T) {
 	detail, _ := step["detail"].(string)
 	if detail == "" || detail == "Healthy · height 100" {
 		t.Fatalf("detail=%q", detail)
+	}
+}
+
+func TestXRPLRunStepKeepsHistoryThousandths(t *testing.T) {
+	step := buildRunStep(nodeLifecycleInput{
+		Network: "xrpl", Env: "mainnet",
+		RPCOK: true, IBD: true,
+		Height: int64(106341483), Headers: int64(106341483),
+		VerifyPct: 0.00017, Peers: 38,
+	})
+	detail, _ := step["detail"].(string)
+	if !strings.Contains(detail, "0.017%") {
+		t.Fatalf("history %% must stay 0.017, got %q", detail)
+	}
+	pct, _ := step["pct"].(float64)
+	if pct < 0.016 || pct > 0.018 {
+		t.Fatalf("run pct=%v want ~0.017", pct)
 	}
 }
 

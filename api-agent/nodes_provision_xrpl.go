@@ -458,12 +458,22 @@ func writeXRPLConfig(etc, data string, req nodeProvisionRequest, cluster xrplNet
 	b.WriteString("[node_size]\n")
 	b.WriteString(xrplNodeSize(hostMemTotalGiB(), xrplDatadirHasLedger(data)) + "\n\n")
 
+	pol := resolveXRPLHistoryPolicy(etc, req.XRPLHistory)
+	_ = writeXRPLHistoryPolicy(etc, pol)
+
 	b.WriteString("[node_db]\n")
 	b.WriteString("type=NuDB\n")
 	b.WriteString("path=" + nudbPath + "\n")
+	if pol.Mode != "full" && pol.Ledgers > 0 {
+		b.WriteString(fmt.Sprintf("online_delete=%d\n", pol.Ledgers))
+	}
 	b.WriteString("advisory_delete=0\n\n")
 
-	b.WriteString("[ledger_history]\nfull\n\n")
+	if pol.Mode == "full" || pol.Ledgers <= 0 {
+		b.WriteString("[ledger_history]\nfull\n\n")
+	} else {
+		b.WriteString(fmt.Sprintf("[ledger_history]\n%d\n\n", pol.Ledgers))
+	}
 	// Default peers_max=21 keeps ~10 outgoing. <68 does not raise outgoing.
 	// History fetch is parallel across outgoing + ips_fixed (fixed do not count).
 	b.WriteString("[peers_max]\n100\n\n")
@@ -605,7 +615,7 @@ func hostMemTotalGiB() float64 {
 }
 
 // healXRPLConfig rewrites xrpld.cfg from the live port profile (node_size from
-// RAM, full history). Called on /nodes/start so Update + Start heals a stuck unit.
+// RAM, history from history.json / existing cfg). Called on /nodes/start.
 func healXRPLConfig(env string) (string, error) {
 	env = normalizeEnv(env)
 	prof := lookupPortProfile("xrpl", env)

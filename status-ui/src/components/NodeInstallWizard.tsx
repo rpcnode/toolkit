@@ -53,9 +53,14 @@ import {
   resolveCurrentStep,
   wizardStepFromAgentLifecycle,
 } from '../lib/nodeLifecycle'
-import { supportsIbdStep, supportsSnapshotStep } from '../lib/network'
+import { isXrplNetwork, supportsIbdStep, supportsSnapshotStep } from '../lib/network'
 import { agentLogLines } from './AgentLogsPanel'
 import { DiskLayoutPanel } from './DiskLayoutPanel'
+import {
+  XrplHistoryPicker,
+  xrplHistoryInstallLabel,
+  type XrplHistoryMode,
+} from './XrplHistoryPicker'
 import { resolveSyncProgressPct } from './SyncStatusCard'
 
 /** Networks with tip multi_disk_roles (must match api-agent/disk_roles.go). */
@@ -318,6 +323,7 @@ export function NodeInstallWizard({
   const [diskRules, setDiskRules] = useState<string[]>([])
   const [diskLoading, setDiskLoading] = useState(false)
   const [diskError, setDiskError] = useState<string | null>(null)
+  const [xrplHistory, setXrplHistory] = useState<XrplHistoryMode>('weeks')
   const [killTarget, setKillTarget] = useState<CheckedCatalogPort | null>(null)
   const [killing, setKilling] = useState(false)
   const autoStarted = useRef(false)
@@ -328,6 +334,7 @@ export function NodeInstallWizard({
   const agentAckedStep = useRef<WizardStepId | null>(null)
   const networkId = (workload?.network || '').toLowerCase()
   const wantsDiskLayout = MULTI_DISK_NETWORKS.has(networkId)
+  const wantsXrplHistory = isXrplNetwork(networkId)
 
   const agentVer = unsupported?.agentVersion || server?.agent_version || ''
   const latestVer = channelLatest || server?.latest_agent_version || ''
@@ -913,6 +920,7 @@ export function NodeInstallWizard({
         node_http_port: ports.node_http_port,
         p2p_port: ports.p2p_port,
         ...(layout ? diskLayoutPayload(layout) : {}),
+        ...(wantsXrplHistory ? { xrpl_history: xrplHistory } : {}),
       })
       if (!res.ok) {
         const blocked = detectUnsupportedCapability(res)
@@ -1042,6 +1050,7 @@ export function NodeInstallWizard({
           node_http_port: ports?.node_http_port || workload.node_http_port,
           p2p_port: ports?.p2p_port || workload.p2p_port,
           ...(layout ? diskLayoutPayload(layout) : {}),
+          ...(wantsXrplHistory ? { xrpl_history: xrplHistory } : {}),
         })
         if (!prov.ok) {
           throw new Error(prov.message || prov.error || 'provision failed')
@@ -1592,6 +1601,23 @@ export function NodeInstallWizard({
                 </Alert>
               )}
 
+              {wantsXrplHistory && !unsupported && (
+                <Stack gap="xs">
+                  <Text size="sm" fw={600}>
+                    History to install
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Choose the ledger window or Full history. This is what xrpld will keep after
+                    Install.
+                  </Text>
+                  <XrplHistoryPicker
+                    value={xrplHistory}
+                    onChange={setXrplHistory}
+                    disabled={portsConfirming}
+                  />
+                </Stack>
+              )}
+
               {wantsDiskLayout && !unsupported && (
                 <DiskLayoutPanel
                   network={networkId}
@@ -1651,7 +1677,9 @@ export function NodeInstallWizard({
                     ? `Check status in ${portsConfirmCountdown}s`
                     : portsConfirming
                       ? 'Installing…'
-                      : 'Install'}
+                      : wantsXrplHistory
+                        ? `Install · ${xrplHistoryInstallLabel(xrplHistory)}`
+                        : 'Install'}
                 </Button>
               </Group>
 

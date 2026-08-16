@@ -33,6 +33,17 @@ export function xrplHistoryPct(lo: number, seq: number, genesis: number): number
   return out
 }
 
+/** Windowed history (stock/day/weeks): fill = complete span / target ledgers. */
+export function xrplWindowPct(lo: number, hi: number, target: number): number {
+  if (target <= 0 || lo <= 0 || hi <= 0) return 0
+  const have = hi - lo + 1
+  const pct = (have / target) * 100
+  const out = Math.round(pct * 1000) / 1000
+  if (out < 0.001 && have > 0) return 0.001
+  if (out >= 100) return 99.9
+  return out
+}
+
 export function xrplTipLive(serverState?: string | null, detail?: string | null): boolean {
   const st = (serverState || '').toLowerCase()
   if (st === 'full' || st === 'proposing' || st === 'validating') return true

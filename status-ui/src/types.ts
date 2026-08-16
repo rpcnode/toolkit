@@ -133,6 +133,10 @@ export type SyncInfo = {
   server_state?: string
   /** XRPL validated ledger seq. */
   ledger_seq?: number
+  /** XRPL history policy: stock | day | weeks | full | custom. */
+  history_mode?: string
+  /** XRPL ledger_history target (0 = full / genesis). */
+  history_ledgers?: number
 }
 
 export type AgentStatusInfo = {

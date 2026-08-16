@@ -65,6 +65,20 @@ type nodeLifecycleInput struct {
 	Progress *lifecycleProgress
 }
 
+// lifecycleVerifyPct100 — VerifyPct is 0..1. Keep thousandths (XRPL 0.017%), do not round to 0.0.
+func lifecycleVerifyPct100(verifyFrac float64) float64 {
+	if verifyFrac <= 0 {
+		return 0
+	}
+
+	p := verifyFrac * 100
+	if p > 100 {
+		return 100
+	}
+
+	return p
+}
+
 // networkLifecycleProfile — runtime gating flags for pipeline/lifecycle
 // (same shape as orchestration 0.3.12). Static catalog lives in network_profiles.go.
 type networkLifecycleProfile struct {
@@ -442,11 +456,7 @@ func buildRunStep(in nodeLifecycleInput) map[string]any {
 		runDetail := "Node not online yet"
 		var pct any
 		if in.VerifyPct > 0 {
-			p := in.VerifyPct * 100
-			if p > 100 {
-				p = 100
-			}
-			pct = float64(int(p*10+0.5)) / 10
+			pct = lifecycleVerifyPct100(in.VerifyPct)
 		}
 		switch {
 		case in.StartError != "":
@@ -514,11 +524,7 @@ func buildRunStep(in nodeLifecycleInput) map[string]any {
 		runDetail := "Node not online yet"
 		var pct any
 		if in.VerifyPct > 0 {
-			p := in.VerifyPct * 100
-			if p > 100 {
-				p = 100
-			}
-			pct = float64(int(p*10+0.5)) / 10
+			pct = lifecycleVerifyPct100(in.VerifyPct)
 		}
 		switch {
 		case in.StartError != "":
@@ -577,11 +583,7 @@ func buildRunStep(in nodeLifecycleInput) map[string]any {
 		runDetail := "Node not online yet"
 		var pct any
 		if in.VerifyPct > 0 {
-			p := in.VerifyPct * 100
-			if p > 100 {
-				p = 100
-			}
-			pct = float64(int(p*10+0.5)) / 10
+			pct = lifecycleVerifyPct100(in.VerifyPct)
 		}
 		switch {
 		case !in.RPCOK:
@@ -667,11 +669,7 @@ func buildRunStep(in nodeLifecycleInput) map[string]any {
 		runDetail := "Node not online yet"
 		var pct any
 		if in.VerifyPct > 0 {
-			p := in.VerifyPct * 100
-			if p > 100 {
-				p = 100
-			}
-			pct = float64(int(p*10+0.5)) / 10
+			pct = lifecycleVerifyPct100(in.VerifyPct)
 		}
 		switch {
 		case !in.RPCOK:
@@ -723,11 +721,7 @@ func buildRunStep(in nodeLifecycleInput) map[string]any {
 		runDetail := "Node not online yet"
 		var pct any
 		if in.VerifyPct > 0 {
-			p := in.VerifyPct * 100
-			if p > 100 {
-				p = 100
-			}
-			pct = float64(int(p*10+0.5)) / 10
+			pct = lifecycleVerifyPct100(in.VerifyPct)
 		}
 		switch {
 		case in.StartError != "":
@@ -809,11 +803,7 @@ func buildRunStep(in nodeLifecycleInput) map[string]any {
 	if strings.EqualFold(in.Network, "bitcoin") || in.IBD || hasHeaders {
 		var pct any
 		if in.VerifyPct > 0 {
-			p := in.VerifyPct * 100
-			if p > 100 {
-				p = 100
-			}
-			pct = float64(int(p*10+0.5)) / 10
+			pct = lifecycleVerifyPct100(in.VerifyPct)
 		}
 		synced := in.RPCOK && !in.IBD
 		if synced && hasH && hasHeaders && hn+1 < headers {
@@ -830,7 +820,17 @@ func buildRunStep(in nodeLifecycleInput) map[string]any {
 			runDetail = "RPC paused (maintenance)"
 		case in.IBD || !synced:
 			runStatus = "active"
-			if hasH && hasHeaders {
+			if strings.EqualFold(in.Network, "xrpl") {
+				tip := headers
+				if hn > tip {
+					tip = hn
+				}
+				if tip > 0 {
+					runDetail = fmt.Sprintf("Syncing history · tip %d", tip)
+				} else {
+					runDetail = "Syncing history"
+				}
+			} else if hasH && hasHeaders {
 				runDetail = fmt.Sprintf("IBD · blocks %d / headers %d", hn, headers)
 			} else if hasH {
 				runDetail = "IBD · height " + strconv.FormatInt(hn, 10)
@@ -881,11 +881,7 @@ func buildRunStep(in nodeLifecycleInput) map[string]any {
 			runDetail = "RPC up · syncing with network"
 		}
 		if in.VerifyPct > 0 {
-			p := in.VerifyPct * 100
-			if p > 100 {
-				p = 100
-			}
-			pct := float64(int(p*10+0.5)) / 10
+			pct := lifecycleVerifyPct100(in.VerifyPct)
 			runDetail = fmt.Sprintf("%s · %s%%", runDetail, formatSyncPct(pct))
 			return lifecycleStep("run", "Run", runStatus, runDetail, pct)
 		}

@@ -36,7 +36,7 @@ func TestXRPLNodeSizeForRAM(t *testing.T) {
 	}
 }
 
-func TestWriteXRPLConfigFullHistoryNotHugeDefault(t *testing.T) {
+func TestWriteXRPLConfigDefaultWeeksHistory(t *testing.T) {
 	dir := t.TempDir()
 	etc := filepath.Join(dir, "etc")
 	data := filepath.Join(dir, "data")
@@ -54,11 +54,11 @@ func TestWriteXRPLConfigFullHistoryNotHugeDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := string(b)
-	if strings.Contains(body, "online_delete") {
-		t.Fatalf("full history must omit online_delete:\n%s", body)
+	if !strings.Contains(body, "online_delete=300000") {
+		t.Fatalf("default weeks must set online_delete:\n%s", body)
 	}
-	if !strings.Contains(body, "[ledger_history]\nfull\n") {
-		t.Fatalf("want ledger_history=full:\n%s", body)
+	if !strings.Contains(body, "[ledger_history]\n300000\n") {
+		t.Fatalf("default install is 2 weeks, not full:\n%s", body)
 	}
 	if !strings.Contains(body, "r.ripple.com 51235") {
 		t.Fatalf("want mainnet [ips]:\n%s", body)
@@ -74,6 +74,55 @@ func TestWriteXRPLConfigFullHistoryNotHugeDefault(t *testing.T) {
 	}
 	if !strings.Contains(body, "[node_size]\nmedium\n") {
 		t.Fatalf("empty datadir must bootstrap medium, got:\n%s", body)
+	}
+}
+
+func TestWriteXRPLConfigFullHistory(t *testing.T) {
+	dir := t.TempDir()
+	etc := filepath.Join(dir, "etc")
+	data := filepath.Join(dir, "data")
+	if err := os.MkdirAll(etc, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path, err := writeXRPLConfig(etc, data, nodeProvisionRequest{
+		NodeHTTPPort: 5005, P2PPort: 51235, XRPLHistory: "full",
+	}, lookupXRPLNetwork("mainnet"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(b)
+	if strings.Contains(body, "online_delete") {
+		t.Fatalf("full history must omit online_delete:\n%s", body)
+	}
+	if !strings.Contains(body, "[ledger_history]\nfull\n") {
+		t.Fatalf("want ledger_history=full:\n%s", body)
+	}
+}
+
+func TestWriteXRPLConfigStockHistory(t *testing.T) {
+	dir := t.TempDir()
+	etc := filepath.Join(dir, "etc")
+	data := filepath.Join(dir, "data")
+	path, err := writeXRPLConfig(etc, data, nodeProvisionRequest{
+		NodeHTTPPort: 5005, XRPLHistory: "stock",
+	}, lookupXRPLNetwork("mainnet"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(b)
+	if !strings.Contains(body, "[ledger_history]\n2000\n") {
+		t.Fatalf("stock window:\n%s", body)
+	}
+	if !strings.Contains(body, "online_delete=2000") {
+		t.Fatalf("stock online_delete:\n%s", body)
 	}
 }
 
