@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Compatibility name. Prefer rpcnodectl — same commands, RpcNode product name.
+_SRC="${BASH_SOURCE[0]}"
+while [[ -L "$_SRC" ]]; do
+  _DIR="$(cd "$(dirname "$_SRC")" && pwd)"
+  _SRC="$(readlink "$_SRC")"
+  [[ "$_SRC" != /* ]] && _SRC="$_DIR/$_SRC"
+done
+_DIR="$(cd "$(dirname "$_SRC")" && pwd)"
+exec "$_DIR/rpcnodectl" "$@"

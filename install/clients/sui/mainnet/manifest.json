@@ -1,0 +1,34 @@
+{
+  "artifact_kind" : "tarball",
+  "artifact_url" : "https:\/\/github.com\/MystenLabs\/sui\/releases\/download\/mainnet-v1.76.1\/sui-mainnet-v1.76.1-ubuntu-x86_64.tgz",
+  "env" : "mainnet",
+  "fetched_at" : "2026-08-16T07:48:35Z",
+  "files" : [
+    {
+      "bytes" : 1105343034,
+      "kind" : "tarball",
+      "name" : "sui-mainnet-v1.76.1-ubuntu-x86_64.tgz",
+      "path" : "sui\/mainnet\/dist\/sui-mainnet-v1.76.1-ubuntu-x86_64.tgz",
+      "role" : "artifact",
+      "sha256" : "80679b1c0123a5a7b15e1add23aa80f8002e25de344539cce96389c01dc17865",
+      "status" : "ok",
+      "url" : "https:\/\/github.com\/MystenLabs\/sui\/releases\/download\/mainnet-v1.76.1\/sui-mainnet-v1.76.1-ubuntu-x86_64.tgz"
+    },
+    {
+      "bytes" : 642945,
+      "kind" : "",
+      "name" : "genesis.blob",
+      "path" : "sui\/mainnet\/conf\/genesis.blob",
+      "role" : "config",
+      "sha256" : "b57abe29e52ea89b68df6d08224c234f6e2cb1fa357203b12ba50dd4776f9038",
+      "status" : "ok",
+      "url" : "https:\/\/github.com\/MystenLabs\/sui-genesis\/raw\/main\/mainnet\/genesis.blob"
+    }
+  ],
+  "network" : "sui",
+  "notes" : "fullnode.yaml is agent-generated. genesis.blob is required.",
+  "sha256" : "80679b1c0123a5a7b15e1add23aa80f8002e25de344539cce96389c01dc17865",
+  "source" : "MystenLabs\/sui",
+  "tag" : "mainnet-v1.77.2",
+  "version" : "mainnet-v1.77.2"
+}

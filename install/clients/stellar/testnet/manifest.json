@@ -1,0 +1,8 @@
+{
+  "version": "27.1.1",
+  "artifact_url": "apt://stellar-rpc",
+  "sha256": "",
+  "needs_conf_patch": false,
+  "artifact_kind": "apt",
+  "notes": "Native install waterfall: SDF apt (host suite) → extract from stellar/stellar-rpc:27.1.1 → go build stellar-rpc. Runtime systemd only (no docker run)."
+}

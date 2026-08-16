@@ -1,0 +1,2 @@
+# Placeholder so `go:embed all:ui` compiles on the host.
+# Real SPA is built in Docker (Dockerfile ui stage) and must not be committed.

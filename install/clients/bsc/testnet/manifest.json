@@ -1,0 +1,34 @@
+{
+  "artifact_kind" : "bin",
+  "artifact_url" : "https:\/\/github.com\/bnb-chain\/bsc\/releases\/download\/v1.7.7\/geth_linux",
+  "env" : "testnet",
+  "fetched_at" : "2026-08-16T07:46:19Z",
+  "files" : [
+    {
+      "bytes" : 117027024,
+      "kind" : "bin",
+      "name" : "geth_linux",
+      "path" : "bsc\/testnet\/dist\/geth_linux",
+      "role" : "artifact",
+      "sha256" : "37d5383756f97627f6b3af9fdd376344211290a481f1089e14e00be1505f160c",
+      "status" : "ok",
+      "url" : "https:\/\/github.com\/bnb-chain\/bsc\/releases\/download\/v1.7.7\/geth_linux"
+    },
+    {
+      "bytes" : 42010,
+      "kind" : "",
+      "name" : "testnet.zip",
+      "path" : "bsc\/testnet\/conf\/testnet.zip",
+      "role" : "config",
+      "sha256" : "0d9de8b7f1bafc36711eed80e97bf33f906fadc2ceb5457361645941d7ad19f7",
+      "status" : "ok",
+      "url" : "https:\/\/github.com\/bnb-chain\/bsc\/releases\/download\/v1.7.7\/testnet.zip"
+    }
+  ],
+  "network" : "bsc",
+  "notes" : "",
+  "sha256" : "37d5383756f97627f6b3af9fdd376344211290a481f1089e14e00be1505f160c",
+  "source" : "bnb-chain\/bsc",
+  "tag" : "v1.8.0-alpha",
+  "version" : "1.8.0-alpha"
+}

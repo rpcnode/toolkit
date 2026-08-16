@@ -1,0 +1,34 @@
+{
+  "artifact_kind" : "",
+  "artifact_url" : "",
+  "env" : "mainnet",
+  "fetched_at" : "2026-08-16T07:46:25Z",
+  "files" : [
+    {
+      "bytes" : 1563,
+      "kind" : "",
+      "name" : "robinhood-chain-info.json",
+      "path" : "robinhood\/mainnet\/conf\/robinhood-chain-info.json",
+      "role" : "config",
+      "sha256" : "cf6c0aa2bc520a28fe8983f783676bc43de94cc25a57a1cdc9b1f0afc5208f0a",
+      "status" : "ok",
+      "url" : "https:\/\/cdn.robinhood.com\/assets\/generated_assets\/hoodchain_docsite\/chain-node-configs\/robinhood-chain-info.json"
+    },
+    {
+      "bytes" : 626691,
+      "kind" : "",
+      "name" : "robinhood-genesis.json",
+      "path" : "robinhood\/mainnet\/conf\/robinhood-genesis.json",
+      "role" : "config",
+      "sha256" : "353e6f6441b47695b41cee0c3645cde8dd7492d2f7f574bfb6aa4371e41bb6ba",
+      "status" : "ok",
+      "url" : "https:\/\/cdn.robinhood.com\/assets\/generated_assets\/hoodchain_docsite\/chain-node-configs\/robinhood-genesis.json"
+    }
+  ],
+  "network" : "robinhood",
+  "notes" : "Official chain-info + genesis only.",
+  "sha256" : "",
+  "source" : "cdn.robinhood.com",
+  "tag" : "",
+  "version" : ""
+}

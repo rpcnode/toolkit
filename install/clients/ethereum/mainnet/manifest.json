@@ -1,0 +1,31 @@
+{
+  "artifact_kind" : "tarball",
+  "artifact_url" : "https:\/\/github.com\/sigp\/lighthouse\/releases\/download\/v8.2.1\/lighthouse-v8.2.1-x86_64-unknown-linux-gnu.tar.gz",
+  "env" : "mainnet",
+  "fetched_at" : "2026-08-16T07:45:43Z",
+  "files" : [
+    {
+      "bytes" : 29611307,
+      "kind" : "tarball",
+      "name" : "lighthouse-v8.2.1-x86_64-unknown-linux-gnu.tar.gz",
+      "path" : "ethereum\/mainnet\/dist\/lighthouse-v8.2.1-x86_64-unknown-linux-gnu.tar.gz",
+      "role" : "artifact",
+      "sha256" : "51754fc07e337a2ccbc9afa0037e268d4cf1b19fb69e9b2a272b5dd44a401496",
+      "status" : "ok",
+      "url" : "https:\/\/github.com\/sigp\/lighthouse\/releases\/download\/v8.2.1\/lighthouse-v8.2.1-x86_64-unknown-linux-gnu.tar.gz"
+    },
+    {
+      "kind" : "apt",
+      "name" : "geth",
+      "role" : "artifact",
+      "status" : "apt",
+      "url" : "apt:\/\/geth"
+    }
+  ],
+  "network" : "ethereum",
+  "notes" : "Geth via apt (no tarball). JWT\/conf agent-generated. Checkpoint: sync-mainnet.beaconcha.in",
+  "sha256" : "51754fc07e337a2ccbc9afa0037e268d4cf1b19fb69e9b2a272b5dd44a401496",
+  "source" : "sigp\/lighthouse + apt geth",
+  "tag" : "v8.2.1",
+  "version" : "8.2.1"
+}

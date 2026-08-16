@@ -1,0 +1,24 @@
+{
+  "artifact_kind" : "bin",
+  "artifact_url" : "https:\/\/binaries.hyperliquid.xyz\/Mainnet\/hl-visor",
+  "env" : "mainnet",
+  "fetched_at" : "2026-08-16T07:46:22Z",
+  "files" : [
+    {
+      "bytes" : 6753024,
+      "kind" : "bin",
+      "name" : "hl-visor",
+      "path" : "hyperliquid\/mainnet\/dist\/hl-visor",
+      "role" : "artifact",
+      "sha256" : "7bfa7785460dcdccfe462bb81ab0ddab86748f9af6307d0a27c28af389fc0411",
+      "status" : "ok",
+      "url" : "https:\/\/binaries.hyperliquid.xyz\/Mainnet\/hl-visor"
+    }
+  ],
+  "network" : "hyperliquid",
+  "notes" : "Non-validator visor. Gossip peers are in agent catalog, not a conf file.",
+  "sha256" : "7bfa7785460dcdccfe462bb81ab0ddab86748f9af6307d0a27c28af389fc0411",
+  "source" : "binaries.hyperliquid.xyz",
+  "tag" : "",
+  "version" : "hl-visor"
+}

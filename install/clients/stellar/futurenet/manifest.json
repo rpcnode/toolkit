@@ -1,0 +1,8 @@
+{
+  "version": "28.0.0-vnext-200",
+  "artifact_url": "docker://stellar/stellar-rpc:28.0.0-vnext-200",
+  "sha256": "",
+  "needs_conf_patch": false,
+  "artifact_kind": "docker_extract",
+  "notes": "Futurenet protocol 28 — extract stellar-rpc + stellar-core into /opt/stellar/futurenet/bin (do not replace host /usr/bin used by testnet/mainnet). Fallback: SDF apt noble/testing."
+}

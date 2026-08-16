@@ -1,0 +1,24 @@
+{
+  "artifact_kind" : "",
+  "artifact_url" : "",
+  "env" : "testnet",
+  "fetched_at" : "2026-08-16T07:46:26Z",
+  "files" : [
+    {
+      "bytes" : 1580,
+      "kind" : "",
+      "name" : "robinhood-chain-testnet-info.json",
+      "path" : "robinhood\/testnet\/conf\/robinhood-chain-testnet-info.json",
+      "role" : "config",
+      "sha256" : "0ad167c746c2aa9169c84a252f8c863140cdbd4fc23b571fa1041f94cabaf745",
+      "status" : "ok",
+      "url" : "https:\/\/cdn.robinhood.com\/assets\/generated_assets\/hoodchain_docsite\/chain-node-configs\/robinhood-chain-testnet-info.json"
+    }
+  ],
+  "network" : "robinhood",
+  "notes" : "Nitro binary is host\/release-channel.",
+  "sha256" : "",
+  "source" : "cdn.robinhood.com",
+  "tag" : "",
+  "version" : ""
+}

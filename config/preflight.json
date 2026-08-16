@@ -1,0 +1,13 @@
+{
+  "ok": 0,
+  "warn": 0,
+  "fail": 0,
+  "suitable": false,
+  "blocking": false,
+  "env": "mainnet",
+  "source": "placeholder",
+  "platform": "",
+  "context": "pending",
+  "hint": "Placeholder — system-agent writes live facts to state dir on container start. Do not commit real host snapshots here.",
+  "checks": []
+}

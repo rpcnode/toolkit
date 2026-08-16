@@ -1,0 +1,24 @@
+{
+  "artifact_kind" : "tarball",
+  "artifact_url" : "https:\/\/bitcoincore.org\/bin\/bitcoin-core-28.1\/bitcoin-28.1-x86_64-linux-gnu.tar.gz",
+  "env" : "signet",
+  "fetched_at" : "2026-08-16T07:45:26Z",
+  "files" : [
+    {
+      "bytes" : 49598812,
+      "kind" : "tarball",
+      "name" : "bitcoin-28.1-x86_64-linux-gnu.tar.gz",
+      "path" : "bitcoin\/signet\/dist\/bitcoin-28.1-x86_64-linux-gnu.tar.gz",
+      "role" : "artifact",
+      "sha256" : "07f77afd326639145b9ba9562912b2ad2ccec47b8a305bd075b4f4cb127b7ed7",
+      "status" : "ok",
+      "url" : "https:\/\/bitcoincore.org\/bin\/bitcoin-core-28.1\/bitcoin-28.1-x86_64-linux-gnu.tar.gz"
+    }
+  ],
+  "network" : "bitcoin",
+  "notes" : "Conf agent-generated (signet=1).",
+  "sha256" : "07f77afd326639145b9ba9562912b2ad2ccec47b8a305bd075b4f4cb127b7ed7",
+  "source" : "bitcoincore.org",
+  "tag" : "",
+  "version" : "28.1"
+}

@@ -1,0 +1,119 @@
+# RpcNode control-plane panel (Mac / ops host) — multi-network (TRON, Bitcoin, …).
+# Does NOT run node agents. Pair with remote api-agent via URL + AGENT_API_TOKEN.
+#
+# rpcnode-panel:local is built from THIS repo (./Dockerfile). Not on Docker Hub.
+#   ./scripts/up-panel.sh
+#   open http://127.0.0.1:8093/
+# Forgot password: docker exec rpcnode-panel rpcnode-panel passwd admin --password 'new-secret'
+# API token: TOKEN=$(./scripts/panel-token.sh)  # Bearer, TTL 30d — see docs/developer-api.md
+#
+# Volume `panel-lib` holds panel.db — keep it across recreate.
+# Stop any old stack that still binds :8093 first:
+#   docker compose -p tron-toolkit-mainnet stop api-agent
+
+name: rpcnode-panel
+
+# Same image for panel / collector / watchdog — built once (panel), never pulled.
+# Do not put `build:` on collector/watchdog: Bake then exports the same tag 3× and
+# often dies at "exporting to image".
+x-panel-image: &panel-image
+  image: rpcnode-panel:local
+  pull_policy: never
+
+services:
+  panel:
+    <<: *panel-image
+    build:
+      context: .
+      dockerfile: Dockerfile
+      pull: false
+    pull_policy: build
+    container_name: rpcnode-panel
+    restart: unless-stopped
+    command: ["/usr/local/bin/rpcnode-panel"]
+    networks: [panel_net]
+    ports:
+      - "${PANEL_PORT:-8093}:8093"
+    environment:
+      PANEL_LISTEN: "0.0.0.0"
+      PANEL_PORT: "8093"
+      PANEL_HTPASSWD: /etc/rpcnode/panel.htpasswd
+      PANEL_SESSIONS: /var/lib/rpcnode/panel-sessions.json
+      PANEL_DB: /var/lib/rpcnode/panel.db
+      PANEL_LEGACY_DIR: /var/lib/rpcnode
+      # Optional fallback only — UI should resolve agents via registry/workload server_id.
+      PANEL_DEFAULT_AGENT_URL: ${PANEL_DEFAULT_AGENT_URL:-}
+      PANEL_DEFAULT_AGENT_TOKEN: ${AGENT_API_TOKEN:-}
+      AGENT_DOWNLOAD_URL: ${AGENT_DOWNLOAD_URL:-https://rpcnode.dev/install/agent.sh}
+      # SPA is compiled in Dockerfile (status-ui → go:embed). Do not mount host panel/ui.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - panel-lib:/var/lib/rpcnode
+      - ./config/nginx/htpasswd/panel.htpasswd:/etc/rpcnode/panel.htpasswd
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8093/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # Polls host agents → SQLite (shared volume). UI reads DB only.
+  panel-collector:
+    <<: *panel-image
+    container_name: rpcnode-panel-collector
+    restart: unless-stopped
+    depends_on:
+      panel:
+        condition: service_started
+    command: ["/usr/local/bin/rpcnode-panel", "collector"]
+    networks: [panel_net]
+    environment:
+      PANEL_DB: /var/lib/rpcnode/panel.db
+      PANEL_LEGACY_DIR: /var/lib/rpcnode
+      # ~100 nodes: 32 parallel workers, 2s tick, 5s HTTP / 8s job timeout.
+      # >100 → queue backlog / delayed refresh (ok). Cap workers at 64 in code.
+      PANEL_COLLECTOR_WORKERS: "${PANEL_COLLECTOR_WORKERS:-32}"
+      PANEL_COLLECTOR_INTERVAL_MS: "${PANEL_COLLECTOR_INTERVAL_MS:-2000}"
+      PANEL_COLLECTOR_TIMEOUT_MS: "${PANEL_COLLECTOR_TIMEOUT_MS:-5000}"
+      PANEL_COLLECTOR_JOB_TIMEOUT_MS: "${PANEL_COLLECTOR_JOB_TIMEOUT_MS:-8000}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - panel-lib:/var/lib/rpcnode
+    healthcheck:
+      disable: true
+
+  # Restarts panel (healthz down) or collector (heartbeat > 2 min). Needs docker.sock.
+  panel-watchdog:
+    <<: *panel-image
+    container_name: rpcnode-panel-watchdog
+    restart: unless-stopped
+    depends_on:
+      panel:
+        condition: service_started
+      panel-collector:
+        condition: service_started
+    command: ["/usr/local/bin/rpcnode-panel-watchdog"]
+    networks: [panel_net]
+    environment:
+      PANEL_HEALTH_URL: "http://panel:8093/healthz"
+      PANEL_CONTAINER: "rpcnode-panel"
+      COLLECTOR_CONTAINER: "rpcnode-panel-collector"
+      SELF_CONTAINER: "rpcnode-panel-watchdog"
+      COLLECTOR_HEARTBEAT: /var/lib/rpcnode/collector.heartbeat
+      STALE_SEC: "120"
+      INTERVAL_SEC: "20"
+      RATE_LIMIT_SEC: "90"
+    volumes:
+      - panel-lib:/var/lib/rpcnode
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      disable: true
+
+volumes:
+  panel-lib:
+
+networks:
+  panel_net:
+    name: ${PANEL_DOCKER_NET:-rpcnode-panel_net}

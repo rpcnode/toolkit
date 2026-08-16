@@ -1,0 +1,13 @@
+{
+  "ok": 0,
+  "warn": 0,
+  "fail": 0,
+  "suitable": false,
+  "blocking": false,
+  "env": "mainnet",
+  "source": "placeholder",
+  "platform": "",
+  "context": "pending",
+  "hint": "Placeholder — copy to config/preflight.json or let system-agent regenerate on start. On the TRON server open http://<server-ip>:8093/status (not Mac localhost). Or: ./rpcnodectl preflight",
+  "checks": []
+}

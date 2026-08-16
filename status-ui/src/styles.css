@@ -1,0 +1,612 @@
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+}
+
+:root[data-mantine-color-scheme='dark'] body,
+[data-mantine-color-scheme='dark'] body {
+  color-scheme: dark;
+  background:
+    radial-gradient(920px 520px at 6% -10%, rgba(61, 220, 151, 0.08), transparent 55%),
+    radial-gradient(780px 420px at 100% 0%, rgba(94, 184, 232, 0.07), transparent 50%),
+    #070b10;
+}
+
+:root[data-mantine-color-scheme='light'] body,
+[data-mantine-color-scheme='light'] body {
+  color-scheme: light;
+  background:
+    radial-gradient(920px 520px at 6% -10%, rgba(12, 166, 120, 0.08), transparent 55%),
+    radial-gradient(780px 420px at 100% 0%, rgba(34, 139, 194, 0.07), transparent 50%),
+    #f4f7fa;
+}
+
+/* Viewport shell: header stays fixed; only main column scrolls. */
+.panel-shell {
+  height: 100dvh;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+.panel-main {
+  position: relative;
+}
+
+.panel-collector-dead {
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  margin-bottom: 0.85rem;
+}
+
+.panel-header {
+  border-bottom: 1px solid rgba(240, 180, 80, 0.35);
+  backdrop-filter: blur(8px);
+  z-index: 200;
+}
+
+[data-mantine-color-scheme='light'] .panel-header {
+  border-bottom-color: rgba(180, 120, 40, 0.35);
+}
+
+.panel-topnav {
+  min-width: 0;
+}
+
+.panel-topnav__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 32px;
+  padding: 0 0.7rem;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+}
+
+.panel-topnav__item:hover {
+  color: var(--mantine-color-text);
+  background: color-mix(in srgb, var(--mantine-color-default-border) 55%, transparent);
+}
+
+.panel-topnav__item--active {
+  color: var(--mantine-color-text);
+  background: color-mix(in srgb, var(--mantine-color-teal-filled) 16%, transparent);
+}
+
+@media (max-width: 62em) {
+  .panel-topnav__label {
+    display: none;
+  }
+
+  .panel-topnav__item {
+    padding: 0 0.55rem;
+  }
+}
+
+.panel-navbar {
+  border-right: 1px solid var(--mantine-color-default-border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  z-index: 150;
+  background: var(--mantine-color-body);
+}
+
+.panel-navbar .mantine-AppShell-section {
+  min-height: 0;
+}
+
+.panel-navbar .mantine-ScrollArea-root {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Nodes page: in-content Networks rail (not AppShell menu). */
+.nodes-page-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem 1.5rem;
+  align-items: start;
+  margin-top: 0.75rem;
+  padding-inline: 0.35rem;
+}
+
+.nodes-page-layout--with-nav {
+  grid-template-columns: 248px minmax(0, 1fr);
+}
+
+.nodes-net-nav {
+  position: sticky;
+  top: 0.5rem;
+  z-index: 4;
+  max-height: calc(100dvh - 7rem);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-inline: 0.15rem;
+  padding: 0.65rem 0.55rem 0.85rem;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--mantine-color-body) 94%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.nodes-net-nav__toggle {
+  margin-bottom: 0.5rem;
+}
+
+.nodes-net-nav__toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.nodes-net-nav__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* Many networks/servers: keep list inside sticky rail and scroll independently. */
+  max-height: calc(100dvh - 11rem);
+}
+
+.nodes-net-nav__scroll .mantine-ScrollArea-viewport {
+  overscroll-behavior: contain;
+}
+
+.nodes-net-nav .mantine-NavLink-root {
+  border-radius: 8px;
+  padding-inline: 0.45rem;
+}
+
+.nodes-net-nav .mantine-NavLink-root[data-active] {
+  background: color-mix(in srgb, var(--mantine-color-teal-filled) 16%, transparent);
+  font-weight: 600;
+}
+
+.nodes-net-nav [data-net-nav],
+.nodes-net-nav [data-srv-nav] {
+  scroll-margin-block: 2.75rem;
+}
+
+.nodes-page-content {
+  min-width: 0;
+  padding-inline: 0.25rem 0.5rem;
+}
+
+.nodes-network-section {
+  /* ~2 card rows below the top of .panel-main when jumping from the rail. */
+  scroll-margin-top: 6rem;
+}
+
+.nodes-network-section__head {
+  padding: 0.15rem 0.1rem 0.2rem;
+  margin-bottom: 0.35rem;
+}
+
+.network-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  overflow: hidden;
+  flex-shrink: 0;
+  line-height: 1;
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.network-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.network-icon__ticker {
+  transform: translateY(0.5px);
+  user-select: none;
+}
+
+@media (max-width: 48em) {
+  .nodes-page-layout--with-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .nodes-net-nav {
+    position: sticky;
+    top: 0;
+    max-height: none;
+    z-index: 6;
+  }
+
+  .nodes-net-nav__scroll {
+    max-height: 11rem;
+  }
+}
+
+.panel-main {
+  /* Fill AppShell main column — equal inset from navbar / right edge (padding on shell). */
+  max-width: none;
+  width: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.page-chrome {
+  padding-inline: 0.35rem 0.65rem;
+}
+
+.page-chrome__header {
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  margin-bottom: 0.25rem;
+  padding-inline: 0.15rem;
+}
+
+.page-chrome__row {
+  width: 100%;
+}
+
+.page-chrome__right,
+.page-chrome__right-meta {
+  flex: 0 0 auto;
+}
+
+.page-chrome__subtitle {
+  line-height: 1.35;
+}
+
+.console-shell {
+  max-width: none;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1.25rem 1.25rem 2.5rem;
+}
+
+.console-header {
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid rgba(240, 180, 80, 0.35);
+}
+
+[data-mantine-color-scheme='light'] .console-header {
+  border-bottom-color: rgba(180, 120, 40, 0.35);
+}
+
+.console-header__right {
+  flex: 0 0 auto;
+  height: 32px;
+  margin-top: 2px;
+}
+
+.mono {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.78rem;
+  word-break: break-all;
+}
+
+.log-box {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.72rem;
+  background: var(--mantine-color-body);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  max-height: 11rem;
+  overflow: auto;
+}
+
+.log-box .line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0.1rem 0;
+}
+
+.brand-logo {
+  display: block;
+  flex-shrink: 0;
+  border-radius: 0.35rem;
+}
+
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  color: #5eb8e8 !important;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+}
+
+[data-mantine-color-scheme='light'] .brand-mark {
+  color: #1c7ed6 !important;
+}
+
+.brand-mark:hover {
+  color: #8ed0f2 !important;
+}
+
+[data-mantine-color-scheme='light'] .brand-mark:hover {
+  color: #1971c2 !important;
+}
+
+.brand-mark__icon {
+  opacity: 0.85;
+}
+
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--mantine-color-dimmed) !important;
+  font-size: 0.8rem;
+}
+
+.brand-link:hover {
+  color: var(--mantine-color-text) !important;
+}
+
+.console-footer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+
+.fullnode-rpc-card {
+  border-color: color-mix(in srgb, var(--mantine-color-teal-6) 35%, var(--mantine-color-default-border));
+}
+
+.host-load-compact {
+  min-height: 0;
+}
+
+.rpc-metric-tile {
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--mantine-color-default-hover) 55%, transparent);
+  border: 1px solid var(--mantine-color-default-border);
+}
+
+.rpc-metric-tile--accent {
+  border-color: color-mix(in srgb, var(--mantine-color-teal-6) 40%, var(--mantine-color-default-border));
+  background: color-mix(in srgb, var(--mantine-color-teal-9) 18%, var(--mantine-color-default-hover));
+}
+
+.metric-help {
+  display: inline-flex;
+  align-items: center;
+  color: var(--mantine-color-dimmed);
+  cursor: help;
+  flex-shrink: 0;
+}
+
+.metric-help:hover {
+  color: var(--mantine-color-teal-5);
+}
+
+.metric-chart-panel {
+  background: color-mix(in srgb, var(--mantine-color-dark-9) 55%, transparent);
+}
+
+.auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+}
+
+/* One SimpleGrid child per node (Card + modals). height:100% keeps row stretch. */
+.node-card-cell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+}
+
+.node-card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 0.35rem;
+}
+
+/* Reserved slots so Server / Client / Height / Ports line up across the /nodes grid. */
+.node-card__status {
+  min-height: calc(1.45em * 2);
+}
+
+.node-card__sync {
+  min-height: 3.85rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.node-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  column-gap: 1rem;
+  row-gap: 0.35rem;
+}
+
+.node-card__client {
+  min-height: 2.55rem;
+  min-width: 0;
+  flex: 1 1 6rem;
+}
+
+.node-card__server {
+  min-height: 2.55rem;
+  min-width: 0;
+  flex: 0 1 auto;
+  max-width: 62%;
+  text-align: right;
+  margin-left: auto;
+}
+
+.node-card__server-name {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+
+.node-card__meta .node-dates {
+  flex: 1 1 100%;
+  margin-top: 0.15rem;
+}
+
+.node-card__metrics {
+  min-height: 1.35em;
+}
+
+.node-card__footer {
+  margin-top: auto;
+}
+
+.node-dates {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 0.85rem;
+  row-gap: 0.12rem;
+  margin-top: 0.4rem;
+}
+
+.node-dates__row {
+  display: grid;
+  grid-template-columns: 3.4rem minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 0.4rem;
+  min-width: 0;
+}
+
+.node-dates__label {
+  color: var(--mantine-color-dimmed);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+}
+
+.node-dates__value {
+  min-width: 0;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.env-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.env-card__actions {
+  margin-top: auto;
+}
+
+/* Servers grid: fixed metric/agent rows so cards don't jump on poll. */
+.server-card__metrics {
+  min-height: 5.5rem;
+}
+
+.server-card__metric {
+  min-width: 0;
+}
+
+.server-card__metric-value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.35;
+  min-height: 1.35em;
+}
+
+.server-card__name {
+  word-break: break-word;
+  line-height: 1.3;
+  min-width: 0;
+}
+
+.server-card__id {
+  min-width: 0;
+  word-break: break-all;
+}
+
+.server-card__status-col {
+  flex-shrink: 0;
+}
+
+.server-card__plat {
+  flex-shrink: 0;
+}
+
+.server-card__agent {
+  min-height: 2.75rem;
+}
+
+.server-card__upd-badge {
+  min-width: 4.5rem;
+  justify-content: center;
+}
+
+.server-card__nodes {
+  min-height: 1.25rem;
+}
+
+.server-card__url-code {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.env-card--installed:hover {
+  border-color: rgba(61, 220, 151, 0.45);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 640px) {
+  .console-shell {
+    padding: 0.85rem 0.85rem 2rem;
+  }
+}

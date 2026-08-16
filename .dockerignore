@@ -1,0 +1,25 @@
+.git
+.cursor
+**/.DS_Store
+**/__pycache__
+**/*.pyc
+
+# Secrets / local
+.env
+**/*.local.env
+
+# Not copied into the image (keeps context small — dist/archives alone is hundreds of MB)
+dist
+var
+media
+gateway
+gateway-go
+
+# Host leftover SPA — image builds UI in the `ui` stage, then go:embed
+panel/ui
+**/node_modules
+status-ui/dist
+
+# Docs are not in the image except the one file the UI stage copies
+*.md
+!docs/developer-api.md

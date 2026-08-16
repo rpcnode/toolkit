@@ -1,0 +1,988 @@
+#!/usr/bin/env bash
+# rpcnodectl — host CLI for the RpcNode toolkit (install / snapshot / status / agents).
+# `tronctl` is a compatibility wrapper with the same commands.
+#
+# Usage (on target server, from this toolkit dir or via PATH):
+#   sudo TRON_ENV=mainnet ./rpcnodectl install
+#   sudo ./rpcnodectl snapshot start
+#   ./rpcnodectl status
+#   sudo ./rpcnodectl maintenance on --reason "upgrading" --phase jar
+#   sudo ./rpcnodectl upgrade --check
+#   sudo ./rpcnodectl upgrade
+#   sudo ./rpcnodectl upgrade --with-snapshot
+#   sudo ./rpcnodectl gateway install
+#   sudo ./rpcnodectl updater enable
+set -euo pipefail
+
+# Resolve symlinks (e.g. /usr/local/bin/rpcnodectl → …/toolkit/rpcnodectl)
+_CTL_SRC="${BASH_SOURCE[0]}"
+while [[ -L "$_CTL_SRC" ]]; do
+  _CTL_DIR="$(cd "$(dirname "$_CTL_SRC")" && pwd)"
+  _CTL_SRC="$(readlink "$_CTL_SRC")"
+  [[ "$_CTL_SRC" != /* ]] && _CTL_SRC="$_CTL_DIR/$_CTL_SRC"
+done
+TOOLKIT_DIR="$(cd "$(dirname "$_CTL_SRC")" && pwd)"
+unset _CTL_SRC _CTL_DIR
+# shellcheck disable=SC1091
+source "$TOOLKIT_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+source "$TOOLKIT_DIR/lib/ports.sh"
+# shellcheck disable=SC1091
+source "$TOOLKIT_DIR/lib/paths.sh"
+# shellcheck disable=SC1091
+source "$TOOLKIT_DIR/lib/detect.sh"
+# shellcheck disable=SC1091
+source "$TOOLKIT_DIR/lib/registry.sh"
+# shellcheck disable=SC1091
+source "$TOOLKIT_DIR/lib/setup.sh"
+# shellcheck disable=SC1091
+source "$TOOLKIT_DIR/lib/docker.sh"
+# shellcheck disable=SC1091
+source "$TOOLKIT_DIR/lib/panel-auth.sh"
+# shellcheck disable=SC1091
+source "$TOOLKIT_DIR/lib/preflight.sh"
+# shellcheck disable=SC1091
+source "$TOOLKIT_DIR/lib/toolkit-update.sh"
+
+usage() {
+  cat <<EOF
+rpcnodectl — RpcNode host toolkit (env=${TRON_ENV})
+
+Architecture:
+  nginx         public panel port — basic auth for ops panel; RPC without auth
+  system-agent  checks → agent-state.json
+  api-agent     React /status + JSON + RPC proxy (internal)
+  java-tron     usually on HOST
+
+Host agent external port: chosen by installer (default 39090, scans if busy).
+Panel (control plane): docker-compose.panel.yml on a separate host (:8093).
+
+Commands:
+  setup [--wizard|flags]     Node bits + host agent install (systemd)
+  preflight                  Optional host report
+  panel-auth set|show        Panel htpasswd helpers
+  toolkit-update check|apply|schedule|status|watch
+  agents up|down|status|logs|restart
+                             # systemd: rpcnode-api-agent + rpcnode-system-agent
+  install [--wizard]         Fresh node bits then setup
+  snapshot start|status
+  status | instances | where | detect | paths
+  maintenance on|off|status
+  upgrade […]               java-tron jar upgrade (separate from toolkit)
+  gateway …                  Alias → agents (compat)
+  updater enable|disable|run-once   # java-tron daily jar check
+
+Primary:
+  curl -fsSL https://rpcnode.dev/install/agent.sh | sudo bash
+  # or: sudo rpcnodectl setup --wizard
+  # panel on ops host:
+  docker compose -f docker-compose.panel.yml up -d --build
+  rpcnodectl where
+
+Paths:
+  env file:   /etc/tron/\$TRON_ENV/toolkit.env
+  register:   /etc/rpcnode/register.txt
+  agent port: /etc/rpcnode/agent.port
+  htpasswd:   /etc/rpcnode/panel.htpasswd
+  state:      /var/lib/rpcnode/tron-\$TRON_ENV/agent-state.json
+EOF
+}
+
+cmd_paths() {
+  cat <<EOF
+TRON_ENV=${TRON_ENV}
+OPT=${TRON_OPT}
+ETC=${TRON_ETC}
+DATA=${TRON_DATA}
+OUTPUT=${TRON_OUTPUT}
+JAR=${TRON_JAR}
+CONFIG=${TRON_CONFIG}
+SERVICE=${TRON_SERVICE}
+NODE_HTTP=${TRON_NODE_HTTP_HOST}:${TRON_NODE_HTTP_PORT}
+API_AGENT=${TRON_GATEWAY_LISTEN}:${TRON_GATEWAY_PORT}
+SYSTEM_AGENT_HEALTH=127.0.0.1:8091/healthz
+AGENT_STATE=${TRON_AGENT_STATE}
+INSTANCE_FILE=${TRON_INSTANCE_FILE}
+REGISTRY_FILE=${TRON_REGISTRY_FILE}
+MAINTENANCE_FILE=${TRON_MAINTENANCE_FILE}
+SNAPSHOT_URL=${TRON_SNAPSHOT_URL}
+TAG=${TRON_TAG}
+TOOLKIT_DIR=${TOOLKIT_DIR}
+RUNTIME=systemd-binaries
+EOF
+}
+
+ensure_dirs() {
+  mkdir -p "$TRON_OPT" "$TRON_ETC" "$TRON_OUTPUT" "$TRON_LOGS" \
+    "/var/log/tron" "/run/tron-${TRON_ENV}" \
+    "$(dirname "$TRON_MAINTENANCE_FILE")"
+  useradd --system --create-home --shell /bin/bash "$TRON_USER" 2>/dev/null || true
+  chown -R "${TRON_USER}:${TRON_GROUP}" /data/tron /opt/tron 2>/dev/null || true
+  chown -R "${TRON_USER}:${TRON_GROUP}" "$TRON_DATA" "$TRON_OPT" || true
+  chown -R "root:${TRON_GROUP}" /etc/tron
+  chmod 750 /etc/tron "$TRON_ETC"
+}
+
+patch_config_ports() {
+  local cfg="$1"
+  # fullNode HTTP → internal port for gateway
+  if grep -q 'fullNodePort' "$cfg"; then
+    sed -i -E "s/fullNodePort[[:space:]]*=[[:space:]]*[0-9]+/fullNodePort = ${TRON_NODE_HTTP_PORT}/" "$cfg"
+  fi
+  if grep -q 'listen.port' "$cfg"; then
+    sed -i -E "s/listen\.port[[:space:]]*=[[:space:]]*[0-9]+/listen.port = ${TRON_P2P_PORT}/" "$cfg"
+  fi
+  sed -i 's/db.engine *= *"ROCKSDB"/db.engine = "LEVELDB"/' "$cfg" || true
+  # Snapshot DBs need checkpoint.version = 2 (GreatVoyage); missing → CHECKPOINT_VERSION exit.
+  if grep -qE 'checkpoint\.version[[:space:]]*=' "$cfg"; then
+    sed -i -E 's/checkpoint\.version[[:space:]]*=[[:space:]]*[0-9]+/checkpoint.version = 2/' "$cfg"
+  else
+    sed -i '0,/storage {/s//storage {\n  checkpoint.version = 2/' "$cfg" || true
+  fi
+  # RpcNode: fullNode HTTP only (Go proxy). Disable stock solidity/PBFT HTTP (8091/8092
+  # collide with system-agent 2909x legacy and multi-env :18091).
+  # http{} block comes before rpc{} — first solidityEnable/PBFTEnable/Port hits are HTTP.
+  sed -i '0,/solidityEnable = true/s//solidityEnable = false/' "$cfg" || true
+  sed -i '0,/PBFTEnable = true/s//PBFTEnable = false/' "$cfg" || true
+  local sol_http=$(( ${TRON_NODE_HTTP_PORT:-18090} + 100 ))
+  local pbft_http=$(( ${TRON_NODE_HTTP_PORT:-18090} + 101 ))
+  sed -i -E "0,/solidityPort[[:space:]]*=[[:space:]]*[0-9]+/s//solidityPort = ${sol_http}/" "$cfg" || true
+  sed -i -E "0,/PBFTPort[[:space:]]*=[[:space:]]*[0-9]+/s//PBFTPort = ${pbft_http}/" "$cfg" || true
+  patch_config_prod_limits "$cfg"
+}
+
+# High-load private RPC profile (node behind gateway on 127.0.0.1).
+# global.ip.qps ≈ global.qps because all client traffic comes from one gateway IP.
+patch_config_prod_limits() {
+  local cfg="$1"
+  [[ -f "$cfg" ]] || return 0
+
+  # Concurrent HTTP connections into java-tron (default 50 is too low for prod RPC).
+  # Day-one high-load (thousands concurrent via Go proxy). Override with TRON_* env.
+  if grep -qE 'maxHttpConnectNumber[[:space:]]*=' "$cfg"; then
+    sed -i -E "s/maxHttpConnectNumber[[:space:]]*=[[:space:]]*[0-9]+/maxHttpConnectNumber = ${TRON_MAX_HTTP_CONNECT:-4000}/" "$cfg"
+  fi
+
+  if grep -qE 'global\.qps[[:space:]]*=' "$cfg"; then
+    sed -i -E "s/global\.qps[[:space:]]*=[[:space:]]*[0-9]+/global.qps = ${TRON_GLOBAL_QPS:-200000}/" "$cfg"
+  fi
+
+  if grep -qE 'global\.ip\.qps[[:space:]]*=' "$cfg"; then
+    sed -i -E "s/global\.ip\.qps[[:space:]]*=[[:space:]]*[0-9]+/global.ip.qps = ${TRON_GLOBAL_IP_QPS:-200000}/" "$cfg"
+  fi
+
+  # Reject immediately on overload instead of blocking worker threads.
+  if grep -qE 'apiNonBlocking[[:space:]]*=' "$cfg"; then
+    sed -i -E "s/apiNonBlocking[[:space:]]*=[[:space:]]*(true|false)/apiNonBlocking = true/" "$cfg"
+  fi
+}
+
+write_node_unit() {
+  # GreatVoyage amd64 requires Java 8 (jar rejects 17).
+  local java_home="${JAVA_HOME:-}"
+  local java_bin="${JAVA_BIN:-}"
+  if [[ -z "$java_bin" ]]; then
+    for c in \
+      /usr/lib/jvm/java-8-openjdk-amd64/bin/java \
+      /usr/lib/jvm/java-1.8.0-openjdk-amd64/bin/java
+    do
+      if [[ -x "$c" ]]; then
+        java_bin="$c"
+        java_home="$(dirname "$(dirname "$c")")"
+        break
+      fi
+    done
+  fi
+  if [[ -z "$java_bin" ]]; then
+    java_bin=/usr/bin/java
+    java_home="${java_home:-/usr/lib/jvm/java-8-openjdk-amd64}"
+  fi
+  cat > "/etc/systemd/system/${TRON_SERVICE}.service" <<EOF
+[Unit]
+Description=TRON java-tron FullNode (${TRON_ENV})
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${TRON_USER}
+Group=${TRON_GROUP}
+WorkingDirectory=${TRON_OPT}
+Environment=JAVA_HOME=${java_home}
+ExecStart=${java_bin} \\
+  -Xmx${TRON_JAVA_XMX} -Xms${TRON_JAVA_XMS} \\
+  -XX:+UseG1GC \\
+  -XX:+HeapDumpOnOutOfMemoryError \\
+  -XX:HeapDumpPath=${TRON_LOGS} \\
+  -jar ${TRON_JAR} \\
+  -c ${TRON_CONFIG} \\
+  -d ${TRON_OUTPUT}
+SuccessExitStatus=143
+TimeoutStopSec=600
+Restart=on-failure
+RestartSec=30
+LimitNOFILE=1000000
+KillSignal=SIGTERM
+KillMode=mixed
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+write_snapshot_unit() {
+  cat > "/etc/systemd/system/${TRON_SNAPSHOT_SERVICE}.service" <<EOF
+[Unit]
+Description=TRON ${TRON_ENV} FullNode snapshot download+extract
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=!${TRON_SNAPSHOT_MARKER}
+
+[Service]
+Type=simple
+User=root
+Environment=TRON_ENV=${TRON_ENV}
+Environment=TOOLKIT_DIR=${TOOLKIT_DIR}
+ExecStart=${TOOLKIT_DIR}/rpcnodectl snapshot start --foreground
+Restart=on-failure
+RestartSec=60
+Nice=10
+# No [Install] section — never enable on boot. Start only via UI / rpcnodectl snapshot start.
+EOF
+}
+
+gateway_exec_start() {
+  # Go api-agent only (Python gateway quarantined under gateway/legacy/).
+  printf '%s' "$TRON_GATEWAY_BIN"
+}
+
+write_gateway_unit() {
+  local exec_start
+  exec_start="$(gateway_exec_start)"
+  # Reliability: never Requires= java-tron. Restart=always. Bounded memory.
+  # /status must stay up while the node is syncing or down (degraded UI).
+  cat > "/etc/systemd/system/${TRON_GATEWAY_SERVICE}.service" <<EOF
+[Unit]
+Description=TRON ${TRON_ENV} HTTP gateway (Go; maintenance + metrics + status UI)
+Documentation=file://${TOOLKIT_DIR}/README.md
+After=network-online.target
+Wants=network-online.target
+# Intentionally NOT Requires=/After= ${TRON_SERVICE} — status UI must survive node downtime.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=${TRON_OPT}
+EnvironmentFile=-${TRON_ETC}/toolkit.env
+Environment=TRON_ENV=${TRON_ENV}
+Environment=TRON_NODE_HTTP_HOST=${TRON_NODE_HTTP_HOST}
+Environment=TRON_NODE_HTTP_PORT=${TRON_NODE_HTTP_PORT}
+Environment=TRON_GATEWAY_LISTEN=${TRON_GATEWAY_LISTEN}
+Environment=TRON_GATEWAY_PORT=${TRON_GATEWAY_PORT}
+Environment=TRON_P2P_PORT=${TRON_P2P_PORT}
+Environment=TRON_PUBLIC_BASE=${TRON_PUBLIC_BASE}
+Environment=TRON_MAINTENANCE_FILE=${TRON_MAINTENANCE_FILE}
+Environment=TRON_OUTPUT=${TRON_OUTPUT}
+Environment=TRON_OPT=${TRON_OPT}
+Environment=TRON_ETC=${TRON_ETC}
+Environment=TRON_DATA=${TRON_DATA}
+Environment=TRON_SNAPSHOT_LOG=${TRON_SNAPSHOT_LOG}
+Environment=TRON_SNAPSHOT_MARKER=${TRON_SNAPSHOT_MARKER}
+Environment=TRON_SNAPSHOT_STATE=${TRON_SNAPSHOT_STATE}
+Environment=TRON_SNAPSHOT_URL=${TRON_SNAPSHOT_URL}
+Environment=TRON_UPDATER_STATE=${TRON_UPDATER_STATE}
+Environment=TRON_VERSION_FILE=${TRON_VERSION_FILE}
+Environment=TRON_INSTANCE_FILE=${TRON_INSTANCE_FILE}
+Environment=TRON_SERVICE=${TRON_SERVICE}
+Environment=TRON_SNAPSHOT_SERVICE=${TRON_SNAPSHOT_SERVICE}
+Environment=TRON_GATEWAY_SERVICE=${TRON_GATEWAY_SERVICE}
+Environment=TOOLKIT_DIR=${TOOLKIT_DIR}
+ExecStart=${exec_start}
+ExecStopPost=/bin/bash -c 'ts=\$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ); echo "[\$ts] gateway-stop rc=\$SERVICE_RESULT/\$EXIT_CODE/\$EXIT_STATUS" >>/var/log/tron/${TRON_ENV}-gateway.log'
+Restart=always
+RestartSec=2
+TimeoutStartSec=30
+TimeoutStopSec=20
+KillMode=mixed
+KillSignal=SIGTERM
+LimitNOFILE=1000000
+MemoryMax=${TRON_GATEWAY_MEMORY_MAX}
+OOMPolicy=continue
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=${TRON_GATEWAY_SERVICE}
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+write_gateway_watchdog_units() {
+  [[ "${TRON_GATEWAY_WATCHDOG}" == "1" ]] || return 0
+  mkdir -p /var/log/tron
+  cat > "/etc/systemd/system/${TRON_GATEWAY_WATCHDOG_SERVICE}.service" <<EOF
+[Unit]
+Description=TRON ${TRON_ENV} gateway health watchdog (restart if /healthz down)
+After=network-online.target ${TRON_GATEWAY_SERVICE}.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'set -euo pipefail; code=\$(curl -sS -o /dev/null -w "%%{http_code}" --max-time 3 http://127.0.0.1:${TRON_GATEWAY_PORT}/healthz || echo 000); if [[ "\$code" != "200" && "\$code" != "503" ]]; then ts=\$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ); echo "[\$ts] watchdog restart healthz=\$code" >>/var/log/tron/${TRON_ENV}-gateway.log; systemctl restart ${TRON_GATEWAY_SERVICE}.service; fi'
+EOF
+
+  cat > "/etc/systemd/system/${TRON_GATEWAY_WATCHDOG_TIMER}" <<EOF
+[Unit]
+Description=TRON ${TRON_ENV} gateway watchdog every minute
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=60s
+AccuracySec=5s
+Persistent=true
+Unit=${TRON_GATEWAY_WATCHDOG_SERVICE}.service
+
+[Install]
+WantedBy=timers.target
+EOF
+}
+
+build_gateway_go() {
+  # Prefer api-agent (systemd Go stack).
+  local src="${TRON_GATEWAY_SRC:-$TOOLKIT_DIR/api-agent}"
+  local out="$TRON_GATEWAY_BIN"
+  [[ -d "$src" ]] || src="$TOOLKIT_DIR/api-agent"
+  [[ -d "$src" ]] || die "api-agent source missing: $src"
+  mkdir -p "$(dirname "$out")"
+  if command -v go >/dev/null 2>&1; then
+    info "building api-agent (Go) → $out"
+    (cd "$src" && CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o "$out" .)
+  elif [[ -x "$out" ]]; then
+    warn "go not installed; keeping existing binary $out"
+  else
+    die "need Go to build api-agent, or use: docker compose up -d --build"
+  fi
+  chmod 755 "$out"
+  ok "api-agent binary: $out"
+}
+
+write_updater_state() {
+  local status="$1" detail="$2" local_v="${3:-}" remote_v="${4:-}"
+  local auto=false snap=false
+  [[ "${TRON_UPDATER_AUTO_APPLY}" == "1" ]] && auto=true
+  [[ "${TRON_UPDATER_WITH_SNAPSHOT}" == "1" ]] && snap=true
+  write_json_file "$TRON_UPDATER_STATE" \
+    --arg status "$status" \
+    --arg detail "$detail" \
+    --arg local_tag "$local_v" \
+    --arg remote_tag "$remote_v" \
+    --argjson auto_apply "$auto" \
+    --argjson with_snapshot "$snap" \
+    --arg checked_at "$(ts)" \
+    '{status:$status, detail:$detail, local_tag:$local_tag, remote_tag:$remote_tag,
+      auto_apply:$auto_apply, with_snapshot:$with_snapshot, checked_at:$checked_at}'
+}
+
+write_updater_units() {
+  local hour="${TRON_UPDATER_HOUR_UTC:-3}"
+  cat > "/etc/systemd/system/${TRON_UPDATER_SERVICE}.service" <<EOF
+[Unit]
+Description=TRON ${TRON_ENV} daily release check / auto-upgrade
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=TRON_ENV=${TRON_ENV}
+Environment=TOOLKIT_DIR=${TOOLKIT_DIR}
+# Load AUTO_APPLY / WITH_SNAPSHOT / hour from toolkit.env
+EnvironmentFile=-${TRON_ETC}/toolkit.env
+ExecStart=${TOOLKIT_DIR}/rpcnodectl updater run-once
+EOF
+
+  cat > "/etc/systemd/system/${TRON_UPDATER_TIMER}" <<EOF
+[Unit]
+Description=Daily TRON ${TRON_ENV} version check (UTC ${hour}:15)
+
+[Timer]
+OnCalendar=*-*-* ${hour}:15:00
+Persistent=true
+RandomizedDelaySec=300
+Unit=${TRON_UPDATER_SERVICE}.service
+
+[Install]
+WantedBy=timers.target
+EOF
+}
+
+install_env_file() {
+  local dest="${TRON_ETC}/toolkit.env"
+  if [[ ! -f "$dest" ]]; then
+    mkdir -p "$TRON_ETC"
+    sed "s|^TRON_ENV=.*|TRON_ENV=${TRON_ENV}|" \
+      "$TOOLKIT_DIR/config/toolkit.env.mainnet.example" >"$dest"
+    # keep snapshot URL / tag from current paths defaults
+    cat >>"$dest" <<EOF
+
+TRON_TAG=${TRON_TAG}
+TRON_SNAPSHOT_URL=${TRON_SNAPSHOT_URL}
+TRON_NODE_HTTP_PORT=${TRON_NODE_HTTP_PORT}
+TRON_GATEWAY_PORT=${TRON_GATEWAY_PORT}
+TRON_P2P_PORT=${TRON_P2P_PORT}
+EOF
+    ok "wrote $dest"
+  else
+    info "keep existing $dest"
+  fi
+  chown "root:${TRON_GROUP}" "$dest"
+  chmod 640 "$dest"
+}
+
+cmd_install() {
+  require_root
+  info "install TRON env=${TRON_ENV}"
+  export DEBIAN_FRONTEND=noninteractive
+  if grep -qi cdrom /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null; then
+    sed -i '/[Cc][Dd][Rr][Oo][Mm]/d' /etc/apt/sources.list 2>/dev/null || true
+    find /etc/apt/sources.list.d -type f -exec sed -i '/[Cc][Dd][Rr][Oo][Mm]/d' {} + 2>/dev/null || true
+  fi
+  apt-get update -qq
+  apt-get install -y -qq openjdk-17-jdk-headless curl jq tar wget ca-certificates ufw
+
+  ensure_dirs
+  install_env_file
+  # reload paths after env file
+  # shellcheck disable=SC1091
+  source "$TOOLKIT_DIR/lib/paths.sh"
+
+  info "download jar ${TRON_TAG}"
+  curl -fL --retry 5 -o "$TRON_JAR" "$TRON_JAR_URL"
+  chown "${TRON_USER}:${TRON_GROUP}" "$TRON_JAR"
+
+  info "download config"
+  curl -fL -o "$TRON_CONFIG" "$TRON_CONFIG_URL"
+  patch_config_ports "$TRON_CONFIG"
+  chown "root:${TRON_GROUP}" "$TRON_CONFIG"
+  chmod 640 "$TRON_CONFIG"
+
+  cat >"$TRON_VERSION_FILE" <<EOF
+tag=${TRON_TAG}
+jar=FullNode.jar
+snapshot_url=${TRON_SNAPSHOT_URL}
+installed_at=$(ts)
+layout=${TRON_ENV}-isolated
+node_http=${TRON_NODE_HTTP_HOST}:${TRON_NODE_HTTP_PORT}
+gateway=${TRON_GATEWAY_LISTEN}:${TRON_GATEWAY_PORT}
+EOF
+  chown "${TRON_USER}:${TRON_GROUP}" "$TRON_VERSION_FILE"
+
+  write_node_unit
+  write_snapshot_unit
+  write_updater_units
+  systemctl daemon-reload
+  systemctl enable "${TRON_SERVICE}.service"
+  systemctl enable "${TRON_UPDATER_TIMER}"
+
+  ufw allow OpenSSH >/dev/null 2>&1 || true
+  ufw allow "${TRON_P2P_PORT}/tcp" comment "tron-${TRON_ENV}-p2p" >/dev/null 2>&1 || true
+  ufw --force enable >/dev/null 2>&1 || true
+
+  ln -sfn "$TOOLKIT_DIR/rpcnodectl" /usr/local/bin/rpcnodectl
+  ln -sfn "$TOOLKIT_DIR/tronctl" /usr/local/bin/tronctl
+  ensure_host_runtime_dirs 2>/dev/null || mkdir -p "/var/lib/rpcnode/tron-${TRON_ENV}" "/etc/rpcnode/instances.d"
+  write_instance_registry "fresh"
+
+  ok "install complete (node bits on host)"
+  info "next: sudo TRON_ENV=${TRON_ENV} rpcnodectl snapshot start"
+  info "      sudo rpcnodectl setup --non-interactive   # agents via Docker"
+  info "      # or: cd $TOOLKIT_DIR && docker compose up -d --build"
+  info "where: rpcnodectl where   ·   status: http://<ip>:${TRON_GATEWAY_PORT}/status"
+  cmd_paths
+}
+
+write_snapshot_state() {
+  local pct="$1" phase="$2" detail="$3"
+  write_json_file "$TRON_SNAPSHOT_STATE" \
+    --arg pct "$pct" \
+    --arg phase "$phase" \
+    --arg detail "$detail" \
+    --arg output "$TRON_OUTPUT" \
+    --arg url "$TRON_SNAPSHOT_URL" \
+    --arg updated_at "$(ts)" \
+    '{pct:$pct, phase:$phase, detail:$detail, output:$output, url:$url, updated_at:$updated_at}'
+}
+
+cmd_snapshot() {
+  local sub="${1:-status}"
+  shift || true
+  case "$sub" in
+    status)
+      if [[ -f "$TRON_SNAPSHOT_MARKER" ]]; then
+        ok "snapshot ready: $TRON_SNAPSHOT_MARKER"
+      else
+        warn "snapshot marker missing"
+      fi
+      if [[ -f "$TRON_SNAPSHOT_STATE" ]]; then
+        cat "$TRON_SNAPSHOT_STATE"
+      fi
+      if [[ -f "$TRON_SNAPSHOT_LOG" ]]; then
+        info "log tail $TRON_SNAPSHOT_LOG"
+        # last progress percent lines
+        grep -E '[0-9]+%' "$TRON_SNAPSHOT_LOG" 2>/dev/null | tail -3 || tail -5 "$TRON_SNAPSHOT_LOG"
+      fi
+      du -sh "$TRON_OUTPUT" 2>/dev/null || true
+      df -h / | tail -1
+      pgrep -af "wget.*FullNode_output|${TRON_SNAPSHOT_SERVICE}" | head -5 || true
+      ;;
+    start)
+      require_root
+      local foreground=0
+      for a in "$@"; do [[ "$a" == "--foreground" ]] && foreground=1; done
+      if [[ -f "$TRON_SNAPSHOT_MARKER" ]]; then
+        ok "already ready: $TRON_SNAPSHOT_MARKER"
+        return 0
+      fi
+      if [[ "$foreground" -eq 0 ]]; then
+        write_snapshot_unit
+        systemctl daemon-reload
+        # Unit has no [Install] — start only (never enable-on-boot).
+        systemctl start "${TRON_SNAPSHOT_SERVICE}.service"
+        ok "started ${TRON_SNAPSHOT_SERVICE} (background)"
+        info "watch: rpcnodectl snapshot status | journalctl -u ${TRON_SNAPSHOT_SERVICE} -f"
+        return 0
+      fi
+
+      ensure_dirs
+      mkdir -p "$(dirname "$TRON_SNAPSHOT_LOG")"
+      cd "$TRON_DATA"
+      write_snapshot_state "0" "download" "starting $TRON_SNAPSHOT_URL"
+      upgrade_log "$TRON_SNAPSHOT_LOG" "START stream extract $TRON_SNAPSHOT_URL -> $TRON_DATA"
+
+      (
+        while true; do
+          sleep 60
+          pgrep -f "wget.*FullNode_output|tar -xzf" >/dev/null || break
+          sz=$(du -sh "$TRON_OUTPUT" 2>/dev/null | awk '{print $1}')
+          pct=$(grep -oE '[0-9]+%' "$TRON_SNAPSHOT_LOG" 2>/dev/null | tail -1 || echo "?")
+          pct_num="${pct%%%}"
+          write_snapshot_state "$pct_num" "download" "output=$sz"
+          echo "[$(ts)] progress output=$sz pct=${pct} disk=$(df -h / | awk 'NR==2{print $5}')" >>"$TRON_SNAPSHOT_LOG"
+        done
+      ) &
+      local prog_pid=$!
+
+      set +e
+      wget -O - "$TRON_SNAPSHOT_URL" 2>>"$TRON_SNAPSHOT_LOG" | tar -xzf - >>"$TRON_SNAPSHOT_LOG" 2>&1
+      local rc=$?
+      set -e
+      kill "$prog_pid" 2>/dev/null || true
+
+      if [[ "$rc" -ne 0 ]]; then
+        write_snapshot_state "?" "failed" "wget/tar exit $rc"
+        die "snapshot failed rc=$rc — see $TRON_SNAPSHOT_LOG"
+      fi
+
+      chown -R "${TRON_USER}:${TRON_GROUP}" "$TRON_DATA"
+      date -u +"%Y-%m-%dT%H:%M:%SZ" >"$TRON_SNAPSHOT_MARKER"
+      write_snapshot_state "100" "done" "marker written"
+      upgrade_log "$TRON_SNAPSHOT_LOG" "DONE extract — starting ${TRON_SERVICE}"
+      systemctl start "${TRON_SERVICE}.service" || true
+      sleep 3
+      systemctl is-active "${TRON_SERVICE}.service" | tee -a "$TRON_SNAPSHOT_LOG" || true
+      ok "snapshot done; node start attempted"
+      ;;
+    *)
+      die "snapshot subcommand: start|status"
+      ;;
+  esac
+}
+
+rpc_height() {
+  local port="${1:-$TRON_GATEWAY_PORT}"
+  curl -s --max-time 3 "http://127.0.0.1:${port}/wallet/getnowblock" \
+    | jq -r '.block_header.raw_data.number // empty' 2>/dev/null || true
+}
+
+cmd_status() {
+  echo "=== paths (${TRON_ENV}) ==="
+  cmd_paths
+  echo
+  echo "=== disk ==="
+  df -h / | tail -1
+  du -sh "$TRON_OUTPUT" 2>/dev/null || echo "output: (missing)"
+  echo
+  echo "=== snapshot ==="
+  if [[ -f "$TRON_SNAPSHOT_MARKER" ]]; then
+    ok "ready ($(cat "$TRON_SNAPSHOT_MARKER"))"
+  else
+    warn "not ready"
+  fi
+  [[ -f "$TRON_SNAPSHOT_STATE" ]] && cat "$TRON_SNAPSHOT_STATE"
+  pgrep -af "wget.*FullNode_output" | head -3 || echo "(no wget)"
+  echo
+  echo "=== services ==="
+  for s in "$TRON_SERVICE" "$TRON_GATEWAY_SERVICE" "$TRON_SNAPSHOT_SERVICE"; do
+    printf '%-32s %s\n' "$s" "$(systemctl is-active "$s" 2>/dev/null || echo n/a)"
+  done
+  echo
+  echo "=== maintenance ==="
+  cmd_maintenance status || true
+  echo
+  echo "=== versions ==="
+  [[ -f "$TRON_VERSION_FILE" ]] && cat "$TRON_VERSION_FILE" || echo "(no VERSION)"
+  echo "remote latest tag hint: rpcnodectl upgrade --check"
+  echo
+  echo "=== rpc ==="
+  echo -n "gateway :${TRON_GATEWAY_PORT} height: "
+  rpc_height "$TRON_GATEWAY_PORT" || echo "?"
+  echo -n "node    :${TRON_NODE_HTTP_PORT} height: "
+  rpc_height "$TRON_NODE_HTTP_PORT" || echo "?"
+  curl -s --max-time 3 "http://127.0.0.1:${TRON_GATEWAY_PORT}/gateway/health" || true
+  echo
+}
+
+cmd_maintenance() {
+  local sub="${1:-status}"
+  shift || true
+  case "$sub" in
+    status)
+      if [[ -f "$TRON_MAINTENANCE_FILE" ]]; then
+        cat "$TRON_MAINTENANCE_FILE"
+      else
+        echo '{"enabled": false}'
+      fi
+      ;;
+    on)
+      require_root
+      local reason="maintenance" phase="manual" retry=30
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --reason) reason="$2"; shift 2 ;;
+          --phase) phase="$2"; shift 2 ;;
+          --retry) retry="$2"; shift 2 ;;
+          *) shift ;;
+        esac
+      done
+      mkdir -p "$(dirname "$TRON_MAINTENANCE_FILE")"
+      write_json_file "$TRON_MAINTENANCE_FILE" \
+        --argjson enabled true \
+        --arg reason "$reason" \
+        --arg phase "$phase" \
+        --argjson retry_after_sec "$retry" \
+        --arg since "$(ts)" \
+        '{enabled:$enabled, reason:$reason, phase:$phase, retry_after_sec:$retry_after_sec, since:$since}'
+      upgrade_log "$TRON_UPGRADE_LOG" "MAINTENANCE_ON phase=${phase} reason=${reason}"
+      ok "maintenance ON → $TRON_MAINTENANCE_FILE"
+      ;;
+    off)
+      require_root
+      mkdir -p "$(dirname "$TRON_MAINTENANCE_FILE")"
+      write_json_file "$TRON_MAINTENANCE_FILE" \
+        --argjson enabled false \
+        --arg since "$(ts)" \
+        '{enabled:$enabled, since:$since}'
+      upgrade_log "$TRON_UPGRADE_LOG" "MAINTENANCE_OFF"
+      ok "maintenance OFF"
+      ;;
+    *)
+      die "maintenance: on|off|status"
+      ;;
+  esac
+}
+
+latest_github_tag() {
+  curl -fsSL "https://api.github.com/repos/${TRON_GITHUB_REPO}/releases/latest" \
+    | jq -r '.tag_name'
+}
+
+local_tag() {
+  if [[ -f "$TRON_VERSION_FILE" ]]; then
+    grep -E '^tag=' "$TRON_VERSION_FILE" | head -1 | cut -d= -f2-
+  else
+    echo ""
+  fi
+}
+
+cmd_upgrade() {
+  local check_only=0 with_snapshot=0 assume_yes=0 tag=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --check) check_only=1; shift ;;
+      --with-snapshot) with_snapshot=1; shift ;;
+      --yes|-y) assume_yes=1; shift ;;
+      --tag) tag="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
+  local remote local_v
+  remote="$(latest_github_tag)"
+  local_v="$(local_tag)"
+  tag="${tag:-$remote}"
+
+  info "local=${local_v:-unknown}  latest=${remote}  target=${tag}"
+
+  if [[ "$check_only" -eq 1 ]]; then
+    if [[ -n "$local_v" && "$local_v" == "$remote" ]]; then
+      ok "up to date"
+      exit 0
+    fi
+    warn "update available: ${local_v:-?} → ${remote}"
+    exit 2
+  fi
+
+  require_root
+  if [[ -n "$local_v" && "$local_v" == "$tag" && "$with_snapshot" -eq 0 ]]; then
+    ok "already on $tag"
+    return 0
+  fi
+
+  if [[ "$assume_yes" -ne 1 ]]; then
+    if [[ ! -t 0 ]]; then
+      die "non-interactive: pass --yes"
+    fi
+    read -r -p "Upgrade to ${tag}? snapshot=${with_snapshot} [y/N] " reply || true
+    case "$reply" in y|Y|yes) ;; *) die "aborted" ;; esac
+  fi
+
+  upgrade_log "$TRON_UPGRADE_LOG" "UPGRADE_BEGIN from=${local_v:-?} to=${tag} snapshot=${with_snapshot}"
+  write_updater_state "upgrading" "RPC sleep — upgrading ${local_v:-?} → ${tag}" "$local_v" "$tag"
+
+  # Always sleep client traffic via gateway before touching the node.
+  cmd_maintenance on \
+    --reason "UPDATE PAUSE: upgrading ${local_v:-unknown} → ${tag}. Requests are sleeping (503 Retry-After)." \
+    --phase "upgrade" \
+    --retry 60
+
+  cleanup_upgrade_fail() {
+    local rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+      upgrade_log "$TRON_UPGRADE_LOG" "UPGRADE_FAIL to=${tag} rc=${rc}"
+      write_updater_state "failed" "upgrade failed rc=${rc}; RPC still in maintenance — check logs" "$local_v" "$tag"
+      cmd_maintenance on \
+        --reason "UPDATE FAILED to ${tag}. RPC paused — check /var/log/tron/${TRON_ENV}-upgrades.log" \
+        --phase "failed" \
+        --retry 120 || true
+    fi
+  }
+  trap cleanup_upgrade_fail ERR
+
+  info "stop ${TRON_SERVICE}"
+  systemctl stop "${TRON_SERVICE}.service" || true
+  # wait java exit
+  for _ in $(seq 1 120); do
+    pgrep -f "FullNode.jar.*${TRON_CONFIG}" >/dev/null || break
+    sleep 1
+  done
+
+  TRON_TAG="$tag"
+  TRON_JAR_URL="https://github.com/tronprotocol/java-tron/releases/download/${tag}/FullNode.jar"
+  TRON_CONFIG_URL="https://raw.githubusercontent.com/tronprotocol/java-tron/${tag}/framework/src/main/resources/config.conf"
+
+  cmd_maintenance on \
+    --reason "UPDATE PAUSE: downloading jar/config ${tag}" \
+    --phase "jar" \
+    --retry 60
+  info "download jar+config ${tag}"
+  curl -fL --retry 5 -o "${TRON_JAR}.new" "$TRON_JAR_URL"
+  curl -fL -o "${TRON_CONFIG}.new" "$TRON_CONFIG_URL"
+  patch_config_ports "${TRON_CONFIG}.new"
+  mv -f "${TRON_JAR}.new" "$TRON_JAR"
+  mv -f "${TRON_CONFIG}.new" "$TRON_CONFIG"
+  chown "${TRON_USER}:${TRON_GROUP}" "$TRON_JAR"
+  chown "root:${TRON_GROUP}" "$TRON_CONFIG"
+  chmod 640 "$TRON_CONFIG"
+
+  # Keep toolkit.env tag in sync
+  if [[ -f "${TRON_ETC}/toolkit.env" ]]; then
+    if grep -q '^TRON_TAG=' "${TRON_ETC}/toolkit.env"; then
+      sed -i "s|^TRON_TAG=.*|TRON_TAG=${tag}|" "${TRON_ETC}/toolkit.env"
+    else
+      echo "TRON_TAG=${tag}" >>"${TRON_ETC}/toolkit.env"
+    fi
+  fi
+
+  if [[ "$with_snapshot" -eq 1 ]]; then
+    cmd_maintenance on \
+      --reason "UPDATE PAUSE: Full snapshot replace for ${tag} (long)" \
+      --phase "snapshot" \
+      --retry 300
+    upgrade_log "$TRON_UPGRADE_LOG" "SNAPSHOT_REPLACE begin"
+    systemctl stop "${TRON_SERVICE}.service" || true
+    if [[ -d "$TRON_OUTPUT" ]]; then
+      mv "$TRON_OUTPUT" "${TRON_OUTPUT}.old.$(date +%Y%m%d%H%M%S)"
+    fi
+    mkdir -p "$TRON_OUTPUT"
+    rm -f "$TRON_SNAPSHOT_MARKER"
+    TRON_TAG="$tag" "$TOOLKIT_DIR/rpcnodectl" snapshot start --foreground
+  fi
+
+  cat >"$TRON_VERSION_FILE" <<EOF
+tag=${tag}
+jar=FullNode.jar
+snapshot_url=${TRON_SNAPSHOT_URL}
+upgraded_at=$(ts)
+layout=${TRON_ENV}-isolated
+node_http=${TRON_NODE_HTTP_HOST}:${TRON_NODE_HTTP_PORT}
+gateway=${TRON_GATEWAY_LISTEN}:${TRON_GATEWAY_PORT}
+EOF
+  chown "${TRON_USER}:${TRON_GROUP}" "$TRON_VERSION_FILE"
+
+  cmd_maintenance on \
+    --reason "UPDATE PAUSE: starting node ${tag}" \
+    --phase "start" \
+    --retry 30
+  systemctl start "${TRON_SERVICE}.service"
+  sleep 5
+
+  local h=""
+  for _ in $(seq 1 60); do
+    h="$(rpc_height "$TRON_NODE_HTTP_PORT" || true)"
+    [[ -n "$h" ]] && break
+    sleep 2
+  done
+
+  trap - ERR
+
+  if [[ -z "$h" ]]; then
+    upgrade_log "$TRON_UPGRADE_LOG" "UPGRADE_WARN node HTTP not ready yet"
+    warn "node HTTP not answering yet — check journalctl -u ${TRON_SERVICE}"
+    write_updater_state "started" "upgraded to ${tag}, waiting for RPC" "$tag" "$tag"
+  else
+    ok "node height=$h"
+    upgrade_log "$TRON_UPGRADE_LOG" "UPGRADE_OK to=${tag} height=${h}"
+    write_updater_state "ok" "upgraded to ${tag}, height=${h}" "$tag" "$tag"
+  fi
+
+  cmd_maintenance off
+  ok "upgrade finished → $tag (RPC sleep cleared)"
+  info "log: $TRON_UPGRADE_LOG"
+}
+
+cmd_gateway() {
+  # Compat alias → Docker Go agents (no Python path).
+  local sub="${1:-status}"
+  shift || true
+  case "$sub" in
+    build) cmd_agents build ;;
+    install|start) cmd_agents up ;;
+    stop) cmd_agents down ;;
+    status) cmd_agents status ;;
+    *) die "gateway: install|build|start|stop|status (→ agents)" ;;
+  esac
+}
+
+cmd_updater() {
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    enable)
+      require_root
+      write_updater_units
+      systemctl daemon-reload
+      systemctl enable --now "${TRON_UPDATER_TIMER}"
+      systemctl list-timers "${TRON_UPDATER_TIMER}" --no-pager || true
+      ok "daily timer ${TRON_UPDATER_TIMER} enabled (UTC ${TRON_UPDATER_HOUR_UTC}:15)"
+      info "AUTO_APPLY=${TRON_UPDATER_AUTO_APPLY} WITH_SNAPSHOT=${TRON_UPDATER_WITH_SNAPSHOT}"
+      ;;
+    disable)
+      require_root
+      systemctl disable --now "${TRON_UPDATER_TIMER}" 2>/dev/null || true
+      ok "timer disabled"
+      ;;
+    run-once)
+      # Daily job: parse latest GreatVoyage tag; if newer → maintenance sleep + upgrade.
+      require_root
+      local remote local_v
+      remote="$(latest_github_tag || true)"
+      local_v="$(local_tag)"
+      upgrade_log "$TRON_UPGRADE_LOG" "CHECK local=${local_v:-?} latest=${remote:-?} auto=${TRON_UPDATER_AUTO_APPLY}"
+      if [[ -z "$remote" ]]; then
+        write_updater_state "error" "cannot fetch latest GitHub release" "$local_v" ""
+        warn "cannot fetch latest release"
+        return 0
+      fi
+      if [[ -n "$local_v" && "$local_v" == "$remote" ]]; then
+        write_updater_state "ok" "up to date" "$local_v" "$remote"
+        ok "up to date ($remote)"
+        return 0
+      fi
+      warn "update available: ${local_v:-?} → ${remote}"
+      write_updater_state "available" "update available ${local_v:-?} → ${remote}" "$local_v" "$remote"
+
+      # If node height is stuck, optionally force snapshot (still gated by env).
+      local h1 h2 stall=0
+      h1="$(rpc_height "$TRON_NODE_HTTP_PORT" || true)"
+      if [[ -n "$h1" ]]; then
+        sleep 20
+        h2="$(rpc_height "$TRON_NODE_HTTP_PORT" || true)"
+        if [[ -n "$h2" && "$h1" == "$h2" ]]; then
+          stall=1
+          upgrade_log "$TRON_UPGRADE_LOG" "STALL height=${h1}"
+        fi
+      fi
+
+      if [[ "${TRON_UPDATER_AUTO_APPLY}" != "1" ]]; then
+        upgrade_log "$TRON_UPGRADE_LOG" "UPDATE_AVAILABLE ${local_v:-?} -> ${remote} (auto-apply disabled)"
+        # Still announce on status via updater-state; do not sleep RPC until apply.
+        return 0
+      fi
+
+      local args=(upgrade --yes --tag "$remote")
+      if [[ "${TRON_UPDATER_WITH_SNAPSHOT}" == "1" || ( "$stall" -eq 1 && "${TRON_UPDATER_SNAPSHOT_ON_STALL:-0}" == "1" ) ]]; then
+        args+=(--with-snapshot)
+      fi
+      "$TOOLKIT_DIR/rpcnodectl" "${args[@]}"
+      ;;
+    *)
+      die "updater: enable|disable|run-once"
+      ;;
+  esac
+}
+
+main() {
+  local cmd="${1:-}"
+  shift || true
+  case "$cmd" in
+    ""|-h|--help|help) usage ;;
+    paths) cmd_paths ;;
+    setup) cmd_setup "$@" ;;
+    preflight|check-host) cmd_preflight "$@" ;;
+    install)
+      # install --wizard / --non-interactive → setup path for existing nodes
+      if [[ "${1:-}" == "--wizard" || "${1:-}" == "--non-interactive" || "${1:-}" == "--yes" || "${1:-}" == "-y" ]]; then
+        cmd_setup "$@"
+      else
+        cmd_install "$@"
+      fi
+      ;;
+    snapshot) cmd_snapshot "$@" ;;
+    status) cmd_status "$@" ;;
+    instances) cmd_instances "$@" ;;
+    where) cmd_where "$@" ;;
+    detect)
+      detect_existing_node
+      print_detection_report
+      ;;
+    maintenance) cmd_maintenance "$@" ;;
+    upgrade) cmd_upgrade "$@" ;;
+    agents|agent) cmd_agents "$@" ;;
+    panel-auth|panel_auth) cmd_panel_auth "$@" ;;
+    toolkit-update|toolkit_update) cmd_toolkit_update "$@" ;;
+    gateway)
+      # Compat: map old gateway subcommands onto docker agents.
+      case "${1:-status}" in
+        start|install) cmd_agents up ;;
+        stop) cmd_agents down ;;
+        status) cmd_agents status ;;
+        build) cmd_agents build ;;
+        *) cmd_agents "$@" ;;
+      esac
+      ;;
+    updater) cmd_updater "$@" ;;
+    *) die "unknown command: $cmd (see --help)" ;;
+  esac
+}
+
+main "$@"

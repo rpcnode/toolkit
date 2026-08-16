@@ -1,0 +1,34 @@
+{
+  "artifact_kind" : "jar",
+  "artifact_url" : "https:\/\/github.com\/tron-nile-testnet\/nile-testnet\/releases\/download\/GreatVoyage-Nile-v4.8.2.1-PQ1-build1\/FullNode-Nile-x64-4.8.2.1-pq1-build1.jar",
+  "env" : "nile",
+  "fetched_at" : "2026-08-16T07:44:41Z",
+  "files" : [
+    {
+      "bytes" : 146790770,
+      "kind" : "jar",
+      "name" : "FullNode.jar",
+      "path" : "tron\/nile\/dist\/FullNode.jar",
+      "role" : "artifact",
+      "sha256" : "daf43263e2ea8613956798b19655bc99fb93b84ace20478b059800f21427e9aa",
+      "status" : "ok",
+      "url" : "https:\/\/github.com\/tron-nile-testnet\/nile-testnet\/releases\/download\/GreatVoyage-Nile-v4.8.2.1-PQ1-build1\/FullNode-Nile-x64-4.8.2.1-pq1-build1.jar"
+    },
+    {
+      "bytes" : 16516,
+      "kind" : "",
+      "name" : "config-nile.conf",
+      "path" : "tron\/nile\/conf\/config-nile.conf",
+      "role" : "config",
+      "sha256" : "296455a150477bc0f80a4125a57809cafcd843c271f1d7973ee051576a827b84",
+      "status" : "ok",
+      "url" : "https:\/\/raw.githubusercontent.com\/tron-nile-testnet\/nile-testnet\/master\/framework\/src\/main\/resources\/config-nile.conf"
+    }
+  ],
+  "network" : "tron",
+  "notes" : "NOT GreatVoyage. Official Nile seeds run 4.8.2.1.PQ1_build1 (pq_auth_sig). Stock 4.8.2.1 rejects the next block as type 15 block sign invalid. Conf is nile-testnet config-nile.conf — not tron-docker nile_net_config.conf (dead 47.252.* seeds).",
+  "sha256" : "daf43263e2ea8613956798b19655bc99fb93b84ace20478b059800f21427e9aa",
+  "source" : "tron-nile-testnet\/nile-testnet",
+  "tag" : "GreatVoyage-Nile-v4.8.2.1-PQ1-build1",
+  "version" : "4.8.2.1-PQ1-build1"
+}

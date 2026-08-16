@@ -1,0 +1,24 @@
+{
+  "artifact_kind" : "tarball",
+  "artifact_url" : "https:\/\/github.com\/ZcashFoundation\/zebra\/releases\/download\/v6.3.0\/zebrad-6.3.0-x86_64-unknown-linux-gnu.tar.gz",
+  "env" : "testnet",
+  "fetched_at" : "2026-08-16T07:46:42Z",
+  "files" : [
+    {
+      "bytes" : 66992676,
+      "kind" : "tarball",
+      "name" : "zebrad-6.3.0-x86_64-unknown-linux-gnu.tar.gz",
+      "path" : "zcash\/testnet\/dist\/zebrad-6.3.0-x86_64-unknown-linux-gnu.tar.gz",
+      "role" : "artifact",
+      "sha256" : "86326f5324f4e59cc2008c15f94407cc8d5feacf75d64942164bb5f08eca8c5e",
+      "status" : "ok",
+      "url" : "https:\/\/github.com\/ZcashFoundation\/zebra\/releases\/download\/v6.3.0\/zebrad-6.3.0-x86_64-unknown-linux-gnu.tar.gz"
+    }
+  ],
+  "network" : "zcash",
+  "notes" : "",
+  "sha256" : "86326f5324f4e59cc2008c15f94407cc8d5feacf75d64942164bb5f08eca8c5e",
+  "source" : "ZcashFoundation\/zebra",
+  "tag" : "v6.3.0",
+  "version" : "6.3.0"
+}

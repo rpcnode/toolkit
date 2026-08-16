@@ -1,0 +1,24 @@
+{
+  "artifact_kind" : "bin",
+  "artifact_url" : "https:\/\/binaries.hyperliquid-testnet.xyz\/Testnet\/hl-visor",
+  "env" : "testnet",
+  "fetched_at" : "2026-08-16T07:46:25Z",
+  "files" : [
+    {
+      "bytes" : 6782208,
+      "kind" : "bin",
+      "name" : "hl-visor",
+      "path" : "hyperliquid\/testnet\/dist\/hl-visor",
+      "role" : "artifact",
+      "sha256" : "5b43ceab160711939a8651eac492109474e4b42f4968fc5e19f708de64926abd",
+      "status" : "ok",
+      "url" : "https:\/\/binaries.hyperliquid-testnet.xyz\/Testnet\/hl-visor"
+    }
+  ],
+  "network" : "hyperliquid",
+  "notes" : "",
+  "sha256" : "5b43ceab160711939a8651eac492109474e4b42f4968fc5e19f708de64926abd",
+  "source" : "binaries.hyperliquid-testnet.xyz",
+  "tag" : "",
+  "version" : "hl-visor"
+}

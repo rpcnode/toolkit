@@ -1,0 +1,14 @@
+{
+  "updated_at": "2026-08-12",
+  "title": "Support RpcNode",
+  "blurb": "If this toolkit saves you time, a small tip helps us keep building. We'll be very grateful.",
+  "footer": "Double-check the network in your wallet before sending. Tips are voluntary and never required to use the panel or agents.",
+  "wallets": [
+    {
+      "network": "tron",
+      "label": "TRON (TRX / USDT-TRC20)",
+      "address": "TCaLmNocrKGhJwRfQfnHvjxmL7MJS66KFV",
+      "note": "Send to this address only on the TRON network"
+    }
+  ]
+}

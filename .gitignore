@@ -1,0 +1,74 @@
+# Never commit a real host preflight snapshot (regenerated into state dir on agents start).
+# Keep config/preflight.json as a tracked empty placeholder only — if a real snapshot
+# appears here (source != placeholder), wipe it before commit.
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+!**/*.env.example
+**/*-host.env
+**/rpcnode-*-host.env
+**/*secret*
+!**/*.go
+**/*.pem
+**/credentials.json
+
+# Local Cursor rules / secrets — not in this repo
+.cursor/
+
+# Local smoke / screenshot seed (IPs, panel copies)
+/var/
+
+# Build artifacts / local junk
+node_modules/
+dist/
+# Vite SPA — Docker embeds status-ui/dist at image build (go:embed). Stub keeps local `go build`.
+/panel/ui/**
+!/panel/ui/.gitkeep
+.DS_Store
+.idea/
+**/__pycache__/
+*.pyc
+
+# Compiled agent binaries (local darwin/linux builds — not source)
+/api-agent/api-agent
+/system-agent/system-agent
+/system-agent/TOOLKIT_VERSION
+
+# Staged agent binaries (CDN payload lives in connect public/install).
+/install/binaries/
+/install/archives/
+
+# Local fetch of chain clients (jars/tarballs). Manifests + conf/ stay tracked.
+/install/clients/**/dist/
+/install/clients/FETCH_REPORT.md
+/install/clients/FETCH_LOG.txt
+
+# macOS RpcNode app (local only — not in this repo)
+/tools/FetchClients/
+/scripts/open-rpcnode.sh
+
+# Local panel SQLite copies
+panel/panel.db
+**/*.db
+
+# Internal ops / DigitalOcean fleet / screenshot seed — keep on disk, never publish
+scripts/seed-panel-screenshots.py
+scripts/do-fleet.py
+scripts/destroy-created.sh
+scripts/digitalocean.env.example
+scripts/update-remote-*.sh
+
+# Internal contributor / smoke docs (not the public GitHub tree)
+# Public: architecture-control-plane.md, developer-api.md, agent-install.md
+/docs/add-network.md
+/docs/agent-invariants.md
+/docs/smoke-install.md
+/docs/smoke-resume.md
+
+# Local override configs that often embed real host IPs
+**/docker-compose.*.local.yml
+**/*.local.env
+**/config/*-host.*
+**/config/*.local.*

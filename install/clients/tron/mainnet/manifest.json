@@ -1,0 +1,34 @@
+{
+  "artifact_kind" : "jar",
+  "artifact_url" : "https:\/\/github.com\/tronprotocol\/java-tron\/releases\/download\/GreatVoyage-v4.8.2.1\/FullNode-x64.jar",
+  "env" : "mainnet",
+  "fetched_at" : "2026-08-16T07:44:21Z",
+  "files" : [
+    {
+      "bytes" : 145743769,
+      "kind" : "jar",
+      "name" : "FullNode.jar",
+      "path" : "tron\/mainnet\/dist\/FullNode.jar",
+      "role" : "artifact",
+      "sha256" : "834f492b4e547acb69a0d112474bb24723ca9678870d700db6abc98a6ce37743",
+      "status" : "ok",
+      "url" : "https:\/\/github.com\/tronprotocol\/java-tron\/releases\/download\/GreatVoyage-v4.8.2.1\/FullNode-x64.jar"
+    },
+    {
+      "bytes" : 13127,
+      "kind" : "",
+      "name" : "main_net_config.conf",
+      "path" : "tron\/mainnet\/conf\/main_net_config.conf",
+      "role" : "config",
+      "sha256" : "fb51f5ee508cefb4e0d4b0c1868029e385a997ee9b7468875c9d781d77b0ea2a",
+      "status" : "ok",
+      "url" : "https:\/\/raw.githubusercontent.com\/tronprotocol\/java-tron\/GreatVoyage-v4.8.2.1\/framework\/src\/main\/resources\/config.conf"
+    }
+  ],
+  "network" : "tron",
+  "notes" : "Stock GreatVoyage FullNode. Agent patches ports\/RPC after copy.",
+  "sha256" : "834f492b4e547acb69a0d112474bb24723ca9678870d700db6abc98a6ce37743",
+  "source" : "tronprotocol\/java-tron",
+  "tag" : "GreatVoyage-v4.8.2.1",
+  "version" : "4.8.2.1"
+}
