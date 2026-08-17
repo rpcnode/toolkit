@@ -282,7 +282,7 @@ Group=nodeop
 ExecStart=%s --conf %s
 # Bounded server_stop so NuDB can close. timeout 15s — stalled RPC must not hang systemd.
 # After TimeoutStopSec systemd SIGTERM (not SIGINT/Ctrl+C), then SIGKILL.
-ExecStop=/usr/bin/timeout 15 %s --conf %s server_stop
+ExecStop=-/usr/bin/timeout 15 %s --conf %s server_stop
 Restart=on-failure
 RestartSec=10
 TimeoutStopSec=45
@@ -317,7 +317,8 @@ func recycleXRPLUnit(unit string) error {
 	if !fileExists(bin) {
 		bin = "/usr/bin/xrpld"
 	}
-	if fileExists(bin) && fileExists(conf) {
+	active, _ := exec.Command("systemctl", "is-active", unit).Output()
+	if strings.TrimSpace(string(active)) == "active" && fileExists(bin) && fileExists(conf) {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		_ = exec.CommandContext(ctx, bin, "--conf", conf, "server_stop").Run()
 		cancel()
@@ -374,7 +375,7 @@ func ensureXRPLDInstalled(optPath string) (string, error) {
 		}
 	}
 
-	if err := installXRPLDFromApt(); err != nil {
+	if err := installXRPLDFromApt(env); err != nil {
 		return "", err
 	}
 	for _, c := range candidates {
@@ -433,7 +434,22 @@ func ensureRippleAptRepo() error {
 	return nil
 }
 
-func installXRPLDFromApt() error {
+func xrplDebFromCatalog(env string) (pkg, ver string) {
+	rel, err := fetchVendoredClientRelease("xrpl", env)
+	pkg, ver = "xrpld", "3.3.0"
+	if err == nil && strings.TrimSpace(rel.Version) != "" {
+		ver = strings.TrimSpace(rel.Version)
+	}
+	if err == nil {
+		u := strings.ToLower(rel.ArtifactURL)
+		if strings.Contains(u, "rippled") && !strings.Contains(u, "xrpld") {
+			pkg = "rippled"
+		}
+	}
+	return pkg, ver
+}
+
+func installXRPLDFromApt(env string) error {
 	if _, err := exec.LookPath("apt-get"); err != nil {
 		return fmt.Errorf("apt-get required to install xrpld: %w", err)
 	}
@@ -441,15 +457,35 @@ func installXRPLDFromApt() error {
 	if err := ensureRippleAptRepo(); err != nil {
 		return err
 	}
-	// Prefer xrpld; fall back to rippled package name on older repos.
-	if out, err := exec.Command("apt-get", "-y", "install", "xrpld").CombinedOutput(); err != nil {
-		if out2, err2 := exec.Command("apt-get", "-y", "install", "rippled").CombinedOutput(); err2 != nil {
-			return fmt.Errorf("apt-get install xrpld/rippled: %v (%s | %s)",
-				err, strings.TrimSpace(string(out)), strings.TrimSpace(string(out2)))
-		}
+	pkg, ver := xrplDebFromCatalog(env)
+	pref := fmt.Sprintf("Package: %s\nPin: version %s*\nPin-Priority: 1001\n", pkg, ver)
+	_ = os.WriteFile("/etc/apt/preferences.d/rpcnode-xrpl", []byte(pref), 0o644)
+	if err := aptInstallPinnedDeb(pkg, ver); err != nil {
+		return err
 	}
-
+	_ = exec.Command("apt-mark", "hold", pkg).Run()
 	return nil
+}
+
+func aptInstallPinnedDeb(pkg, ver string) error {
+	ver = strings.TrimSpace(ver)
+	cands := []string{pkg}
+	if ver != "" {
+		cands = []string{pkg + "=" + ver + "-1", pkg + "=" + ver, pkg}
+	}
+	var lastOut []byte
+	var lastErr error
+	for _, spec := range cands {
+		cmd := exec.Command("apt-get", "-y", "-o", "Dpkg::Options::=--force-confold", "install", spec)
+		cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+		out, err := cmd.CombinedOutput()
+		if err == nil {
+			return nil
+		}
+		lastOut, lastErr = out, err
+	}
+	return fmt.Errorf("apt-get install %s (catalog %s): %v (%s)",
+		pkg, ver, lastErr, strings.TrimSpace(string(lastOut)))
 }
 
 func writeXRPLConfig(etc, data string, req nodeProvisionRequest, cluster xrplNetwork) (string, error) {
@@ -523,7 +559,7 @@ func writeXRPLConfig(etc, data string, req nodeProvisionRequest, cluster xrplNet
 	b.WriteString("[node_db]\n")
 	b.WriteString("type=NuDB\n")
 	b.WriteString("path=" + nudbPath + "\n")
-	if pol.Mode != "full" && pol.Ledgers > 0 {
+	if pol.Mode != "full" && pol.Ledgers > 0 && xrplDatadirHasLedger(data) {
 		b.WriteString(fmt.Sprintf("online_delete=%d\n", pol.Ledgers))
 	}
 	b.WriteString("advisory_delete=0\n\n")

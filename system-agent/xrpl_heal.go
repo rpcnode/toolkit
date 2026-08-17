@@ -29,6 +29,10 @@ func xrplMainnetHubs() []string {
 	}
 }
 
+func xrplMainnetFixedPeers() []string {
+	return append(xrplMainnetHubs(), "s2.ripple.com 51235")
+}
+
 // xrplNodeSizeForRAMGiB — same table as api-agent (capacity-planning).
 func xrplNodeSizeForRAMGiB(gib float64) string {
 	switch {
@@ -113,7 +117,33 @@ func xrplReinitStaleNuDB(data string) (bool, error) {
 		return false, nil
 	}
 
+	marker := filepath.Join(data, ".nudb-reinit")
+	if info, err := os.Stat(marker); err == nil && time.Since(info.ModTime()) < 15*time.Minute {
+		return false, nil
+	}
+	_ = os.Remove(marker)
+
 	return xrplRotateNuDB(data, ".nudb-reinit", "reinit after failed first ledger acquire\n")
+}
+
+func xrplUnitHasLoadStall(unit string) bool {
+	return xrplJournalHasLoadStall(strings.Split(journalUnitSnippet(unit, 60), "\n"))
+}
+
+func xrplCooldownReady(dir, name string, d time.Duration) bool {
+	p := filepath.Join(strings.TrimSpace(dir), name)
+	if info, err := os.Stat(p); err == nil && time.Since(info.ModTime()) < d {
+		return false
+	}
+	return true
+}
+
+func xrplMarkCooldown(dir, name, note string) {
+	dir = strings.TrimSpace(dir)
+	if dir == "" || name == "" {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(dir, name), []byte(note), 0o644)
 }
 
 const xrplStateDBReinitMarker = ".nudb-reinit-statedb"
@@ -314,12 +344,15 @@ func healXRPLCfgFile(path, env string, hasLedger bool) (bool, error) {
 	size := xrplNodeSize(float64(ramGB()), hasLedger)
 	s = xrplNodeSizeRe.ReplaceAllString(s, "[node_size]\n"+size)
 	s = applyXRPLHistoryHeal(s, filepath.Dir(path))
+	if !hasLedger {
+		s = xrplOnlineDeleteRe.ReplaceAllString(s, "")
+	}
 	s = xrplEnsurePeersMax(s)
 	s = xrplEnsureFetchDepthFull(s)
 	s = xrplEnsureClioPorts(s, env)
 	if normalizeEnvName(env) != "testnet" {
 		s = xrplEnsureStanzaLines(s, "ips", xrplMainnetHubs())
-		s = xrplEnsureStanzaLines(s, "ips_fixed", []string{"s2.ripple.com 51235"})
+		s = xrplEnsureStanzaLines(s, "ips_fixed", xrplMainnetFixedPeers())
 	}
 	if s == orig {
 		return false, nil
@@ -465,7 +498,9 @@ func recycleXRPLUnit(unit string, cfg Config) error {
 		return fmt.Errorf("systemctl start %s: unit not installed yet", unit)
 	}
 
-	xrplGracefulStop(cfg)
+	if running, _ := xrplProcessRunning(cfg); running {
+		xrplGracefulStop(cfg)
+	}
 	_ = exec.Command("systemctl", "reset-failed", unit).Run()
 	out, err := exec.Command("systemctl", "start", unit).CombinedOutput()
 	if err != nil {

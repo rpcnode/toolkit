@@ -6,6 +6,7 @@
 .env
 .env.*
 !.env.example
+/client-watch.env
 !**/*.env.example
 **/*-host.env
 **/rpcnode-*-host.env
@@ -42,6 +43,8 @@ dist/
 
 # Local fetch of chain clients (jars/tarballs). Manifests + conf/ stay tracked.
 /install/clients/**/dist/
+/install/clients/_updates/
+/install/clients/.watch/
 /install/clients/FETCH_REPORT.md
 /install/clients/FETCH_LOG.txt
 

@@ -38,8 +38,8 @@ advisory_delete=0
 		t.Fatal(err)
 	}
 	body := string(b)
-	if !strings.Contains(body, "online_delete=256") {
-		t.Fatalf("windowed cfg must keep matching online_delete:\n%s", body)
+	if strings.Contains(body, "online_delete=") {
+		t.Fatalf("empty NuDB must not set online_delete:\n%s", body)
 	}
 	if !strings.Contains(body, "[ledger_history]\n256") {
 		t.Fatalf("heal must not force full when cfg is 256:\n%s", body)
@@ -52,6 +52,9 @@ advisory_delete=0
 	}
 	if !strings.Contains(body, "s2.ripple.com 51235") {
 		t.Fatalf("want s2 history peer:\n%s", body)
+	}
+	if i := strings.Index(body, "[ips_fixed]"); i < 0 || !strings.Contains(body[i:], "r.ripple.com 51235") {
+		t.Fatalf("first ledger needs hub in ips_fixed:\n%s", body)
 	}
 	if !strings.Contains(body, "[peers_max]\n100") {
 		t.Fatalf("want peers_max=100:\n%s", body)

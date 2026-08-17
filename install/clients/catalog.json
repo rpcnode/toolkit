@@ -160,38 +160,46 @@
       "artifacts": [],
       "configs": [],
       "env": "mainnet",
+      "github_repo": "anza-xyz/agave",
       "network": "solana",
-      "notes": "Catch-up from gossip; no official conf file to vendor.",
+      "notes": "Catch-up from gossip; no official conf file to vendor. Pin = tracked Agave (host-installed, not a CDN tarball).",
       "skip_reason": "Agave is host-installed (no pinned tarball in provision). See deploy/nodes/solana/mainnet.md.",
       "source": "anza-xyz/agave",
-      "version": ""
+      "tag": "v4.2.1",
+      "version": "4.2.1"
     },
     {
       "artifacts": [],
       "configs": [],
       "env": "testnet",
+      "github_repo": "anza-xyz/agave",
       "network": "solana",
       "skip_reason": "Agave is host-installed (no pinned tarball in provision).",
       "source": "anza-xyz/agave",
-      "version": ""
+      "tag": "v4.2.1",
+      "version": "4.2.1"
     },
     {
       "artifacts": [],
       "configs": [],
       "env": "devnet",
+      "github_repo": "anza-xyz/agave",
       "network": "solana",
       "skip_reason": "Agave is host-installed (no pinned tarball in provision).",
       "source": "anza-xyz/agave",
-      "version": ""
+      "tag": "v4.2.1",
+      "version": "4.2.1"
     },
     {
       "artifacts": [],
       "configs": [],
       "env": "localnet",
+      "github_repo": "anza-xyz/agave",
       "network": "solana",
       "skip_reason": "solana-test-validator is host-installed.",
       "source": "anza-xyz/agave",
-      "version": ""
+      "tag": "v4.2.1",
+      "version": "4.2.1"
     },
     {
       "artifacts": [
@@ -333,20 +341,24 @@
       "artifacts": [],
       "configs": [],
       "env": "mainnet",
+      "github_repo": "OffchainLabs/nitro",
       "network": "arb",
-      "notes": "Do not vendor nitro-pruned.tar here.",
+      "notes": "Do not vendor nitro-pruned.tar here. Pin = docker extract offchainlabs/nitro-node:v3.11.2-3599aca.",
       "skip_reason": "Nitro binary is host/release-channel; snapshot is lifecycle --init.url, not this cache.",
       "source": "offchainlabs/nitro",
-      "version": ""
+      "tag": "v3.11.2-3599aca",
+      "version": "3.11.2"
     },
     {
       "artifacts": [],
       "configs": [],
       "env": "sepolia",
+      "github_repo": "OffchainLabs/nitro",
       "network": "arb",
       "skip_reason": "Nitro binary is host/release-channel; snapshot is lifecycle --init.url.",
       "source": "offchainlabs/nitro",
-      "version": ""
+      "tag": "v3.11.2-3599aca",
+      "version": "3.11.2"
     },
     {
       "artifacts": [],
@@ -361,11 +373,13 @@
         }
       ],
       "env": "mainnet",
+      "github_repo": "OffchainLabs/nitro",
       "network": "robinhood",
-      "notes": "Official chain-info + genesis only.",
+      "notes": "Official chain-info + genesis only. Same nitro pin as arb (v3.11.2-3599aca).",
       "skip_reason": "Nitro binary is host/release-channel. Snapshot via robinhood-snapshots.offchainlabs.com (lifecycle).",
       "source": "cdn.robinhood.com",
-      "version": ""
+      "tag": "v3.11.2-3599aca",
+      "version": "3.11.2"
     },
     {
       "artifacts": [],
@@ -376,46 +390,60 @@
         }
       ],
       "env": "testnet",
+      "github_repo": "OffchainLabs/nitro",
       "network": "robinhood",
       "skip_reason": "Nitro binary is host/release-channel.",
       "source": "cdn.robinhood.com",
-      "version": ""
+      "tag": "v3.11.2-3599aca",
+      "version": "3.11.2"
     },
     {
       "artifacts": [],
       "configs": [],
       "env": "mainnet",
+      "github_repo": "ethereum-optimism/op-geth",
       "network": "optimism",
+      "notes": "Pin = op-geth v1.101511.1 (docker extract). op-node v1.13.5 alongside.",
       "skip_reason": "op-geth / op-node are host-installed; rollup.json comes from Superchain registry at provision.",
-      "source": "ethereum-optimism",
-      "version": ""
+      "source": "ethereum-optimism/op-geth",
+      "tag": "v1.101511.1",
+      "version": "1.101511.1"
     },
     {
       "artifacts": [],
       "configs": [],
       "env": "sepolia",
+      "github_repo": "ethereum-optimism/op-geth",
       "network": "optimism",
+      "notes": "Pin = op-geth v1.101511.1 (docker extract). op-node v1.13.5 alongside.",
       "skip_reason": "op-geth / op-node are host-installed.",
-      "source": "ethereum-optimism",
-      "version": ""
+      "source": "ethereum-optimism/op-geth",
+      "tag": "v1.101511.1",
+      "version": "1.101511.1"
     },
     {
       "artifacts": [],
       "configs": [],
       "env": "mainnet",
+      "github_repo": "base/node-reth",
       "network": "base",
-      "skip_reason": "op-geth / op-node are host-installed.",
-      "source": "base-org",
-      "version": ""
+      "notes": "Pin = ghcr.io/base/node-reth:v1.2.0 (docker extract). Not the deprecated op-geth path.",
+      "skip_reason": "base-reth-node / base-consensus are host-extracted from the official image.",
+      "source": "base/node-reth",
+      "tag": "v1.2.0",
+      "version": "1.2.0"
     },
     {
       "artifacts": [],
       "configs": [],
       "env": "sepolia",
+      "github_repo": "base/node-reth",
       "network": "base",
-      "skip_reason": "op-geth / op-node are host-installed.",
-      "source": "base-org",
-      "version": ""
+      "notes": "Pin = ghcr.io/base/node-reth:v1.2.0 (docker extract).",
+      "skip_reason": "base-reth-node / base-consensus are host-extracted from the official image.",
+      "source": "base/node-reth",
+      "tag": "v1.2.0",
+      "version": "1.2.0"
     },
     {
       "artifacts": [
@@ -577,8 +605,8 @@
       "artifacts": [
         {
           "kind": "apt",
-          "name": "rippled",
-          "url": "apt://rippled"
+          "name": "xrpld",
+          "url": "apt://xrpld"
         }
       ],
       "configs": [
@@ -589,17 +617,19 @@
       ],
       "env": "mainnet",
       "network": "xrpl",
-      "notes": "rippled is apt. rippled.cfg is agent-generated. Official UNL list is vendored.",
+      "github_repo": "XRPLF/rippled",
+      "notes": "Catalog pin = latest stable 3.3.0 (2026-08-06). Provision/update install this deb. ❌ Unpinned apt (that is how 3.2.0 landed). 3.2.0 first-ledger XRPLF#7572.",
       "skip_reason": "",
       "source": "repos.ripple.com",
-      "version": ""
+      "tag": "3.3.0",
+      "version": "3.3.0"
     },
     {
       "artifacts": [
         {
           "kind": "apt",
-          "name": "rippled",
-          "url": "apt://rippled"
+          "name": "xrpld",
+          "url": "apt://xrpld"
         }
       ],
       "configs": [
@@ -609,11 +639,13 @@
         }
       ],
       "env": "testnet",
+      "github_repo": "XRPLF/rippled",
       "network": "xrpl",
-      "notes": "rippled is apt. Official UNL list is vendored.",
+      "notes": "Catalog pin = latest stable 3.3.0 (2026-08-06). Provision/update install this deb. ❌ Unpinned apt (that is how 3.2.0 landed). 3.2.0 first-ledger XRPLF#7572.",
       "skip_reason": "",
       "source": "repos.ripple.com",
-      "version": ""
+      "tag": "3.3.0",
+      "version": "3.3.0"
     },
     {
       "artifacts": [
@@ -1046,19 +1078,25 @@
       "artifacts": [],
       "configs": [],
       "env": "mainnet",
+      "github_repo": "ton-blockchain/mytonctrl",
       "network": "ton",
+      "notes": "Pin = latest mytonctrl release (FetchClients). Provision still runs install.sh from master — not this tag as a jar.",
       "skip_reason": "validator-engine comes from mytonctrl install.sh on the host, not a single GitHub jar.",
       "source": "ton-blockchain/mytonctrl",
-      "version": ""
+      "tag": "v2.17.1",
+      "version": "2.17.1"
     },
     {
       "artifacts": [],
       "configs": [],
       "env": "testnet",
+      "github_repo": "ton-blockchain/mytonctrl",
       "network": "ton",
+      "notes": "Pin = latest mytonctrl release (FetchClients). Provision still runs install.sh from master.",
       "skip_reason": "validator-engine comes from mytonctrl install.sh on the host.",
       "source": "ton-blockchain/mytonctrl",
-      "version": ""
+      "tag": "v2.17.1",
+      "version": "2.17.1"
     },
     {
       "artifacts": [

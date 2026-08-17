@@ -248,6 +248,9 @@ func journalLineIsSystemdNoise(low string) bool {
 	if strings.HasPrefix(low, "started ") || strings.HasPrefix(low, "stopped ") {
 		return true
 	}
+	if xrplServerStopNoise(low) {
+		return true
+	}
 	return false
 }
 

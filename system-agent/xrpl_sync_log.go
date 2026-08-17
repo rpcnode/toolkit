@@ -32,8 +32,9 @@ func xrplLogTail(cfg Config, n int) []string {
 		n = 80
 	}
 	fileLines := textLogTail(xrplSyncLogPath(cfg), n)
+	debugLines := textLogTail(filepath.Join(cfg.DataDir, "debug.log"), n)
 	journalLines := xrplJournalLogLines(cfg, n*2)
-	merged := mergeLogTails(journalLines, fileLines, n)
+	merged := mergeLogTails(journalLines, append(debugLines, fileLines...), n)
 	if len(merged) > 0 {
 		return merged
 	}

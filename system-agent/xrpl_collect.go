@@ -109,6 +109,10 @@ func collectXRPL(cfg Config) map[string]any {
 	}
 
 	prog := loadLifecycleProgress(cfg)
+	if prog != nil && xrplServerStopNoise(prog.Auto.LastError) {
+		prog.Auto.LastError = ""
+		saveLifecycleProgress(cfg, prog)
+	}
 	lcIn := nodeLifecycleInput{
 		Network:        network,
 		Env:            cfg.Env,
@@ -283,7 +287,16 @@ func collectXRPL(cfg Config) map[string]any {
 		syncBlock["headers"] = info.Seq
 	}
 	if rpcOK {
-		if syncing && live {
+		if info.Seq <= 0 {
+			if xrplBuildIsBroken32(info.BuildVer) {
+				_, cat := xrplDebFromCatalog(cfg.Env)
+				syncBlock["detail"] = fmt.Sprintf("xrpld %s (3.2.x first-ledger) · catalog %s · state=%s · peers %d",
+					info.BuildVer, cat, info.State, info.Peers)
+			} else {
+				syncBlock["detail"] = fmt.Sprintf("Waiting for first ledger · state=%s · peers %d",
+					info.State, info.Peers)
+			}
+		} else if syncing && live {
 			syncBlock["detail"] = fmt.Sprintf("Syncing history · live tip · complete %s · %s%%",
 				info.Complete, formatSyncPct(verifyPct))
 		} else if syncing {
@@ -544,6 +557,10 @@ func xrplStartFailureDetail(cfg Config, procOK bool) (string, bool) {
 		return "", false
 	}
 	snip := journalUnitSnippet(cfg.NodeService, 16)
+	if xrplServerStopNoise(snip) {
+		// ExecStop=server_stop when xrpld is already dead — not a start fault.
+		return "", false
+	}
 	if strings.TrimSpace(snip) == "" {
 		snip = fmt.Sprintf("xrpld unit failed (state=%s result=%s restarts=%d)",
 			probe.ActiveState, probe.Result, probe.NRestarts)

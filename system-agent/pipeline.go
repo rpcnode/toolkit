@@ -288,9 +288,28 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 	// Never recycle the unit while tip remove/provision is in flight (enable+restart vs kill).
 	if isXRPL && !removing && !provisioning {
 		if healXRPLUnitGracefulStop(p.cfg) {
-			hostLogf("INFO", "system-agent", "start", "healed %s ExecStop=timeout server_stop", p.cfg.NodeService)
+			hostLogf("INFO", "system-agent", "start", "healed %s ExecStop=-timeout server_stop", p.cfg.NodeService)
 		}
 		hasLedger := xrplStatusHasLedger(st) || xrplDatadirHasLedger(p.cfg.DataDir)
+		xrplNoteFirstLedgerWait(p.cfg.DataDir, hasLedger)
+		if !hasLedger {
+			if pinned, err := healXRPLFirstLedgerBinary(p.cfg); err != nil {
+				log.Printf("pipeline: xrpl catalog client: %v", err)
+			} else if pinned {
+				unit := p.cfg.NodeService
+				if unit != "" && !strings.HasSuffix(unit, ".service") {
+					unit += ".service"
+				}
+				if unit != "" {
+					if err := recycleXRPLUnit(unit, p.cfg); err != nil {
+						log.Printf("pipeline: xrpl recycle after catalog client: %v", err)
+					} else {
+						_, ver := xrplDebFromCatalog(p.cfg.Env)
+						hostLogf("INFO", "system-agent", "start", "applied catalog xrpld %s", ver)
+					}
+				}
+			}
+		}
 		rotated := false
 		if !hasLedger || xrplShouldHealStateDB(p.cfg.DataDir, p.cfg.NodeService) {
 			xrplPrepareDatadirHeal(p.cfg)
@@ -320,11 +339,11 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 		if err != nil {
 			log.Printf("pipeline: xrpl cfg heal: %v", err)
 		}
+		unit := p.cfg.NodeService
+		if unit != "" && !strings.HasSuffix(unit, ".service") {
+			unit += ".service"
+		}
 		if changed || rotated {
-			unit := p.cfg.NodeService
-			if unit != "" && !strings.HasSuffix(unit, ".service") {
-				unit += ".service"
-			}
 			if unit != "" {
 				if err := recycleXRPLUnit(unit, p.cfg); err != nil {
 					log.Printf("pipeline: xrpl recycle after cfg heal: %v", err)
@@ -332,6 +351,20 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 			}
 			hostLogf("INFO", "system-agent", "start", "healed xrpld.cfg + recycle %s", unit)
 			log.Printf("pipeline: healed %s changed=%v rotated=%v recycled %s", conf, changed, rotated, unit)
+		} else if unit != "" && systemdUnitInstalled(unit) && fileExists(conf) && xrplUnitDown(p.cfg) {
+			if err := recycleXRPLUnit(unit, p.cfg); err != nil {
+				log.Printf("pipeline: xrpl start after dead server_stop: %v", err)
+			} else {
+				hostLogf("INFO", "system-agent", "start", "xrpld down (stale server_stop) — start")
+			}
+		} else if !hasLedger && unit != "" && systemdUnitInstalled(unit) &&
+			xrplUnitHasLoadStall(unit) && xrplCooldownReady(p.cfg.DataDir, ".load-stall-recycle", 12*time.Minute) {
+			xrplMarkCooldown(p.cfg.DataDir, ".load-stall-recycle", "LoadManager stall while seq=0\n")
+			if err := recycleXRPLUnit(unit, p.cfg); err != nil {
+				log.Printf("pipeline: xrpl recycle after LoadManager stall: %v", err)
+			} else {
+				hostLogf("INFO", "system-agent", "start", "LoadManager stall · seq=0 — recycle medium")
+			}
 		}
 	}
 

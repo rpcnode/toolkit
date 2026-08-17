@@ -28,9 +28,9 @@ func lookupXRPLNetwork(env string) xrplNetwork {
 			NetworkID: "",
 			// Official full-history pool — peer-to-peer backfill needs a direct
 			// history peer (https://xrpl.org/docs/infrastructure/configuration/data-retention/configure-full-history).
-			IPSFixed: []string{
-				"s2.ripple.com 51235",
-			},
+			// Hubs in ips_fixed — [ips] is bootstrap-only and drops. s2 alone
+			// is the history pool; first ledger needs a stock hub (r.ripple.com).
+			IPSFixed: append(xrplMainnetHubs(), "s2.ripple.com 51235"),
 		}
 	}
 }

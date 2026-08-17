@@ -54,8 +54,8 @@ func TestWriteXRPLConfigDefaultWeeksHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := string(b)
-	if !strings.Contains(body, "online_delete=300000") {
-		t.Fatalf("default weeks must set online_delete:\n%s", body)
+	if strings.Contains(body, "online_delete=") {
+		t.Fatalf("empty NuDB must not set online_delete yet:\n%s", body)
 	}
 	if !strings.Contains(body, "[ledger_history]\n300000\n") {
 		t.Fatalf("default install is 2 weeks, not full:\n%s", body)
@@ -65,6 +65,9 @@ func TestWriteXRPLConfigDefaultWeeksHistory(t *testing.T) {
 	}
 	if !strings.Contains(body, "s2.ripple.com 51235") {
 		t.Fatalf("want s2 history peer in ips_fixed:\n%s", body)
+	}
+	if i := strings.Index(body, "[ips_fixed]"); i < 0 || !strings.Contains(body[i:], "r.ripple.com 51235") {
+		t.Fatalf("first ledger needs hub in ips_fixed:\n%s", body)
 	}
 	if !strings.Contains(body, "[peers_max]\n100\n") {
 		t.Fatalf("want peers_max=100 for outgoing history fetch:\n%s", body)
@@ -200,7 +203,7 @@ func TestWriteXRPLConfigStockHistory(t *testing.T) {
 
 func TestRenderXRPLUnitBoundedServerStop(t *testing.T) {
 	u := renderXRPLUnit("mainnet", "/usr/bin/xrpld", "/etc/xrpl/mainnet/xrpld.cfg")
-	if !strings.Contains(u, "ExecStop=/usr/bin/timeout 15 /usr/bin/xrpld --conf /etc/xrpl/mainnet/xrpld.cfg server_stop") {
+	if !strings.Contains(u, "ExecStop=-/usr/bin/timeout 15 /usr/bin/xrpld --conf /etc/xrpl/mainnet/xrpld.cfg server_stop") {
 		t.Fatalf("want bounded server_stop:\n%s", u)
 	}
 	if !strings.Contains(u, "TimeoutStopSec=45") {
