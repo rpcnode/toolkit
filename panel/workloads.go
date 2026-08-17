@@ -1183,7 +1183,7 @@ func (s *Server) handleWorkloadProvision(w http.ResponseWriter, r *http.Request)
 		req.Header.Set("Authorization", "Bearer "+srv.AgentKey)
 		req.Header.Set("X-Api-Token", srv.AgentKey)
 	}
-	client := &http.Client{Timeout: 2 * time.Minute, Transport: s.client.Transport}
+	client := &http.Client{Timeout: 8 * time.Minute, Transport: s.client.Transport}
 	resp, err := client.Do(req)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]any{
@@ -1494,7 +1494,10 @@ func rewriteAgentCapabilityError(
 	}
 	out := map[string]any{
 		"ok": false, "error": errCode, "message": msg, "agent": agent,
-		"network": network, "env": env, "hint": "update_agent",
+		"network": network, "env": env,
+	}
+	if errCode == "unsupported_network" || errCode == "unsupported_env" {
+		out["hint"] = "update_agent"
 	}
 	if agentVer != "" {
 		out["agent_version"] = agentVer

@@ -75,6 +75,78 @@ func TestWriteXRPLConfigDefaultWeeksHistory(t *testing.T) {
 	if !strings.Contains(body, "[node_size]\nmedium\n") {
 		t.Fatalf("empty datadir must bootstrap medium, got:\n%s", body)
 	}
+	if !strings.Contains(body, "[port_grpc]\nport = 51251\n") {
+		t.Fatalf("want localhost gRPC for Clio:\n%s", body)
+	}
+	if !strings.Contains(body, "[port_ws_public]\nport = 6005\n") {
+		t.Fatalf("want public WS for Clio ETL:\n%s", body)
+	}
+}
+
+func TestScyllaIOPropertiesYAML(t *testing.T) {
+	body := scyllaIOPropertiesYAML("/data")
+	if !strings.Contains(body, "mountpoint: /data") {
+		t.Fatalf("mount: %s", body)
+	}
+	if !strings.Contains(body, "read_iops:") {
+		t.Fatalf("iops: %s", body)
+	}
+	if got := scyllaIOPropertiesYAML(""); !strings.Contains(got, "mountpoint: /") {
+		t.Fatalf("empty mount: %s", got)
+	}
+}
+
+func TestScyllaAptListURL(t *testing.T) {
+	if got := scyllaAptListURL("ubuntu"); !strings.Contains(got, "/deb/ubuntu/scylla-") {
+		t.Fatalf("ubuntu list: %s", got)
+	}
+	if got := scyllaAptListURL("debian"); !strings.Contains(got, "/deb/debian/scylla-") {
+		t.Fatalf("debian list: %s", got)
+	}
+	if got := scyllaAptListURL(""); !strings.Contains(got, "/deb/debian/scylla-") {
+		t.Fatalf("unknown os → debian list: %s", got)
+	}
+	if strings.Contains(scyllaWebInstallerURL, "/deb/install") {
+		t.Fatal("dead downloads.scylladb.com/deb/install must not be used")
+	}
+}
+
+func TestScyllaMemoryGiB(t *testing.T) {
+	t.Setenv("SCYLLA_MEMORY_GIB", "")
+	if got := scyllaMemoryGiB(12); got != 4 {
+		t.Fatalf("small host=%d", got)
+	}
+	if got := scyllaMemoryGiB(96); got != 32 {
+		t.Fatalf("96 GiB host → 1/3: %d", got)
+	}
+	if got := scyllaMemoryGiB(384); got != 96 {
+		t.Fatalf("cap 96, got %d", got)
+	}
+	t.Setenv("SCYLLA_MEMORY_GIB", "48")
+	if got := scyllaMemoryGiB(96); got != 48 {
+		t.Fatalf("override=%d", got)
+	}
+}
+
+func TestWriteXRPLClioConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeXRPLClioConfig("mainnet", dir, filepath.Join(dir, "data")); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "clio.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw)
+	if !strings.Contains(body, `"port": 51233`) {
+		t.Fatalf("clio listen:\n%s", body)
+	}
+	if !strings.Contains(body, `"grpc_port": "51251"`) {
+		t.Fatalf("clio grpc:\n%s", body)
+	}
+	if !strings.Contains(body, `"keyspace": "clio_mainnet"`) {
+		t.Fatalf("clio keyspace:\n%s", body)
+	}
 }
 
 func TestWriteXRPLConfigFullHistory(t *testing.T) {
@@ -126,10 +198,13 @@ func TestWriteXRPLConfigStockHistory(t *testing.T) {
 	}
 }
 
-func TestRenderXRPLUnitHasNoExecStop(t *testing.T) {
+func TestRenderXRPLUnitBoundedServerStop(t *testing.T) {
 	u := renderXRPLUnit("mainnet", "/usr/bin/xrpld", "/etc/xrpl/mainnet/xrpld.cfg")
-	if strings.Contains(u, "\nExecStop=") {
-		t.Fatal("ExecStop=server_stop races SIGKILL on a stalled xrpld")
+	if !strings.Contains(u, "ExecStop=/usr/bin/timeout 15 /usr/bin/xrpld --conf /etc/xrpl/mainnet/xrpld.cfg server_stop") {
+		t.Fatalf("want bounded server_stop:\n%s", u)
+	}
+	if !strings.Contains(u, "TimeoutStopSec=45") {
+		t.Fatal("want TimeoutStopSec=45")
 	}
 	if !strings.Contains(u, "KillMode=mixed") {
 		t.Fatal("want KillMode=mixed")

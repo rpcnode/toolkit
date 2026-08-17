@@ -331,6 +331,8 @@ func collectXRPL(cfg Config) map[string]any {
 		},
 		"services": map[string]any{
 			"node":   nodeSvcEffective,
+			"clio":   systemctlActive(strings.TrimSuffix(xrplClioUnitName(cfg.Env), ".service")),
+			"scylla": systemctlActive("scylla-server"),
 			"api":    apiSvc,
 			"system": systemctlActive(cfg.SystemService),
 		},

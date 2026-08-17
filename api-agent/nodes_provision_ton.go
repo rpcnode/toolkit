@@ -546,6 +546,49 @@ LimitNOFILE=1048576
 EOF
 systemctl daemon-reload || true
 
+# Dump apply OOMs when MyTonCtrl leaves --celldb-preload-all / a 64G cache.
+# Cap cache from MemTotal (same table as system-agent healTonValidatorMemory).
+if [[ -f /etc/systemd/system/validator.service ]]; then
+  python3 - <<'PY' || true
+import re
+path = "/etc/systemd/system/validator.service"
+try:
+    text = open(path).read()
+except OSError:
+    raise SystemExit(0)
+mem = 0
+for line in open("/proc/meminfo"):
+    if line.startswith("MemTotal:"):
+        mem = int(line.split()[1]) // 1024  # MiB
+        break
+gib = mem / 1024
+if gib < 16:
+    cache = 1 << 30
+elif gib < 32:
+    cache = 2 << 30
+elif gib < 64:
+    cache = 4 << 30
+else:
+    cache = 8 << 30
+m = re.search(r"(?m)^ExecStart\s*=\s*(.+)$", text)
+if not m or "validator-engine" not in m.group(1):
+    raise SystemExit(0)
+line = m.group(1).strip()
+line = re.sub(r"\s+--celldb-cache-size(?:=|\s+)\S+", "", line)
+line = re.sub(r"\s+--celldb-preload-all\b", "", line)
+line = re.sub(r"\s+--celldb-in-memory\b", "", line)
+line = re.sub(r"\s+--fast-state-serializer\b", "", line)
+flag = f"--celldb-cache-size={cache}"
+if flag not in line:
+    line = line.strip() + " " + flag
+new = re.sub(r"(?m)^ExecStart\s*=\s*.+$", "ExecStart=" + line, text, count=1)
+if new != text:
+    open(path, "w").write(new)
+    print(f"capped celldb cache at {cache} bytes (RAM ~{gib:.0f} GiB)")
+PY
+  systemctl daemon-reload || true
+fi
+
 systemctl enable validator.service mytoncore.service 2>/dev/null || true
 systemctl restart validator.service 2>/dev/null || true
 systemctl restart mytoncore.service 2>/dev/null || true

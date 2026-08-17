@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var (
@@ -111,26 +112,190 @@ func xrplReinitStaleNuDB(data string) (bool, error) {
 	if data == "" || xrplDatadirHasLedger(data) {
 		return false, nil
 	}
-	marker := filepath.Join(data, ".nudb-reinit")
+
+	return xrplRotateNuDB(data, ".nudb-reinit", "reinit after failed first ledger acquire\n")
+}
+
+const xrplStateDBReinitMarker = ".nudb-reinit-statedb"
+
+// xrplReinitCorruptStateDB — SHAMapStore abort. xrpld asks to remove db/state*
+// and empty db/nudb. One-shot marker avoids wiping a live NuDB because old
+// journal lines still say "state db error".
+func xrplReinitCorruptStateDB(data string) (bool, error) {
+	return xrplHealCorruptStateDB(data, "")
+}
+
+func xrplHealCorruptStateDB(data, unit string) (bool, error) {
+	data = strings.TrimSpace(data)
+	if data == "" {
+		return false, nil
+	}
+
+	marker := filepath.Join(data, xrplStateDBReinitMarker)
+	force := false
+	if fileExists(marker) {
+		if info, err := os.Stat(marker); err == nil && strings.TrimSpace(unit) != "" {
+			force = xrplJournalHasStateDBError(journalUnitSnippetSince(unit, info.ModTime(), 40)) ||
+				(xrplUnitDumpedCore(unit) && xrplNuDBNewerThan(data, info.ModTime()))
+		}
+	}
+
+	wipedState := xrplWipeStateSidecars(data)
+	if fileExists(marker) && !force {
+		return wipedState, nil
+	}
+
+	if force {
+		_ = os.Remove(marker)
+	}
+
+	rotated, err := xrplRotateNuDB(data, xrplStateDBReinitMarker, "reinit after SHAMapStore state db error\n")
+	if err != nil {
+		return wipedState, err
+	}
+
+	return wipedState || rotated, nil
+}
+
+func xrplStateSidecarGlob(data string) []string {
+	matches, err := filepath.Glob(filepath.Join(data, "db", "state*"))
+	if err != nil {
+		return nil
+	}
+
+	return matches
+}
+
+func xrplWipeStateSidecars(data string) bool {
+	changed := false
+	for _, p := range xrplStateSidecarGlob(data) {
+		if err := os.RemoveAll(p); err == nil {
+			changed = true
+		}
+	}
+
+	return changed
+}
+
+func xrplRotateNuDB(data, markerName, note string) (bool, error) {
+	if xrpldHoldsNuDB(data) {
+		return false, fmt.Errorf("refuse NuDB rotate: xrpld still has %s/db/nudb open", data)
+	}
+
+	marker := filepath.Join(data, markerName)
 	if fileExists(marker) {
 		return false, nil
 	}
+
 	nudb := filepath.Join(data, "db", "nudb")
 	entries, err := os.ReadDir(nudb)
 	if err != nil || len(entries) == 0 {
 		return false, nil
 	}
+
 	bak := nudb + ".stale"
 	_ = os.RemoveAll(bak)
 	if err := os.Rename(nudb, bak); err != nil {
 		return false, err
 	}
+
 	if err := os.MkdirAll(nudb, 0o755); err != nil {
 		return false, err
 	}
+
 	_ = exec.Command("chown", "-R", "nodeop:nodeop", filepath.Dir(nudb), nudb).Run()
-	_ = os.WriteFile(marker, []byte("reinit after failed first ledger acquire\n"), 0o644)
+	_ = os.WriteFile(marker, []byte(note), 0o644)
+
 	return true, nil
+}
+
+func xrplShouldHealStateDB(data, unit string) bool {
+	if xrplJournalHasStateDBError(journalUnitSnippet(unit, 40)) {
+		return true
+	}
+
+	return xrplUnitDumpedCore(unit) && (xrplNuDBHasFiles(data) || len(xrplStateSidecarGlob(data)) > 0)
+}
+
+func xrplNuDBHasFiles(data string) bool {
+	entries, err := os.ReadDir(filepath.Join(strings.TrimSpace(data), "db", "nudb"))
+	if err != nil {
+		return false
+	}
+
+	return len(entries) > 0
+}
+
+func xrplUnitDumpedCore(unit string) bool {
+	unit = strings.TrimSpace(unit)
+	if unit == "" {
+		return false
+	}
+	if !strings.HasSuffix(unit, ".service") {
+		unit += ".service"
+	}
+
+	out, _ := exec.Command("systemctl", "show", unit,
+		"-p", "Result", "-p", "ExecMainStatus", "--no-pager").CombinedOutput()
+	result, status := "", ""
+	for _, ln := range strings.Split(string(out), "\n") {
+		k, v, ok := strings.Cut(strings.TrimSpace(ln), "=")
+		if !ok {
+			continue
+		}
+		switch k {
+		case "Result":
+			result = v
+		case "ExecMainStatus":
+			status = v
+		}
+	}
+
+	return xrplSystemdLooksLikeAbort(result, status)
+}
+
+func xrplSystemdLooksLikeAbort(result, execMainStatus string) bool {
+	switch strings.ToLower(strings.TrimSpace(result)) {
+	case "core-dump", "coredump":
+		return true
+	}
+
+	switch strings.TrimSpace(execMainStatus) {
+	case "6", "134":
+		return true
+	}
+
+	return false
+}
+
+func xrplNuDBNewerThan(data string, t time.Time) bool {
+	entries, err := os.ReadDir(filepath.Join(data, "db", "nudb"))
+	if err != nil {
+		return false
+	}
+
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().After(t) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func xrplJournalHasStateDBError(raw string) bool {
+	s := strings.ToLower(raw)
+	if s == "" {
+		return false
+	}
+
+	return strings.Contains(s, "state db error") ||
+		strings.Contains(s, "corrupted state") ||
+		(strings.Contains(s, "shamapstore") && strings.Contains(s, "writabledbexists"))
 }
 
 // healXRPLCfgFile patches a stock xrpld.cfg that hardcoded node_size=huge /
@@ -151,6 +316,7 @@ func healXRPLCfgFile(path, env string, hasLedger bool) (bool, error) {
 	s = applyXRPLHistoryHeal(s, filepath.Dir(path))
 	s = xrplEnsurePeersMax(s)
 	s = xrplEnsureFetchDepthFull(s)
+	s = xrplEnsureClioPorts(s, env)
 	if normalizeEnvName(env) != "testnet" {
 		s = xrplEnsureStanzaLines(s, "ips", xrplMainnetHubs())
 		s = xrplEnsureStanzaLines(s, "ips_fixed", []string{"s2.ripple.com 51235"})
@@ -217,6 +383,36 @@ func xrplEnsurePeersMax(s string) string {
 	return strings.TrimRight(s, "\n") + fmt.Sprintf("\n\n[peers_max]\n%d\n", xrplPeersMaxHistory)
 }
 
+func xrplEnsureClioPorts(s, env string) string {
+	s = xrplEnsureServerName(s, "port_ws_public")
+	s = xrplEnsureServerName(s, "port_grpc")
+	if !strings.Contains(s, "[port_ws_public]") {
+		s = strings.TrimRight(s, "\n") + fmt.Sprintf(
+			"\n\n[port_ws_public]\nport = %d\nip = 127.0.0.1\nprotocol = ws\n",
+			xrplWSPublicPort(env),
+		)
+	}
+	if !strings.Contains(s, "[port_grpc]") {
+		s = strings.TrimRight(s, "\n") + fmt.Sprintf(
+			"\n\n[port_grpc]\nport = %d\nip = 127.0.0.1\nsecure_gateway = 127.0.0.1\n",
+			xrplGRPCPort(env),
+		)
+	}
+
+	return s
+}
+
+func xrplEnsureServerName(s, name string) string {
+	if strings.Contains(s, name) {
+		return s
+	}
+	if !strings.Contains(s, "[server]\n") {
+		return s
+	}
+
+	return strings.Replace(s, "[server]\n", "[server]\n"+name+"\n", 1)
+}
+
 func xrplEnsureFetchDepthFull(s string) string {
 	if strings.Contains(s, "[fetch_depth]") {
 		return s
@@ -242,10 +438,22 @@ func xrplEnsureStanzaLines(s, name string, lines []string) string {
 	return strings.TrimRight(s, "\n") + "\n\n" + header + strings.Join(missing, "\n") + "\n"
 }
 
+func systemdUnitInstalled(unit string) bool {
+	unit = strings.TrimSpace(unit)
+	if unit == "" {
+		return false
+	}
+	if !strings.HasSuffix(unit, ".service") {
+		unit += ".service"
+	}
+
+	return fileExists("/etc/systemd/system/"+unit) || fileExists("/lib/systemd/system/"+unit)
+}
+
 // recycleXRPLUnit — never `systemctl restart`. ExecStop=server_stop hangs when
 // LoadManager stalled / RPC is dead; systemd then SIGKILLs auxiliaries and
 // returns "Job canceled" / "Invalid argument". Kill the main process, then start.
-func recycleXRPLUnit(unit string) error {
+func recycleXRPLUnit(unit string, cfg Config) error {
 	unit = strings.TrimSpace(unit)
 	if unit == "" {
 		return nil
@@ -253,7 +461,11 @@ func recycleXRPLUnit(unit string) error {
 	if !strings.HasSuffix(unit, ".service") {
 		unit += ".service"
 	}
-	_ = exec.Command("systemctl", "kill", "-s", "SIGKILL", "--kill-who=main", unit).Run()
+	if !systemdUnitInstalled(unit) {
+		return fmt.Errorf("systemctl start %s: unit not installed yet", unit)
+	}
+
+	xrplGracefulStop(cfg)
 	_ = exec.Command("systemctl", "reset-failed", unit).Run()
 	out, err := exec.Command("systemctl", "start", unit).CombinedOutput()
 	if err != nil {

@@ -388,10 +388,12 @@ func builtinPortProfiles() []networkPortProfile {
 			OptPath:     "/opt/avalanche/fuji", EtcPath: "/etc/avalanche/fuji", DataPath: "/data/avalanche/fuji"},
 		// XRPL — stock xrpld. Non-overlapping with BTC 3929x/3939x and L2 4009x/4019x.
 		{Network: "xrpl", Env: "mainnet", Public: 40290, Agent: 40390, NodeHTTP: 5005, P2P: 51235,
+			SolHTTP: 51233, GRPC: 51251,
 			ChainFlag: "mainnet", WatchSlug: "xrpl", DiskHintGiB: 1024,
 			ServiceUnit: "xrpl-mainnet.service",
 			OptPath:     "/opt/xrpl/mainnet", EtcPath: "/etc/xrpl/mainnet", DataPath: "/data/xrpl/mainnet"},
 		{Network: "xrpl", Env: "testnet", Public: 40291, Agent: 40391, NodeHTTP: 5006, P2P: 51236,
+			SolHTTP: 51234, GRPC: 51252,
 			ChainFlag: "testnet", WatchSlug: "xrpl-testnet", DiskHintGiB: 128,
 			ServiceUnit: "xrpl-testnet.service",
 			OptPath:     "/opt/xrpl/testnet", EtcPath: "/etc/xrpl/testnet", DataPath: "/data/xrpl/testnet"},

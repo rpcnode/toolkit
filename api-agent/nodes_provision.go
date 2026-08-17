@@ -1834,6 +1834,7 @@ func envReclaimUnits(network, env string) []string {
 		fmt.Sprintf("rpcnode-api-agent-%s-%s.service", network, env),
 		fmt.Sprintf("rpcnode-system-agent-%s-%s.service", network, env),
 		fmt.Sprintf("%s-%s.service", network, env),
+		fmt.Sprintf("%s-clio-%s.service", network, env),
 	}
 }
 

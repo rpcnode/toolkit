@@ -261,12 +261,40 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 	}
 
 	removing := removeJobPending(p.cfg.Network, p.cfg.Env)
+	provisioning := provisionLockPending(p.cfg.Network, p.cfg.Env)
+
+	// TON: dump apply OOMs if celldb cache / preload-all is huge. Cap + start.
+	if isTon && !removing && !provisioning && tonBootstrapDone(p.cfg) {
+		changed, err := healTonValidatorMemory()
+		if err != nil {
+			log.Printf("pipeline: ton celldb heal: %v", err)
+		}
+		if changed {
+			if err := recycleTonValidator(); err != nil {
+				log.Printf("pipeline: ton validator recycle after celldb heal: %v", err)
+			} else {
+				hostLogf("INFO", "system-agent", "start", "capped validator celldb cache + recycle")
+			}
+		} else if tonValidatorDown() {
+			if err := nudgeTonValidatorStack(); err != nil {
+				log.Printf("pipeline: ton validator start: %v", err)
+			} else {
+				hostLogf("INFO", "system-agent", "start", "validator down after dump — start")
+			}
+		}
+	}
 
 	// XRPL: hardcoded node_size=huge stalls LoadManager (seq=0 → FTL 90s) on <32 GiB RAM.
-	// Never recycle the unit while tip remove is in flight (enable+restart vs kill).
-	if isXRPL && !removing {
+	// Never recycle the unit while tip remove/provision is in flight (enable+restart vs kill).
+	if isXRPL && !removing && !provisioning {
+		if healXRPLUnitGracefulStop(p.cfg) {
+			hostLogf("INFO", "system-agent", "start", "healed %s ExecStop=timeout server_stop", p.cfg.NodeService)
+		}
 		hasLedger := xrplStatusHasLedger(st) || xrplDatadirHasLedger(p.cfg.DataDir)
 		rotated := false
+		if !hasLedger || xrplShouldHealStateDB(p.cfg.DataDir, p.cfg.NodeService) {
+			xrplPrepareDatadirHeal(p.cfg)
+		}
 		if !hasLedger {
 			var err error
 			rotated, err = xrplReinitStaleNuDB(p.cfg.DataDir)
@@ -275,6 +303,16 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 			} else if rotated {
 				hostLogf("INFO", "system-agent", "start", "reinit empty NuDB after failed first acquire")
 				log.Printf("pipeline: reinit stale NuDB under %s", p.cfg.DataDir)
+			}
+		}
+		if !rotated && xrplShouldHealStateDB(p.cfg.DataDir, p.cfg.NodeService) {
+			ok, err := xrplHealCorruptStateDB(p.cfg.DataDir, p.cfg.NodeService)
+			if err != nil {
+				log.Printf("pipeline: xrpl state-db reinit: %v", err)
+			} else if ok {
+				rotated = true
+				hostLogf("INFO", "system-agent", "start", "reinit NuDB after SHAMapStore state db error")
+				log.Printf("pipeline: reinit corrupt SHAMapStore NuDB under %s", p.cfg.DataDir)
 			}
 		}
 		conf := filepath.Join(p.cfg.EtcDir, "xrpld.cfg")
@@ -288,7 +326,7 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 				unit += ".service"
 			}
 			if unit != "" {
-				if err := recycleXRPLUnit(unit); err != nil {
+				if err := recycleXRPLUnit(unit, p.cfg); err != nil {
 					log.Printf("pipeline: xrpl recycle after cfg heal: %v", err)
 				}
 			}
@@ -588,6 +626,14 @@ func (p *LifecyclePipeline) startNode() error {
 		// Also nudge stock MyTonCtrl units when bootstrap already finished.
 		// ❌ /usr/bin/ton/validator-engine is a build dir mid-dump — only marker or real binary.
 		if fileExists(filepath.Join(etc, "bootstrap.done")) || tonValidatorEngineBin() != "" {
+			if changed, err := healTonValidatorMemory(); err != nil {
+				log.Printf("pipeline: ton celldb heal: %v", err)
+			} else if changed {
+				hostLogf("INFO", "system-agent", "start", "capped validator celldb cache + recycle")
+				if err := recycleTonValidator(); err != nil {
+					log.Printf("pipeline: ton validator recycle: %v", err)
+				}
+			}
 			_ = exec.Command("systemctl", "start", "--no-block", "validator.service").Run()
 			_ = exec.Command("systemctl", "start", "--no-block", "mytoncore.service").Run()
 			for _, u := range []string{"ton-http-api.service", "ton_http_api.service"} {
@@ -999,20 +1045,38 @@ func (p *LifecyclePipeline) startNode() error {
 	}
 
 	if isXRPL {
+		if removeJobPending(p.cfg.Network, p.cfg.Env) {
+			log.Printf("pipeline: skip xrpld start — remove job pending")
+			return nil
+		}
+		if provisionLockPending(p.cfg.Network, p.cfg.Env) {
+			log.Printf("pipeline: skip xrpld start — provision in flight")
+			return nil
+		}
 		if resolveXRPLDBin(p.cfg) == "" {
 			return fmt.Errorf("xrpld binary missing under %s/bin or /usr/bin/xrpld", p.cfg.OptDir)
 		}
 		conf := filepath.Join(p.cfg.EtcDir, "xrpld.cfg")
 		if !fileExists(conf) {
-			return fmt.Errorf("xrpld.cfg missing at %s — re-provision", conf)
+			log.Printf("pipeline: skip xrpld start — cfg not ready at %s", conf)
+			return nil
 		}
-		if removeJobPending(p.cfg.Network, p.cfg.Env) {
-			log.Printf("pipeline: skip xrpld start — remove job pending")
+		if !systemdUnitInstalled(unit) {
+			log.Printf("pipeline: skip xrpld start — %s not installed yet", unit)
 			return nil
 		}
 		hasLedger := xrplDatadirHasLedger(p.cfg.DataDir)
 		if _, err := healXRPLCfgFile(conf, p.cfg.Env, hasLedger); err != nil {
 			return fmt.Errorf("heal xrpld.cfg: %w", err)
+		}
+		if xrplShouldHealStateDB(p.cfg.DataDir, unit) {
+			xrplPrepareDatadirHeal(p.cfg)
+			if ok, err := xrplHealCorruptStateDB(p.cfg.DataDir, unit); err != nil {
+				return fmt.Errorf("reinit corrupt NuDB: %w", err)
+			} else if ok {
+				hostLogf("INFO", "system-agent", "start", "reinit NuDB after SHAMapStore state db error")
+				log.Printf("pipeline: start reinit corrupt SHAMapStore NuDB under %s", p.cfg.DataDir)
+			}
 		}
 		if err := ensurePerNodeAPIAgent(p.cfg); err != nil {
 			return fmt.Errorf("ensure Go RPC: %w", err)
@@ -1020,7 +1084,7 @@ func (p *LifecyclePipeline) startNode() error {
 		_ = exec.Command("systemctl", "daemon-reload").Run()
 		_ = exec.Command("systemctl", "reset-failed", unit).Run()
 		_ = exec.Command("systemctl", "enable", unit).Run()
-		if err := recycleXRPLUnit(unit); err != nil {
+		if err := recycleXRPLUnit(unit, p.cfg); err != nil {
 			snippet := journalUnitSnippet(unit, 12)
 			msg := err.Error()
 			if snippet != "" {
@@ -1031,6 +1095,9 @@ func (p *LifecyclePipeline) startNode() error {
 		time.Sleep(900 * time.Millisecond)
 		procOK, _ := xrplProcessRunning(p.cfg)
 		if procOK {
+			if err := startXRPLClioStack(p.cfg); err != nil {
+				log.Printf("pipeline: xrpl clio start: %v", err)
+			}
 			log.Printf("pipeline: xrpld START via %s conf=%s", unit, conf)
 			return nil
 		}
@@ -1042,6 +1109,9 @@ func (p *LifecyclePipeline) startNode() error {
 				msg += " — " + snippet
 			}
 			return fmt.Errorf("%s (conf=%s)", msg, conf)
+		}
+		if err := startXRPLClioStack(p.cfg); err != nil {
+			log.Printf("pipeline: xrpl clio start: %v", err)
 		}
 		log.Printf("pipeline: xrpld START via %s conf=%s state=%s", unit, conf, state)
 		return nil

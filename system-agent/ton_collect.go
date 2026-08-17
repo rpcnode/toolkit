@@ -90,18 +90,14 @@ func collectTon(cfg Config) map[string]any {
 	// we have a real catch-up signal (oos) or validator/THA is past dump.
 	// ❌ Clearing immediately on bootstrap.done → empty bar until getstats works.
 	if bootDone && !bootActive {
-		if procOK || thaOpen {
-			if oos, _, ok := readTonOutOfSyncSec(cfg); ok && oos >= 0 {
-				dumpPct = 0
-				dumpDetail = ""
-				clearTonDumpProgress(cfg)
-			} else if dumpPct >= 100 {
-				// Dump finished; validator up but oos not ready yet — hold 99.9, not 100.
-				dumpPct = 99
-				dumpDetail = "dump done · waiting for catch-up signal"
-			}
-		} else {
-			// Marker written, process not up yet — keep last dump % for the UI gap.
+		if oos, seq, ok := readTonOutOfSyncSec(cfg); ok && oos >= 0 && seq > 0 && (procOK || thaOpen) {
+			dumpPct = 0
+			dumpDetail = ""
+			clearTonDumpProgress(cfg)
+		} else if dumpPct >= 100 || dumpPct == 0 {
+			// Dump finished; seqno=0 means apply/OOM — hold 99, not lag-closed 0.1%.
+			dumpPct = 99
+			dumpDetail = "dump done · applying state"
 		}
 	}
 
@@ -120,20 +116,24 @@ func collectTon(cfg Config) map[string]any {
 			if info.Seqno <= 0 && seq > 0 {
 				info.Seqno = seq
 			}
-			// Healthy only when THA answers — otherwise still catching up / API not ready.
-			info.Synced = oos <= tonOutOfSyncHealthySec && info.OK && !bootActive
+			oom := tonValidatorOOM()
+			// Healthy only with applied seqno + THA. oos≈0 + seqno=0 is dump/OOM, not tip.
+			info.Synced = tonCatchupHonest(oos, info.Seqno, oom) && info.OK && !bootActive
 			if info.Synced {
 				info.VerifyPct = 1
 				clearTonCatchupMaxBehind(cfg)
 				clearTonDumpProgress(cfg)
 				dumpPct = 0
 				info.DumpPct = 0
-			} else if p, ok := tonLagClosedPct(cfg, oos); ok {
-				info.VerifyPct = p / 100
-				// Real lag signal supersedes dump %.
-				dumpPct = 0
-				info.DumpPct = 0
-				clearTonDumpProgress(cfg)
+			} else if info.Seqno > 0 && !oom {
+				if p, ok := tonLagClosedPct(cfg, oos); ok {
+					info.VerifyPct = p / 100
+					dumpPct = 0
+					info.DumpPct = 0
+					clearTonDumpProgress(cfg)
+				}
+			} else {
+				info.Synced = false
 			}
 		} else if info.OK {
 			// THA up but no out-of-sync yet — treat as syncing without fake %.
@@ -355,7 +355,7 @@ func collectTon(cfg Config) map[string]any {
 	if info.Seqno > 0 {
 		rpcBlock["node_height"] = info.Seqno
 	}
-	if info.OutOfSyncOK {
+	if info.OutOfSyncOK && info.Seqno > 0 {
 		rpcBlock["out_of_sync_sec"] = info.OutOfSyncSec
 	}
 	if verifyPctUI != nil {
@@ -376,7 +376,7 @@ func collectTon(cfg Config) map[string]any {
 	if info.Seqno > 0 {
 		syncBlock["height"] = info.Seqno
 	}
-	if info.OutOfSyncOK {
+	if info.OutOfSyncOK && info.Seqno > 0 {
 		syncBlock["out_of_sync_sec"] = info.OutOfSyncSec
 	}
 	if dumpPct > 0 && !info.Synced {
@@ -462,28 +462,30 @@ func tonSetupIbdPct(info tonRPCInfo, rpcOK bool) any {
 }
 
 func tonSyncDetail(info tonRPCInfo, syncing bool) string {
+	if tonValidatorOOM() {
+		if info.Seqno <= 0 {
+			return "OOM killer — celldb preload/huge cache after dump (seqno 0)"
+		}
+		return fmt.Sprintf("OOM killer — celldb preload/huge cache · seqno %d", info.Seqno)
+	}
 	lag := ""
-	if info.VerifyPct > 0 && info.VerifyPct < 1 && info.OutOfSyncOK {
+	if info.VerifyPct > 0 && info.VerifyPct < 1 && info.OutOfSyncOK && info.Seqno > 0 {
 		lag = fmt.Sprintf(" · %.1f%% lag closed", info.VerifyPct*100)
 	}
-	if info.OutOfSyncOK {
+	if info.OutOfSyncOK && info.Seqno > 0 {
 		if syncing {
-			seq := ""
-			if info.Seqno > 0 {
-				seq = fmt.Sprintf(" · seqno %d", info.Seqno)
-			}
-			return fmt.Sprintf("%s sec behind%s%s", formatTonBehind(info.OutOfSyncSec), lag, seq)
+			return fmt.Sprintf("%s sec behind%s · seqno %d", formatTonBehind(info.OutOfSyncSec), lag, info.Seqno)
 		}
 		return fmt.Sprintf("Synced · %s sec behind · seqno %d", formatTonBehind(info.OutOfSyncSec), info.Seqno)
+	}
+	if info.DumpPct > 0 && syncing {
+		return fmt.Sprintf("MyTonCtrl dump %d%% · applying state", info.DumpPct)
 	}
 	if info.OK {
 		if syncing {
 			return fmt.Sprintf("Syncing · seqno %d (out-of-sync pending)", info.Seqno)
 		}
 		return fmt.Sprintf("THA ok · seqno %d", info.Seqno)
-	}
-	if info.DumpPct > 0 && syncing {
-		return fmt.Sprintf("MyTonCtrl dump %d%%", info.DumpPct)
 	}
 	if info.Error != "" {
 		return info.Error
@@ -1120,6 +1122,9 @@ func tonStartFailureDetail(cfg Config, procOK, bootDone, bootActive bool) (strin
 		return msg, true
 	}
 	if bootDone && !procOK {
+		if tonValidatorOOM() {
+			return "validator.service killed by OOM — MyTonCtrl celldb preload / huge cache (heal strips preload-all and caps cache)", true
+		}
 		if systemctlFailed("validator.service") {
 			snip := stripUnitPathNoise(journalUnitSnippet("validator.service", 12))
 			msg := "validator.service failed"

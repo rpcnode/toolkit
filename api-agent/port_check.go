@@ -32,12 +32,18 @@ func solHTTPRole(prof networkPortProfile) string {
 	if strings.EqualFold(prof.Network, "stellar") {
 		return "captive_core_http_query_port"
 	}
+	if strings.EqualFold(prof.Network, "xrpl") {
+		return "clio_http_port"
+	}
 	return "sol_http_port"
 }
 
 func solHTTPLabel(prof networkPortProfile) string {
 	if strings.EqualFold(prof.Network, "stellar") {
 		return "Captive Core HTTP_QUERY"
+	}
+	if strings.EqualFold(prof.Network, "xrpl") {
+		return "Clio HTTP"
 	}
 	return "Solidity HTTP (reserved)"
 }

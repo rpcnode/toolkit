@@ -535,6 +535,8 @@ export function SyncStatusCard({
                 </>
               ) : ton &&
                 typeof sync?.out_of_sync_sec === 'number' &&
+                typeof blocks === 'number' &&
+                blocks > 0 &&
                 syncing ? (
                 <>
                   {Number(sync.out_of_sync_sec).toLocaleString()}
@@ -551,7 +553,7 @@ export function SyncStatusCard({
                 typeof sync?.dump_pct === 'number' &&
                 sync.dump_pct > 0 &&
                 syncing &&
-                typeof sync?.out_of_sync_sec !== 'number' ? (
+                !(typeof blocks === 'number' && blocks > 0) ? (
                 <>
                   {sync.dump_pct}%
                   <Text span size="sm" c="dimmed" fw={600} ml={6}>

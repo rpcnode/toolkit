@@ -146,3 +146,79 @@ func TestXRPLReinitStaleNuDBOnce(t *testing.T) {
 		t.Fatalf("second reinit must no-op: ok=%v err=%v", ok, err)
 	}
 }
+
+func TestXRPLSystemdLooksLikeAbort(t *testing.T) {
+	if !xrplSystemdLooksLikeAbort("core-dump", "0") {
+		t.Fatal("core-dump")
+	}
+	if !xrplSystemdLooksLikeAbort("signal", "6") {
+		t.Fatal("SIGABRT")
+	}
+	if !xrplSystemdLooksLikeAbort("exit-code", "134") {
+		t.Fatal("128+ABRT")
+	}
+	if xrplSystemdLooksLikeAbort("success", "0") {
+		t.Fatal("healthy must not look like abort")
+	}
+	if xrplSystemdLooksLikeAbort("signal", "9") {
+		t.Fatal("SIGKILL from recycle must not wipe NuDB")
+	}
+}
+
+func TestXRPLJournalHasStateDBError(t *testing.T) {
+	if !xrplJournalHasStateDBError("terminate called after throwing an instance of 'std::runtime_error'\nwhat():  state db error") {
+		t.Fatal("want state db error")
+	}
+	if !xrplJournalHasStateDBError("SHAMapStore:ERR state db error:\nwritableDbExists false archiveDbExists false") {
+		t.Fatal("want SHAMapStore")
+	}
+	if xrplJournalHasStateDBError("JobQueue:NFO Using 6 threads") {
+		t.Fatal("plain journal is not a state db error")
+	}
+}
+
+func TestXRPLReinitCorruptStateDBIgnoresSize(t *testing.T) {
+	data := t.TempDir()
+	nudb := filepath.Join(data, "db", "nudb")
+	if err := os.MkdirAll(nudb, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	big := make([]byte, 9<<20)
+	if err := os.WriteFile(filepath.Join(nudb, "rippledb.6a6f"), big, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !xrplDatadirHasLedger(data) {
+		t.Fatal("fixture must look like a ledger so stale-reinit would skip")
+	}
+	ok, err := xrplReinitStaleNuDB(data)
+	if err != nil || ok {
+		t.Fatalf("stale path must skip sized NuDB: ok=%v err=%v", ok, err)
+	}
+	if err := os.WriteFile(filepath.Join(data, "db", "state"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ok, err = xrplReinitCorruptStateDB(data)
+	if err != nil || !ok {
+		t.Fatalf("state-db reinit: ok=%v err=%v", ok, err)
+	}
+	if _, err := os.Stat(filepath.Join(data, "db", "nudb.stale", "rippledb.6a6f")); err != nil {
+		t.Fatal("want stale copy of corrupt NuDB")
+	}
+	if _, err := os.Stat(filepath.Join(data, "db", "state")); !os.IsNotExist(err) {
+		t.Fatal("xrpld asks to remove db/state*")
+	}
+	ok, err = xrplReinitCorruptStateDB(data)
+	if err != nil || ok {
+		t.Fatalf("second state-db reinit must no-op: ok=%v err=%v", ok, err)
+	}
+	if err := os.WriteFile(filepath.Join(data, "db", "state.journal"), []byte("y"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ok, err = xrplReinitCorruptStateDB(data)
+	if err != nil || !ok {
+		t.Fatalf("leftover state* after marker must still wipe: ok=%v err=%v", ok, err)
+	}
+	if _, err := os.Stat(filepath.Join(data, "db", "state.journal")); !os.IsNotExist(err) {
+		t.Fatal("want state.journal gone")
+	}
+}

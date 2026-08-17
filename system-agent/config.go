@@ -179,6 +179,13 @@ func loadConfig() Config {
 	}
 	// Bitcoin/Solana profile: upstream always from catalog (ignore stale env).
 	upPort := mustAtoi(envOr("TRON_NODE_HTTP_PORT", strconv.Itoa(defHTTP)), defHTTP)
+	if !hostTip && strings.EqualFold(network, "xrpl") {
+		if n := mustAtoi(envOr("TRON_XRPLD_HTTP_PORT", "0"), 0); n > 0 {
+			upPort = n
+		} else if prof.DefaultNodeHTTP > 0 {
+			upPort = prof.DefaultNodeHTTP
+		}
+	}
 	if !hostTip && (strings.EqualFold(network, "bitcoin") || strings.EqualFold(network, "solana") ||
 		strings.EqualFold(network, "ethereum") || strings.EqualFold(network, "bsc") ||
 		strings.EqualFold(network, "hyperliquid") || strings.EqualFold(network, "arb") ||
@@ -194,23 +201,23 @@ func loadConfig() Config {
 		svcPrefix = network
 	}
 	return Config{
-		Network:         network,
-		Env:             env,
-		Interval:        time.Duration(intervalSec) * time.Second,
-		StateFile:       state,
-		InstanceFile:    envOr("TRON_INSTANCE_FILE", defaultInst),
-		RegistryFile:    envOr("TRON_REGISTRY_FILE", fmt.Sprintf("/etc/rpcnode/instances.d/%s-%s.json", map[bool]string{true: "host", false: network}[hostTip], env)),
-		InternalListen:  envOr("TRON_SYSTEM_AGENT_LISTEN", "127.0.0.1:29090"),
-		UpstreamHost:    upHost,
-		UpstreamPort:    upPort,
-		APIListenHost: envFirst("0.0.0.0", "RPCNODE_GATEWAY_LISTEN", "TRON_GATEWAY_LISTEN"),
+		Network:        network,
+		Env:            env,
+		Interval:       time.Duration(intervalSec) * time.Second,
+		StateFile:      state,
+		InstanceFile:   envOr("TRON_INSTANCE_FILE", defaultInst),
+		RegistryFile:   envOr("TRON_REGISTRY_FILE", fmt.Sprintf("/etc/rpcnode/instances.d/%s-%s.json", map[bool]string{true: "host", false: network}[hostTip], env)),
+		InternalListen: envOr("TRON_SYSTEM_AGENT_LISTEN", "127.0.0.1:29090"),
+		UpstreamHost:   upHost,
+		UpstreamPort:   upPort,
+		APIListenHost:  envFirst("0.0.0.0", "RPCNODE_GATEWAY_LISTEN", "TRON_GATEWAY_LISTEN"),
 		APIListenPort: mustAtoi(envFirst(strconv.Itoa(defPub),
 			"RPCNODE_PUBLIC_PORT", "TRON_PUBLIC_PORT", "RPCNODE_GATEWAY_PORT", "TRON_GATEWAY_PORT"), defPub),
 		PanelPort: mustAtoi(envFirst(strconv.Itoa(defAgent),
 			"RPCNODE_AGENT_PORT", "TRON_AGENT_PORT", "RPCNODE_PANEL_PORT", "TRON_PANEL_PORT"), defAgent),
-		PanelBase:  envFirst("", "RPCNODE_PANEL_BASE", "PANEL_INGEST_URL", "PANEL_BASE", "TRON_PANEL_BASE"),
-		P2PPort:    mustAtoi(envOr("TRON_P2P_PORT", strconv.Itoa(defP2P)), defP2P),
-		PublicBase: envFirst("", "RPCNODE_PUBLIC_BASE", "TRON_PUBLIC_BASE", "PUBLIC_BASE"),
+		PanelBase:       envFirst("", "RPCNODE_PANEL_BASE", "PANEL_INGEST_URL", "PANEL_BASE", "TRON_PANEL_BASE"),
+		P2PPort:         mustAtoi(envOr("TRON_P2P_PORT", strconv.Itoa(defP2P)), defP2P),
+		PublicBase:      envFirst("", "RPCNODE_PUBLIC_BASE", "TRON_PUBLIC_BASE", "PUBLIC_BASE"),
 		MaintenanceFile: envOr("TRON_MAINTENANCE_FILE", fmt.Sprintf("/run/%s-%s/maintenance.json", map[bool]string{true: "host", false: network}[hostTip], env)),
 		Output:          envOr("TRON_OUTPUT", fmt.Sprintf("%s/output-directory", data)),
 		OptDir:          opt,

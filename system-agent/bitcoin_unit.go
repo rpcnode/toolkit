@@ -121,6 +121,29 @@ func journalUnitSnippet(unit string, n int) string {
 	// Prefer bitcoind stderr over bare systemd "Failed with result" lines.
 	out, _ := runCmd(4*time.Second, "journalctl", "-u", unit, "-n", strconv.Itoa(n),
 		"--no-pager", "-o", "cat")
+	return journalUnitSnippetFrom(out, unit)
+}
+
+func journalUnitSnippetSince(unit string, since time.Time, n int) string {
+	unit = strings.TrimSpace(unit)
+	if unit == "" || since.IsZero() {
+		return journalUnitSnippet(unit, n)
+	}
+	if !strings.HasSuffix(unit, ".service") {
+		unit += ".service"
+	}
+	if n <= 0 {
+		n = 12
+	}
+
+	out, _ := runCmd(4*time.Second, "journalctl", "-u", unit,
+		"--since", since.UTC().Format("2006-01-02 15:04:05"),
+		"-n", strconv.Itoa(n), "--no-pager", "-o", "cat")
+
+	return journalUnitSnippetFrom(out, unit)
+}
+
+func journalUnitSnippetFrom(out, unit string) string {
 	lines := []string{}
 	for _, ln := range strings.Split(out, "\n") {
 		ln = strings.TrimSpace(ln)

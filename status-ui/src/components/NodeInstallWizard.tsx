@@ -103,10 +103,15 @@ function detectUnsupportedCapability(res: {
   const agentVersion = String(
     res.agent_version || nested.agent_version || nested.version || '',
   ).trim()
+  const capabilityHint =
+    res.hint === 'update_agent' &&
+    code !== 'provision_failed' &&
+    code !== 'plan_failed' &&
+    code !== 'host_deps_failed'
   const isUnsupported =
     code === 'unsupported_network' ||
     code === 'unsupported_env' ||
-    res.hint === 'update_agent' ||
+    capabilityHint ||
     low.includes('no canonical ports for') ||
     low.startsWith('supported:') ||
     (low.includes('not supported by this agent') && low.includes('update'))

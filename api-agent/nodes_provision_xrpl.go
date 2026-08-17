@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +15,11 @@ import (
 
 func provisionXRPLNodeEnv(req nodeProvisionRequest, prof networkPortProfile) (map[string]any, error) {
 	env := req.Env
+	if err := beginProvisionLock("xrpl", env); err != nil {
+		return nil, err
+	}
+	defer endProvisionLock("xrpl", env)
+
 	steps := []string{}
 	cluster := lookupXRPLNetwork(env)
 
@@ -64,6 +70,8 @@ func provisionXRPLNodeEnv(req nodeProvisionRequest, prof networkPortProfile) (ma
 	}
 	steps = append(steps, "validators.txt ready")
 
+	// Units + instance before Scylla. Apt/iotune can take minutes; leftover
+	// system-agent must see xrpl-mainnet.service instead of "unit not found".
 	rpcBinDir := envOr("RPCNODE_BIN_DIR", "/opt/rpcnode/bin")
 	toolkitDir := envOr("TOOLKIT_DIR", "/opt/rpcnode/toolkit")
 	token := envOr("AGENT_API_TOKEN", envOr("TRON_API_TOKEN", ""))
@@ -74,11 +82,13 @@ func provisionXRPLNodeEnv(req nodeProvisionRequest, prof networkPortProfile) (ma
 	}
 
 	sysListen := systemAgentListenPort("xrpl", env)
+	clioPort := xrplClioHTTPPort(env)
 
 	envBody := fmt.Sprintf(`# managed by rpcnode provision %s (xrpl)
 %sTRON_NETWORK=xrpl
 TRON_NODE_HTTP_HOST=127.0.0.1
 TRON_NODE_HTTP_PORT=%d
+TRON_XRPLD_HTTP_PORT=%d
 TRON_P2P_PORT=%d
 TRON_SYSTEM_AGENT_LISTEN=127.0.0.1:%d
 TRON_SYSTEM_AGENT_URL=http://127.0.0.1:%d
@@ -96,7 +106,7 @@ AGENT_API_TOKEN=%s
 `,
 		time.Now().UTC().Format(time.RFC3339),
 		productEnvVars(env, req.PublicPort, req.AgentPort),
-		req.NodeHTTPPort, req.P2PPort,
+		clioPort, req.NodeHTTPPort, req.P2PPort,
 		sysListen, sysListen, stateDir,
 		opt, etc, data, stateDir, stateDir, env, env,
 		toolkitDir, token,
@@ -116,7 +126,7 @@ AGENT_API_TOKEN=%s
 	nodeUnitName := fmt.Sprintf("xrpl-%s.service", env)
 
 	apiUnit := fmt.Sprintf(`[Unit]
-Description=RpcNode per-node api-agent (xrpl/%s) — Go RPC :%d + Agent API :%d → xrpld :%d
+Description=RpcNode per-node api-agent (xrpl/%s) — Go RPC :%d + Agent API :%d → Clio :%d
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=0
@@ -138,9 +148,9 @@ LimitNOFILE=1048576
 
 [Install]
 WantedBy=multi-user.target
-`, env, req.PublicPort, req.AgentPort, req.NodeHTTPPort, envPath,
+`, env, req.PublicPort, req.AgentPort, clioPort, envPath,
 		productSystemdAPIListenEnv(env, req.PublicPort, req.AgentPort),
-		req.NodeHTTPPort, sysListen, stateDir, toolkitDir, apiBin)
+		clioPort, sysListen, stateDir, toolkitDir, apiBin)
 
 	sysUnit := fmt.Sprintf(`[Unit]
 Description=RpcNode per-node system-agent (xrpl/%s)
@@ -204,7 +214,7 @@ WantedBy=multi-user.target
 		"data_dir":       data,
 		"etc_dir":        etc,
 		"opt_dir":        opt,
-		"units":          []string{nodeUnitName, apiUnitName, sysUnitName},
+		"units":          []string{nodeUnitName, xrplClioUnitName(env), apiUnitName, sysUnitName},
 		"created_at":     time.Now().UTC().Format(time.RFC3339),
 		"hostname":       hostnameOrEmpty(),
 	}
@@ -229,6 +239,11 @@ WantedBy=multi-user.target
 		steps = append(steps, "daemon-reload")
 	}
 
+	if err := provisionXRPLClioStack(env, etc, data); err != nil {
+		return nil, fmt.Errorf("clio stack: %w", err)
+	}
+	steps = append(steps, "scylla+clio ready")
+
 	return map[string]any{
 		"ok":             true,
 		"network":        "xrpl",
@@ -242,7 +257,7 @@ WantedBy=multi-user.target
 		"agent_url":      agentURL,
 		"etc_dir":        etc,
 		"data_dir":       data,
-		"units":          []string{nodeUnitName, apiUnitName, sysUnitName},
+		"units":          []string{nodeUnitName, xrplClioUnitName(env), apiUnitName, sysUnitName},
 		"units_started":  false,
 		"status":         "provisioned",
 		"snapshot":       false,
@@ -265,12 +280,12 @@ Type=simple
 User=nodeop
 Group=nodeop
 ExecStart=%s --conf %s
-# No ExecStop=server_stop: stalled xrpld (LoadManager FTL) will not answer RPC.
-# systemd then SIGKILLs the helper → "Job canceled" / Invalid argument.
-# Panel remove already calls xrpld --conf … server_stop, then escalate.
+# Bounded server_stop so NuDB can close. timeout 15s — stalled RPC must not hang systemd.
+# After TimeoutStopSec systemd SIGTERM (not SIGINT/Ctrl+C), then SIGKILL.
+ExecStop=/usr/bin/timeout 15 %s --conf %s server_stop
 Restart=on-failure
 RestartSec=10
-TimeoutStopSec=30
+TimeoutStopSec=45
 KillMode=mixed
 KillSignal=SIGTERM
 IPAccounting=yes
@@ -280,7 +295,7 @@ LimitNOFILE=1048576
 
 [Install]
 WantedBy=multi-user.target
-`, env, bin, confPath)
+`, env, bin, confPath, bin, confPath)
 }
 
 // recycleXRPLUnit — never systemctl restart (ExecStop hang / SIGKILL auxiliaries).
@@ -292,12 +307,30 @@ func recycleXRPLUnit(unit string) error {
 	if !strings.HasSuffix(unit, ".service") {
 		unit += ".service"
 	}
+	if !fileExists("/etc/systemd/system/"+unit) && !fileExists("/lib/systemd/system/"+unit) {
+		return fmt.Errorf("systemctl start %s: unit not installed yet", unit)
+	}
+
+	env := strings.TrimSuffix(strings.TrimPrefix(unit, "xrpl-"), ".service")
+	conf := filepath.Join("/etc/xrpl", env, "xrpld.cfg")
+	bin := filepath.Join("/opt/xrpl", env, "bin", "xrpld")
+	if !fileExists(bin) {
+		bin = "/usr/bin/xrpld"
+	}
+	if fileExists(bin) && fileExists(conf) {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		_ = exec.CommandContext(ctx, bin, "--conf", conf, "server_stop").Run()
+		cancel()
+	}
+	_ = exec.Command("systemctl", "kill", "-s", "SIGTERM", "--kill-who=main", unit).Run()
+	time.Sleep(2 * time.Second)
 	_ = exec.Command("systemctl", "kill", "-s", "SIGKILL", "--kill-who=main", unit).Run()
 	_ = exec.Command("systemctl", "reset-failed", unit).Run()
 	out, err := exec.Command("systemctl", "start", unit).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("systemctl start %s: %v (%s)", unit, err, strings.TrimSpace(string(out)))
 	}
+
 	return nil
 }
 
@@ -316,6 +349,9 @@ func activateXRPLUnits(env string) error {
 		}
 	}
 	_ = exec.Command("systemctl", "start", "rpcnode-api-agent.service").Run()
+	if err := startXRPLClioUnits(env); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -352,11 +388,7 @@ func ensureXRPLDInstalled(optPath string) (string, error) {
 	return "", fmt.Errorf("xrpld binary missing after apt install")
 }
 
-func installXRPLDFromApt() error {
-	if _, err := exec.LookPath("apt-get"); err != nil {
-		return fmt.Errorf("apt-get required to install xrpld: %w", err)
-	}
-
+func ensureRippleAptRepo() error {
 	_ = exec.Command("apt-get", "-y", "install", "apt-transport-https", "ca-certificates", "wget", "gnupg").Run()
 	_ = os.MkdirAll("/etc/apt/keyrings", 0o755)
 
@@ -397,6 +429,18 @@ func installXRPLDFromApt() error {
 	if out, err := exec.Command("apt-get", "-y", "update").CombinedOutput(); err != nil {
 		return fmt.Errorf("apt-get update: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
+
+	return nil
+}
+
+func installXRPLDFromApt() error {
+	if _, err := exec.LookPath("apt-get"); err != nil {
+		return fmt.Errorf("apt-get required to install xrpld: %w", err)
+	}
+
+	if err := ensureRippleAptRepo(); err != nil {
+		return err
+	}
 	// Prefer xrpld; fall back to rippled package name on older repos.
 	if out, err := exec.Command("apt-get", "-y", "install", "xrpld").CombinedOutput(); err != nil {
 		if out2, err2 := exec.Command("apt-get", "-y", "install", "rippled").CombinedOutput(); err2 != nil {
@@ -429,10 +473,15 @@ func writeXRPLConfig(etc, data string, req nodeProvisionRequest, cluster xrplNet
 	var b strings.Builder
 	b.WriteString("# managed by RpcNode — stock xrpld (non-validator)\n")
 	b.WriteString("# https://xrpl.org/docs/infrastructure/configuration/server-modes/run-xrpld-as-a-stock-server\n\n")
+	wsPublic := xrplWSPublicPort(cluster.Env)
+	grpcPort := xrplGRPCPort(cluster.Env)
+
 	b.WriteString("[server]\n")
 	b.WriteString("port_rpc_admin_local\n")
 	b.WriteString("port_peer\n")
-	b.WriteString("port_ws_admin_local\n\n")
+	b.WriteString("port_ws_admin_local\n")
+	b.WriteString("port_ws_public\n")
+	b.WriteString("port_grpc\n\n")
 
 	b.WriteString("[port_rpc_admin_local]\n")
 	b.WriteString(fmt.Sprintf("port = %d\n", rpcPort))
@@ -451,6 +500,16 @@ func writeXRPLConfig(etc, data string, req nodeProvisionRequest, cluster xrplNet
 	b.WriteString("admin = 127.0.0.1\n")
 	b.WriteString("protocol = ws\n")
 	b.WriteString("send_queue_limit = 500\n\n")
+
+	b.WriteString("[port_ws_public]\n")
+	b.WriteString(fmt.Sprintf("port = %d\n", wsPublic))
+	b.WriteString("ip = 127.0.0.1\n")
+	b.WriteString("protocol = ws\n\n")
+
+	b.WriteString("[port_grpc]\n")
+	b.WriteString(fmt.Sprintf("port = %d\n", grpcPort))
+	b.WriteString("ip = 127.0.0.1\n")
+	b.WriteString("secure_gateway = 127.0.0.1\n\n")
 
 	// Empty NuDB: medium even on 390 GiB hosts. huge cache init + first ledger
 	// write stalls the job queue >90s → LoadManager FTL, seq=0, complete=empty.

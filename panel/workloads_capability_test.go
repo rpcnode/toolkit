@@ -27,6 +27,32 @@ func TestRewriteAgentCapabilityErrorUnsupportedNetwork(t *testing.T) {
 	if out["agent_version"] != "0.4.20" {
 		t.Fatalf("agent_version=%v", out["agent_version"])
 	}
+	if out["hint"] != "update_agent" {
+		t.Fatalf("hint=%v", out["hint"])
+	}
+}
+
+func TestRewriteAgentCapabilityErrorProvisionFailedNotUnsupported(t *testing.T) {
+	code, out := rewriteAgentCapabilityError(
+		map[string]any{
+			"ok": false, "error": "provision_failed",
+			"message": "clio stack: scylla install script: exit status 22: curl: (22) 404",
+		},
+		"provision_failed", "xrpl", "mainnet", "0.4.169", "",
+	)
+	if code != http.StatusBadGateway {
+		t.Fatalf("status=%d", code)
+	}
+	if out["error"] != "provision_failed" {
+		t.Fatalf("error=%v", out["error"])
+	}
+	if out["hint"] == "update_agent" {
+		t.Fatal("install/runtime failures must not look like unsupported network")
+	}
+	msg, _ := out["message"].(string)
+	if !strings.Contains(msg, "scylla") {
+		t.Fatalf("message=%q", msg)
+	}
 }
 
 func TestRewriteAgentCapabilityErrorNoCanonicalPorts(t *testing.T) {

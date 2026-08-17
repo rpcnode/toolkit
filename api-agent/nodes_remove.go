@@ -1075,7 +1075,10 @@ func nodeUnitsForRemove(network, env string) []string {
 			fmt.Sprintf("base-consensus-%s.service", env),
 		}
 	case "xrpl":
-		return []string{fmt.Sprintf("xrpl-%s.service", env)}
+		return []string{
+			fmt.Sprintf("xrpl-%s.service", env),
+			fmt.Sprintf("xrpl-clio-%s.service", env),
+		}
 	case "stellar":
 		return []string{fmt.Sprintf("stellar-%s.service", env)}
 	case "ton":
@@ -1219,7 +1222,7 @@ func killNodeProcesses(network, env string) {
 		)).Run()
 	case "xrpl":
 		_ = exec.Command("bash", "-lc", fmt.Sprintf(
-			`pgrep -af 'xrpld|rippled' | grep -E %q | awk '{print $1}' | while read p; do kill "$p" 2>/dev/null; sleep 0.2; kill -9 "$p" 2>/dev/null; done`,
+			`pgrep -af 'xrpld|rippled|clio_server|clio' | grep -E %q | awk '{print $1}' | while read p; do kill "$p" 2>/dev/null; sleep 0.2; kill -9 "$p" 2>/dev/null; done`,
 			pathGrep,
 		)).Run()
 	case "stellar":
