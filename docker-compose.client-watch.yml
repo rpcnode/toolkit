@@ -1,0 +1,44 @@
+# RpcNode client-watch — CDN host. Hourly GitHub vs catalog pin.
+# Writes clients/_updates + Telegram. Does not rewrite catalog.json.
+#
+#   cp tools/client-watch/client-watch.env.example client-watch.env
+#   docker compose -f docker-compose.client-watch.yml up -d --build --pull never
+# FetchClients → Настройки: http://<этот-хост>:8094
+#
+# Open TCP 8094 on the host yourself. This file does not touch ufw.
+
+name: rpcnode-client-watch
+
+services:
+  client-watch:
+    image: rpcnode-client-watch:local
+    pull_policy: build
+    build:
+      context: ./tools/client-watch
+      dockerfile: Dockerfile
+      pull: false
+    container_name: rpcnode-client-watch
+    restart: unless-stopped
+    ports:
+      - "${CLIENT_WATCH_PORT:-8094}:8094"
+    env_file:
+      - tools/client-watch/client-watch.env.example
+      - path: client-watch.env
+        required: false
+    environment:
+      CLIENT_WATCH_LISTEN: "0.0.0.0:8094"
+      CLIENT_WATCH_CATALOG: /data/clients/catalog.json
+      CLIENT_WATCH_CLIENTS: /data/clients
+      CLIENT_WATCH_STATE: /data/clients/.watch/state.json
+      CLIENT_WATCH_PUBLIC_BASE: ${CLIENT_WATCH_PUBLIC_BASE:-https://rpcnode.dev/install}
+      CLIENT_WATCH_INTERVAL: ${CLIENT_WATCH_INTERVAL:-1h}
+      CLIENT_WATCH_TOKEN: ${CLIENT_WATCH_TOKEN:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    volumes:
+      - ${CLIENT_WATCH_CLIENTS_HOST:-./install/clients}:/data/clients
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8094/healthz"]
+      interval: 20s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
