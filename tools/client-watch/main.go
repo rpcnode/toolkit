@@ -35,6 +35,7 @@ func main() {
 	statePath := flag.String("state", env("CLIENT_WATCH_STATE", ""), "state.json (telegram + seen)")
 	interval := flag.Duration("interval", parseDuration(env("CLIENT_WATCH_INTERVAL", "1h"), time.Hour), "check interval")
 	apiToken := flag.String("api-token", env("CLIENT_WATCH_TOKEN", ""), "optional Bearer for /api/v1/*")
+	once := flag.Bool("once", false, "print pin vs latest for every catalog row and exit")
 	flag.Parse()
 
 	if strings.TrimSpace(*catalog) == "" {
@@ -64,9 +65,100 @@ func main() {
 		state:      st,
 	}
 
+	if *once {
+		rows, err := w.listVersions()
+		if err != nil {
+			log.Fatal(err)
+		}
+		printVersionTable(rows)
+		return
+	}
+
 	go w.loop()
 	if err := w.serveHTTP(); err != nil {
 		log.Fatal(err)
+	}
+}
+
+type versionRow struct {
+	ID     string `json:"id"`
+	Pin    string `json:"pin"`
+	Latest string `json:"latest"`
+	Tag    string `json:"tag,omitempty"`
+	Repo   string `json:"repo,omitempty"`
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
+
+func (w *watcher) listVersions() ([]versionRow, error) {
+	cat, err := loadCatalog(w.catalog)
+	if err != nil {
+		return nil, err
+	}
+	client := httpClient()
+	cache := map[string]ghLatest{}
+	cacheErr := map[string]error{}
+	out := make([]versionRow, 0, len(cat.Entries))
+	for _, e := range cat.Entries {
+		row := versionRow{ID: e.id(), Pin: e.pin(), Status: "no-github"}
+		repo, prefix, ok := e.githubHint()
+		if !ok {
+			out = append(out, row)
+			continue
+		}
+		row.Repo = repo
+		key := repo + "|" + prefix
+		latest, cached := cache[key]
+		if !cached {
+			if prev, bad := cacheErr[key]; bad {
+				row.Status = "error"
+				row.Error = prev.Error()
+				out = append(out, row)
+				continue
+			}
+			got, ghErr := fetchLatest(client, repo, prefix, w.githubTok)
+			if ghErr != nil {
+				cacheErr[key] = ghErr
+				row.Status = "error"
+				row.Error = ghErr.Error()
+				out = append(out, row)
+				continue
+			}
+			latest = got
+			cache[key] = got
+		}
+		row.Latest = firstNonEmpty(latest.Version, latest.Tag)
+		row.Tag = latest.Tag
+		switch {
+		case row.Latest == "":
+			row.Status = "unknown"
+		case row.Pin != "" && normalizeVer(row.Latest) == normalizeVer(row.Pin):
+			row.Status = "ok"
+		case row.Pin == "":
+			row.Status = "new"
+		default:
+			row.Status = "update"
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+func printVersionTable(rows []versionRow) {
+	for _, r := range rows {
+		pin := r.Pin
+		if pin == "" {
+			pin = "—"
+		}
+		latest := r.Latest
+		if latest == "" {
+			latest = "—"
+		}
+		line := fmt.Sprintf("%-22s  pin=%-16s  latest=%-16s  %s", r.ID, pin, latest, r.Status)
+		if r.Error != "" {
+			line += "  " + r.Error
+		}
+		fmt.Println(line)
 	}
 }
 
@@ -148,7 +240,7 @@ func (w *watcher) checkOnce() error {
 				dlNote = fmt.Sprintf("скачано %d файл(ов) → %s", okN, dir)
 			}
 		}
-		msg := formatUpdate(e, pin, latest, public, dlNote)
+		msg := formatUpdate(e, latest)
 		if st.TelegramToken != "" && st.TelegramChat != "" {
 			if tgErr := sendTelegram(st.TelegramToken, st.TelegramChat, msg); tgErr != nil {
 				log.Printf("telegram %s: %v", e.id(), tgErr)
@@ -173,20 +265,12 @@ func (w *watcher) checkOnce() error {
 	return firstErr
 }
 
-func formatUpdate(e catalogEntry, pin string, latest ghLatest, public, dlNote string) string {
-	if pin == "" {
-		pin = "—"
+func formatUpdate(e catalogEntry, latest ghLatest) string {
+	ver := firstNonEmpty(latest.Version, latest.Tag)
+	if ver == "" {
+		return e.id() + " — вышла новая версия"
 	}
-	msg := fmt.Sprintf("Новая версия %s\nпин: %s\nlatest: %s", e.id(), pin, firstNonEmpty(latest.Version, latest.Tag))
-	if latest.Tag != "" && latest.Tag != latest.Version {
-		msg += " (" + latest.Tag + ")"
-	}
-	msg += "\n" + dlNote
-	if public != "" {
-		msg += "\n" + public
-	}
-	msg += "\nКаталог не менялся — закрепи в FetchClients, если нужно."
-	return msg
+	return e.id() + " — вышла новая версия " + ver
 }
 
 func env(key, fallback string) string {

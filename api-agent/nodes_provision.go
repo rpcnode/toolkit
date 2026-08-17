@@ -1131,7 +1131,7 @@ func (s *Server) handleNodesStartWithEnv(w http.ResponseWriter, env, network str
 			})
 			return
 		}
-		if bin, berr := ensureXRPLDInstalled(prof.OptPath); berr == nil && bin != "" {
+		if bin, berr := ensureXRPLDInstalled(prof.OptPath, env); berr == nil && bin != "" {
 			unitPath := filepath.Join("/etc/systemd/system", unit)
 			_ = os.WriteFile(unitPath, []byte(renderXRPLUnit(env, bin, confPath)), 0o644)
 		}

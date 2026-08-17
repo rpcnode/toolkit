@@ -44,7 +44,7 @@ func provisionXRPLNodeEnv(req nodeProvisionRequest, prof networkPortProfile) (ma
 		steps = append(steps, "mkdir "+d)
 	}
 
-	bin, err := ensureXRPLDInstalled(opt)
+	bin, err := ensureXRPLDInstalled(opt, env)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +357,7 @@ func activateXRPLUnits(env string) error {
 	return nil
 }
 
-func ensureXRPLDInstalled(optPath string) (string, error) {
+func ensureXRPLDInstalled(optPath, env string) (string, error) {
 	link := filepath.Join(optPath, "bin", "xrpld")
 	_ = os.MkdirAll(filepath.Dir(link), 0o755)
 

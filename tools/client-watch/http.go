@@ -16,6 +16,7 @@ func (w *watcher) serveHTTP() error {
 	mux.HandleFunc("/api/v1/status", w.withAuth(w.handleStatus))
 	mux.HandleFunc("/api/v1/telegram", w.withAuth(w.handleTelegram))
 	mux.HandleFunc("/api/v1/check", w.withAuth(w.handleCheck))
+	mux.HandleFunc("/api/v1/versions", w.withAuth(w.handleVersions))
 	srv := &http.Server{
 		Addr:              w.listen,
 		Handler:           mux,
@@ -80,11 +81,24 @@ func (w *watcher) handleTelegram(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	if err := sendTelegram(req.Token, req.Chat, "RpcNode client-watch: Telegram подключён. Новые версии клиентов придут сюда (проверка раз в час). Каталог сам не меняется."); err != nil {
+	if err := sendTelegram(req.Token, req.Chat, "Telegram подключён. Сюда придёт: сеть — вышла новая версия."); err != nil {
 		writeJSON(rw, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "chat": req.Chat})
+}
+
+func (w *watcher) handleVersions(rw http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		rw.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	rows, err := w.listVersions()
+	if err != nil {
+		writeJSON(rw, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "entries": rows})
 }
 
 func (w *watcher) handleCheck(rw http.ResponseWriter, r *http.Request) {
