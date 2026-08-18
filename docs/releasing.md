@@ -1,6 +1,6 @@
 # Releases — git tags and the agent CDN
 
-`TOOLKIT_VERSION` (repo root, one line, no `v`) is the **agent install channel**. Panel **Servers** compares each host’s `agent_version` to `https://rpcnode.dev/install/TOOLKIT_VERSION`. A git tag is the matching git object for that ship.
+`TOOLKIT_VERSION` (repo root, one line, no `v`) is the **agent install channel**. Panel **Servers** compares each host’s `agent_version` to `https://toolkit.rpcnode.dev/install/TOOLKIT_VERSION`. A git tag is the matching git object for that ship.
 
 | What | Where |
 |---|---|
@@ -8,7 +8,7 @@
 | Panel footer | `PANEL_VERSION` → `0.1.0` (bump on every `status-ui` / `panel/` change) |
 | Git tag | `v0.4.115` (always the `v` prefix) |
 | Embedded in binaries | `-ldflags -X main.toolkitVersion=…` at compile time |
-| CDN | `https://rpcnode.dev/install/TOOLKIT_VERSION` + binaries / archives |
+| CDN | `https://toolkit.rpcnode.dev/install/TOOLKIT_VERSION` + binaries / archives |
 
 Do **not** move a tag after it is on CDN. Ship the next patch instead.
 
@@ -37,11 +37,11 @@ git commit -m "Release 0.4.114"
 # 3) Annotated tag on that commit, then push commit + tag
 ./scripts/release.sh tag --push
 
-# 4) Build agents, commit frontend/site public/install, git push
+# 4) Build agents, commit frontend/toolkit public/install, git push
 ./scripts/release.sh publish
 ```
 
-After CDN is live, panel **Servers** shows **Update** for hosts still on the old binary. Existing servers: **Update all agents** (or per-server Update). New hosts: `curl -fsSL https://rpcnode.dev/install/agent.sh | sudo bash` already gets the new channel.
+After CDN is live, panel **Servers** shows **Update** for hosts still on the old binary. Existing servers: **Update all agents** (or per-server Update). New hosts: `curl -fsSL https://toolkit.rpcnode.dev/install/agent.sh | sudo bash` already gets the new channel.
 
 Helper: `./scripts/release.sh status` prints file vs tags vs `origin`.
 

@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS nodes (
   disk_layout_json        TEXT NOT NULL DEFAULT '',
   install_started_at      TEXT NOT NULL DEFAULT '',
   synced_at               TEXT NOT NULL DEFAULT '',
+  install_options_json    TEXT NOT NULL DEFAULT '',
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL,
   UNIQUE (server_id, network, env)

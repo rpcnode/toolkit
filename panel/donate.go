@@ -12,7 +12,7 @@ import (
 
 // Donate wallets live on the install CDN (same host as agent.sh) so ops can
 // add network addresses without rebuilding the panel UI.
-//   https://rpcnode.dev/install/donate.json
+//   https://toolkit.rpcnode.dev/install/donate.json
 
 type donateWallet struct {
 	Network string `json:"network"`

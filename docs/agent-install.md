@@ -20,13 +20,13 @@ Version truth = **embedded** in the binary (`rpcnode-api-agent -version`). CDN `
 ## CDN layout
 
 ```text
-https://rpcnode.dev/install/agent.sh
-https://rpcnode.dev/install/rpcnode-agent-watchdog.sh
-https://rpcnode.dev/install/TOOLKIT_VERSION
-https://rpcnode.dev/install/binaries/rpcnode-*-agent-<os>-<arch>
-https://rpcnode.dev/install/binaries/sha256sums.txt
-https://rpcnode.dev/install/archives/rpcnode-agent-<VERSION>.tar.gz
-https://rpcnode.dev/install/archives/rpcnode-agent-latest.tar.gz
+https://toolkit.rpcnode.dev/install/agent.sh
+https://toolkit.rpcnode.dev/install/rpcnode-agent-watchdog.sh
+https://toolkit.rpcnode.dev/install/TOOLKIT_VERSION
+https://toolkit.rpcnode.dev/install/binaries/rpcnode-*-agent-<os>-<arch>
+https://toolkit.rpcnode.dev/install/binaries/sha256sums.txt
+https://toolkit.rpcnode.dev/install/archives/rpcnode-agent-<VERSION>.tar.gz
+https://toolkit.rpcnode.dev/install/archives/rpcnode-agent-latest.tar.gz
 ```
 
 Archive contents (runtime only):
@@ -40,22 +40,25 @@ Archive contents (runtime only):
 
 ## Publish (CI or laptop)
 
-Origin is the **site** tree — Vite copies `public/` into `dist/client`:
+Origin is **`frontend/toolkit`** — same host as clients (`toolkit.rpcnode.dev`):
 
 ```text
-frontend/site/public/install/             →  https://rpcnode.dev/install/
+frontend/toolkit/public/install/          →  https://toolkit.rpcnode.dev/install/
   agent.sh
   uninstall-agents.sh
   rpcnode-agent-watchdog.sh
   TOOLKIT_VERSION
   binaries/
   archives/
+frontend/toolkit/public/clients/          →  https://toolkit.rpcnode.dev/clients/
 ```
 
-❌ Not `public/toolkit` — `/toolkit` is the marketing page.
+`rpcnode.dev/install/…` 301 → `toolkit.rpcnode.dev/install/…` (old curl|bash and in-field agents).
+
+❌ Marketing `/toolkit` page is `frontend/site` — not this CDN.
 
 ```bash
-# from toolkit repo — stage + commit frontend/site + git push (no rsync)
+# from toolkit repo — stage + commit frontend/toolkit + git push (no rsync)
 ./scripts/release.sh publish
 # or:
 ./scripts/build-agent-binaries.sh
@@ -64,7 +67,7 @@ frontend/site/public/install/             →  https://rpcnode.dev/install/
 ./scripts/publish-install.sh --no-push      # commit, no push
 ```
 
-Site deploy from that git push serves `https://rpcnode.dev/install/agent.sh`.
+Toolkit CDN deploy from that git push serves `https://toolkit.rpcnode.dev/install/agent.sh`.
 
 Override local dest: `CONNECT_PUBLIC_INSTALL=/path/to/public/install`.
 
@@ -73,7 +76,7 @@ Override local dest: `CONNECT_PUBLIC_INSTALL=/path/to/public/install`.
 ### Online (preferred)
 
 ```bash
-curl -fsSL "https://rpcnode.dev/install/agent.sh" | sudo bash
+curl -fsSL "https://toolkit.rpcnode.dev/install/agent.sh" | sudo bash
 ```
 
 Fetches matching binaries + watchdog from CDN, writes systemd units, enables tip agents + watchdog, installs **file logging** drop-ins + logrotate.

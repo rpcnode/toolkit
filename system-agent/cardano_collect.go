@@ -73,7 +73,44 @@ func collectCardano(cfg Config) map[string]any {
 	}
 	logTail := cardanoSyncLogTail(cfg, 80)
 
+	wantsSnap := prof.HasExtra(StepSnapshot) || prof.SnapshotPolicy != SnapshotNever
+	snapEnabled := wantsSnap
+	if snapEnabled && strings.TrimSpace(cfg.SnapshotURL) == "" {
+		cfg.SnapshotURL = prof.DefaultSnapshotURL
+	}
+	snapMarker := fileExists(cfg.SnapshotMarker)
+	snapState := readJSONFile(cfg.SnapshotState)
+	snapPhase, _ := snapState["phase"].(string)
+	snapDetail, _ := snapState["detail"].(string)
+	snapErr, _ := snapState["error"].(string)
+	snapUnitState := systemctlActive(cfg.SnapshotService)
+	snapUnitActive := snapUnitState == "active" || snapUnitState == "activating"
+	snapUnitFailed := systemctlFailed(cfg.SnapshotService)
+	mithrilRunning := cardanoMithrilSnapshotRunning(cfg)
+	snapPct, snapPctOK := cardanoMithrilSnapshotPct(cfg)
+	if snapEnabled && !snapMarker && (snapUnitActive || mithrilRunning) {
+		snapPhase = "download"
+		if snapDetail == "" {
+			snapDetail = "Mithril · cardano-db download latest"
+		}
+	}
+	snapBusy := snapEnabled && !snapMarker && !strings.EqualFold(snapPhase, "error") &&
+		(snapUnitActive || mithrilRunning || strings.EqualFold(snapPhase, "download") || snapPctOK ||
+			(snapEnabled && !snapMarker && !snapUnitFailed))
+	snapFailed := snapEnabled && !snapMarker && !snapBusy &&
+		(snapUnitFailed || strings.EqualFold(snapPhase, "error") || snapErr != "")
+	if snapMarker {
+		snapPct = 100
+		snapPctOK = true
+	} else if snapBusy && !snapPctOK {
+		snapPct = 0
+		snapPctOK = true
+	}
+
 	verifyPct := health.SyncPct * 100
+	if snapBusy && snapPctOK {
+		verifyPct = snapPct
+	}
 	if verifyPct < 0 {
 		verifyPct = 0
 	}
@@ -97,12 +134,19 @@ func collectCardano(cfg Config) map[string]any {
 		AgentPortOpen:  agentPortOpen,
 		InstRegistered: instRegistered,
 		APIUp:          apiUp,
-		SnapEnabled:    false,
-		NodeActive:     nodeActive,
+		SnapEnabled:    snapEnabled,
+		Marker:         snapMarker,
+		SnapBusy:       snapBusy,
+		SnapFailed:     snapFailed,
+		SnapPhase:      snapPhase,
+		SnapDetail:     snapDetail,
+		SnapErr:        snapErr,
+		Pct:            map[bool]string{true: fmt.Sprintf("%.1f", snapPct), false: ""}[snapBusy && snapPctOK],
+		NodeActive:     nodeActive && !snapBusy,
 		StartError:     startErr,
 		RPCOK:          rpcOK,
-		IBD:            syncing,
-		VerifyPct:      health.SyncPct,
+		IBD:            syncing && (!snapEnabled || snapMarker),
+		VerifyPct:      map[bool]float64{true: snapPct / 100, false: health.SyncPct}[snapBusy],
 		Progress:       prog,
 	}
 	if rpcOK {
@@ -124,7 +168,15 @@ func collectCardano(cfg Config) map[string]any {
 	}
 
 	syncDetail := health.Error
-	if rpcOK {
+	if snapBusy {
+		syncDetail = "Mithril snapshot download"
+		if snapDetail != "" {
+			syncDetail = snapDetail
+		}
+		if snapPctOK {
+			syncDetail = fmt.Sprintf("%s · %.1f%%", syncDetail, snapPct)
+		}
+	} else if rpcOK {
 		switch {
 		case syncing:
 			syncDetail = fmt.Sprintf(
@@ -150,7 +202,10 @@ func collectCardano(cfg Config) map[string]any {
 			"detail": "INSTANCE.json + /etc/rpcnode/instances.d"},
 		{"id": "disk", "title": "Disk floor for Cardano sync", "done": diskOK,
 			"detail": diskDetail, "active": !diskOK && apiUp},
-		{"id": "node", "title": "cardano-node running", "done": nodeActive,
+		{"id": "snapshot", "title": "Mithril snapshot", "done": !snapEnabled || snapMarker,
+			"detail": firstNonEmptyStr(snapDetail, "mithril-client cardano-db download latest"),
+			"active": snapBusy, "pct": map[bool]any{true: snapPct, false: nil}[snapBusy && snapPctOK]},
+		{"id": "node", "title": "cardano-node running", "done": nodeActive && !snapBusy,
 			"detail": "process/systemd", "active": apiUp && !nodeActive},
 		{"id": "rpc", "title": "Ogmios responding", "done": rpcOK,
 			"detail": "/health", "active": nodeActive && !rpcOK},
@@ -178,8 +233,14 @@ func collectCardano(cfg Config) map[string]any {
 		"disk_gate": map[string]any{
 			"ok": diskOK, "free_gib": freeGiB, "need_gib": needGiB, "detail": diskDetail,
 		},
+		"snapshot": map[string]any{
+			"enabled": snapEnabled, "ready": snapMarker, "busy": snapBusy, "failed": snapFailed,
+			"pct": snapPct, "phase": snapPhase, "detail": snapDetail, "error": snapErr,
+			"url": cfg.SnapshotURL, "wget_running": mithrilRunning || snapUnitActive,
+			"service": cfg.SnapshotService,
+		},
 		"sync": map[string]any{
-			"ok": rpcOK && !syncing, "syncing": syncing, "ibd": syncing,
+			"ok": rpcOK && !syncing && !snapBusy, "syncing": syncing || snapBusy, "ibd": syncing && !snapBusy,
 			"block": tipHeight, "blocks": tipHeight, "slot": health.TipSlot,
 			"height": tipHeight, "epoch": health.Epoch, "slot_in_epoch": health.SlotInEpoch,
 			"peers": health.Peers, "density": health.Density,
@@ -198,9 +259,11 @@ func collectCardano(cfg Config) map[string]any {
 		},
 		"services": map[string]any{
 			"node": nodeSvcEffective, "api": apiSvc, "ogmios": systemctlActive(ogmiosUnit),
+			"snapshot": systemctlActive(cfg.SnapshotService),
 		},
 		"checks": map[string]any{
 			"node_process_up": procOK, "cardano_process": procOK,
+			"snapshot_marker": snapMarker, "mithril_running": mithrilRunning,
 		},
 		"ports": map[string]any{
 			"public": publicPort, "agent": agentPort, "node_http": cfg.UpstreamPort,

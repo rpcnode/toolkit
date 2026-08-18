@@ -430,7 +430,8 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 
 	// Snapshot in flight + java-tron already up = genesis IBD into the same datadir.
 	// Stop the node; wget|tar cannot share output-directory with FullNode.
-	if snapRequired && !marker && nodeActive && pipelineMayUseTronctl(p.cfg.Network) {
+	if snapRequired && !marker && nodeActive &&
+		(pipelineMayUseTronctl(p.cfg.Network) || strings.EqualFold(p.cfg.Network, "cardano")) {
 		unit := p.cfg.NodeService
 		if unit != "" && !strings.HasSuffix(unit, ".service") {
 			unit += ".service"

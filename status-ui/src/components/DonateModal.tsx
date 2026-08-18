@@ -99,7 +99,7 @@ export function DonateModal({ opened, onClose }: Props) {
           <Alert color="yellow" variant="light" title="Could not load wallets">
             <Text size="sm">{error}</Text>
             <Text size="xs" c="dimmed" mt={6}>
-              Source: https://rpcnode.dev/install/donate.json
+              Source: https://toolkit.rpcnode.dev/install/donate.json
             </Text>
           </Alert>
         ) : null}

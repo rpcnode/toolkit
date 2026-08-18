@@ -136,7 +136,7 @@ export function showSyncStatusCard(
   if ((sync?.log_tail?.length || 0) > 0 && !status.connect?.ready) return true
   // Sync-capable profiles (HL / BTC / eth / …) even before first pct sample.
   if (supportsIbdStep(status, networkHint) || isBitcoinStatus(status, networkHint)) return true
-  // No-snapshot chains (HL, doge, cardano, …): show bar whenever we have status.
+  // No-snapshot chains (HL, doge, …): show bar whenever we have status.
   if (isNoSnapshotNetwork(net)) return true
 
   return false

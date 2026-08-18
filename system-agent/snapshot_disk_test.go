@@ -21,6 +21,11 @@ func TestRequiredSnapshotFreeBytesMargin(t *testing.T) {
 	if tronNeed != tronWant {
 		t.Fatalf("tron required=%d (%s) want %d (%s)", tronNeed, formatGiB(tronNeed), tronWant, formatGiB(tronWant))
 	}
+	// Cardano Mithril moves db/ in place — same 1.0 stream multiplier.
+	adaNeed := requiredSnapshotFreeBytes(archive, "cardano")
+	if adaNeed != tronWant {
+		t.Fatalf("cardano required=%d (%s) want %d", adaNeed, formatGiB(adaNeed), tronWant)
+	}
 }
 
 func TestRequiredSnapshotFreeBytesDefaultWhenZero(t *testing.T) {

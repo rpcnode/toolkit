@@ -57,6 +57,17 @@ func provisionCardanoNodeEnv(req nodeProvisionRequest, prof networkPortProfile) 
 	}
 	steps = append(steps, "wrote cardano configs")
 
+	mithrilBin, err := ensureMithrilClientInstalled(opt)
+	if err != nil {
+		return nil, err
+	}
+	steps = append(steps, "mithril-client="+mithrilBin)
+	snapUnitPath, snapScript, err := ensureCardanoSnapshotUnit(prof, mithrilBin)
+	if err != nil {
+		return nil, err
+	}
+	steps = append(steps, "wrote "+snapUnitPath, "wrote "+snapScript)
+
 	binDir := envOr("RPCNODE_BIN_DIR", "/opt/rpcnode/bin")
 	toolkitDir := envOr("TOOLKIT_DIR", "/opt/rpcnode/toolkit")
 	token := envOr("AGENT_API_TOKEN", envOr("TRON_API_TOKEN", ""))
@@ -71,6 +82,14 @@ func provisionCardanoNodeEnv(req nodeProvisionRequest, prof networkPortProfile) 
 	if metrics <= 0 {
 		metrics = 12798
 	}
+	mithril := cardanoMithrilParams(env)
+	snapURL := mithril.Aggregator
+	if strings.TrimSpace(prof.SnapshotURL) != "" {
+		snapURL = strings.TrimSpace(prof.SnapshotURL)
+	}
+	snapService := fmt.Sprintf("cardano-%s-snapshot", env)
+	snapLog := fmt.Sprintf("/var/log/cardano/%s-snapshot.log", env)
+	_ = os.MkdirAll(filepath.Dir(snapLog), 0o755)
 
 	envBody := fmt.Sprintf(`# managed by rpcnode provision %s (cardano)
 %sTRON_NETWORK=cardano
@@ -87,7 +106,12 @@ TRON_AGENT_STATE=%s/agent-state.json
 TRON_INSTANCE_FILE=%s/INSTANCE.json
 TRON_REGISTRY_FILE=/etc/rpcnode/instances.d/cardano-%s.json
 TRON_SERVICE=cardano-%s
-TRON_SNAPSHOT_ENABLED=0
+TRON_SNAPSHOT_ENABLED=1
+TRON_SNAPSHOT_URL=%s
+TRON_SNAPSHOT_SERVICE=%s
+TRON_SNAPSHOT_LOG=%s
+TRON_SNAPSHOT_MARKER=%s/.snapshot-ready
+TRON_SNAPSHOT_STATE=%s/.snapshot-state.json
 CARDANO_NODE_SOCKET_PATH=%s
 TOOLKIT_DIR=%s
 AGENT_API_TOKEN=%s
@@ -97,6 +121,7 @@ AGENT_API_TOKEN=%s
 		req.NodeHTTPPort, req.P2PPort,
 		sysListen, sysListen, stateDir,
 		opt, etc, data, stateDir, stateDir, env, env,
+		snapURL, snapService, snapLog, data, data,
 		socket, toolkitDir, token,
 	)
 
@@ -244,7 +269,7 @@ WantedBy=multi-user.target
 		"etc_dir":        etc,
 		"opt_dir":        opt,
 		"socket":         socket,
-		"units":          []string{nodeUnitName, ogmiosUnitName, apiUnitName, sysUnitName},
+		"units":          []string{nodeUnitName, ogmiosUnitName, snapService + ".service", apiUnitName, sysUnitName},
 		"created_at":     time.Now().UTC().Format(time.RFC3339),
 		"hostname":       hostnameOrEmpty(),
 	}
@@ -280,11 +305,11 @@ WantedBy=multi-user.target
 		"agent_url":      agentURL,
 		"etc_dir":        etc,
 		"data_dir":       data,
-		"units":          []string{nodeUnitName, ogmiosUnitName, apiUnitName, sysUnitName},
+		"units":          []string{nodeUnitName, ogmiosUnitName, snapService + ".service", apiUnitName, sysUnitName},
 		"units_started":  false,
 		"status":         "provisioned",
-		"snapshot":       false,
-		"lifecycle":      "ports→install→start→run(IBD)",
+		"snapshot":       true,
+		"lifecycle":      "ports→install→snapshot(mithril)→start→run",
 		"message":        "cardano per-node agents written; unit activation scheduled (Server agent left running)",
 		"steps":          steps,
 		"register_file":  "/etc/rpcnode/register.txt",

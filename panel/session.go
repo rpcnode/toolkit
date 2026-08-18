@@ -194,6 +194,5 @@ func defaultAgentDownloadURL() string {
 	if v := strings.TrimSpace(os.Getenv("AGENT_DOWNLOAD_URL")); v != "" {
 		return v
 	}
-	// Placeholder until rpcnode hosts the install script / binary.
-	return "https://rpcnode.dev/install/agent.sh"
+	return "https://toolkit.rpcnode.dev/install/agent.sh"
 }

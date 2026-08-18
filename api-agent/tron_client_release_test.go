@@ -50,7 +50,7 @@ func TestResolveTronPinnedSkipsDeadCDN(t *testing.T) {
 	t.Setenv("TRON_TAG", "")
 	t.Setenv("TRON_JAR_URL", "")
 	t.Setenv("TRON_CONFIG_URL", "")
-	t.Setenv("INSTALL_BASE_URL", "http://127.0.0.1:1")
+	t.Setenv("CLIENTS_BASE_URL", "http://127.0.0.1:1")
 	t.Setenv("AGENT_DOWNLOAD_URL", "")
 	rel := resolveTronClientRelease("mainnet")
 	if rel.Source != "pin" {
@@ -62,7 +62,7 @@ func TestResolveTronPinnedSkipsDeadCDN(t *testing.T) {
 }
 
 func TestPreferVendoredFallsBackWhenCDNDown(t *testing.T) {
-	t.Setenv("INSTALL_BASE_URL", "http://127.0.0.1:1")
+	t.Setenv("CLIENTS_BASE_URL", "http://127.0.0.1:1")
 	t.Setenv("AGENT_DOWNLOAD_URL", "")
 	got := preferVendoredArtifact("ltc", "mainnet", "https://official.example/ltc.tgz")
 	if got != "https://official.example/ltc.tgz" {
@@ -71,10 +71,10 @@ func TestPreferVendoredFallsBackWhenCDNDown(t *testing.T) {
 }
 
 func TestVendoredNamedConfURL(t *testing.T) {
-	t.Setenv("INSTALL_BASE_URL", "https://rpcnode.dev/install")
+	t.Setenv("CLIENTS_BASE_URL", "https://toolkit.rpcnode.dev")
 	t.Setenv("AGENT_DOWNLOAD_URL", "")
 	got := vendoredNamedConfURL("aptos", "mainnet", "genesis.blob")
-	if got != "https://rpcnode.dev/install/clients/aptos/mainnet/conf/genesis.blob" {
+	if got != "https://toolkit.rpcnode.dev/clients/aptos/mainnet/conf/genesis.blob" {
 		t.Fatalf("got %q", got)
 	}
 }

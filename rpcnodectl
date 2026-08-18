@@ -73,7 +73,7 @@ Commands:
   updater enable|disable|run-once   # java-tron daily jar check
 
 Primary:
-  curl -fsSL https://rpcnode.dev/install/agent.sh | sudo bash
+  curl -fsSL https://toolkit.rpcnode.dev/install/agent.sh | sudo bash
   # or: sudo rpcnodectl setup --wizard
   # panel on ops host:
   docker compose -f docker-compose.panel.yml up -d --build

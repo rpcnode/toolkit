@@ -80,6 +80,14 @@ func (r *WorkloadRegistry) Delete(id string) bool {
 	return ok
 }
 
+func (r *WorkloadRegistry) SetInstallOptions(id string, opts map[string]string) error {
+	if err := r.db.SetNodeInstallOptions(id, opts); err != nil {
+		log.Printf("workloads install_options: %v", err)
+		return err
+	}
+	return nil
+}
+
 // SetDiskLayout persists confirmed multi-disk layout for a node UUID.
 func (r *WorkloadRegistry) SetDiskLayout(id string, layout map[string]any) error {
 	if err := r.db.SetNodeDiskLayout(id, layout); err != nil {

@@ -150,7 +150,7 @@ func toolkitVersionURL() string {
 	if u := strings.TrimSpace(os.Getenv("TOOLKIT_VERSION_URL")); u != "" {
 		return u
 	}
-	return "https://rpcnode.dev/install/TOOLKIT_VERSION"
+	return "https://toolkit.rpcnode.dev/install/TOOLKIT_VERSION"
 }
 
 func (t *ToolkitUpdateController) fetchRemote() string {

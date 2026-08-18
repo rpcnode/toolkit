@@ -28,7 +28,7 @@ func installBaseURL() string {
 		u = strings.TrimSuffix(u, "/agent.sh")
 		return u
 	}
-	return "https://rpcnode.dev/install"
+	return "https://toolkit.rpcnode.dev/install"
 }
 
 func toolkitVersionURL() string {
@@ -80,7 +80,7 @@ func getCDNToolkitVersion(force bool) string {
 }
 
 // handleAgentChannel — panel-owned CDN channel (NOT proxied to host agent).
-// Same source as install: https://rpcnode.dev/install/TOOLKIT_VERSION (+ agent.sh).
+// Same source as install: https://toolkit.rpcnode.dev/install/TOOLKIT_VERSION (+ agent.sh).
 func (s *Server) handleAgentChannel(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "GET only", http.StatusMethodNotAllowed)

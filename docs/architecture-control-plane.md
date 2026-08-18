@@ -63,7 +63,7 @@ Panel rules:
 Install (CDN / archive only — ❌ no toolkit git clone):
 
 ```bash
-curl -fsSL "https://rpcnode.dev/install/agent.sh" | sudo bash
+curl -fsSL "https://toolkit.rpcnode.dev/install/agent.sh" | sudo bash
 # prebuilt agents: /install/binaries/ + watchdog; see docs/agent-install.md
 # offline: LOCAL_ARTIFACT_DIR=/path/to/unpacked archive
 ```
@@ -92,7 +92,7 @@ curl -s http://127.0.0.1:39090/wallet/getnowblock | head -c 200
 Install host agent from RpcNode (no network/env at install time):
 
 ```bash
-curl -fsSL "${AGENT_DOWNLOAD_URL:-https://rpcnode.dev/install/agent.sh}" | sudo bash
+curl -fsSL "${AGENT_DOWNLOAD_URL:-https://toolkit.rpcnode.dev/install/agent.sh}" | sudo bash
 ```
 
 Choose network + env later in the panel when **adding a node**.

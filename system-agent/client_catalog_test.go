@@ -75,7 +75,7 @@ func TestResolveTronPinned(t *testing.T) {
 	t.Setenv("TRON_TAG", "")
 	t.Setenv("TRON_JAR_URL", "")
 	t.Setenv("TRON_CONFIG_URL", "")
-	t.Setenv("INSTALL_BASE_URL", "http://127.0.0.1:1")
+	t.Setenv("CLIENTS_BASE_URL", "http://127.0.0.1:1")
 	t.Setenv("AGENT_DOWNLOAD_URL", "")
 	rel, err := ResolveClientRelease("tron", "mainnet")
 	if err != nil {

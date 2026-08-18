@@ -103,10 +103,11 @@ Panel proxy (ops SPA): `GET /api/workloads/host-disks?server_id=&network=solana&
 
 Panel disk layout (SQLite, per node UUID):
 
-- `GET /api/workloads/{uuid}/disk-layout` → `{ ok, node_id, disk_layout }`
+- `GET /api/workloads/{uuid}/disk-layout` → `{ ok, node_id, disk_layout, install_options }`
 - `PUT /api/workloads/{uuid}/disk-layout` body `{ "disk_layout": { … } }`
-- Also on `GET /api/workloads/{uuid}` / list items as `disk_layout`
-- `POST /api/workloads/provision` persists body `disk_layout` (and flat `ledger_dir` / …); omit on retry → panel reuses saved layout toward tip
+- Also on `GET /api/workloads/{uuid}` / list items as `disk_layout` and `install_options`
+- `POST /api/workloads/provision` persists body `disk_layout` (and flat `ledger_dir` / …) and `install_options`; omit on retry → panel reuses saved layout / options toward tip
+- Tip `POST /api/v1/nodes/plan` may return `install_options` groups (TRON mainnet snapshot flavors; XRPL `xrpl_history`). Provision body `{ "install_options": { "snapshot": "internal_tx" } }` or `{ "install_options": { "xrpl_history": "weeks" } }`
 
 ## Host disks (`GET /api/v1/host/disks`)
 

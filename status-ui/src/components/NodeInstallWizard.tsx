@@ -61,6 +61,13 @@ import {
   xrplHistoryInstallLabel,
   type XrplHistoryMode,
 } from './XrplHistoryPicker'
+import {
+  InstallOptionsPicker,
+  fallbackInstallGroups,
+  installOptionLabel,
+  parseInstallOptionGroups,
+  type InstallOptionGroup,
+} from './InstallOptionsPicker'
 import { resolveSyncProgressPct } from './SyncStatusCard'
 
 /** Networks with tip multi_disk_roles (must match api-agent/disk_roles.go). */
@@ -329,6 +336,8 @@ export function NodeInstallWizard({
   const [diskLoading, setDiskLoading] = useState(false)
   const [diskError, setDiskError] = useState<string | null>(null)
   const [xrplHistory, setXrplHistory] = useState<XrplHistoryMode>('weeks')
+  const [installGroups, setInstallGroups] = useState<InstallOptionGroup[]>([])
+  const [installOptions, setInstallOptions] = useState<Record<string, string>>({})
   const [killTarget, setKillTarget] = useState<CheckedCatalogPort | null>(null)
   const [killing, setKilling] = useState(false)
   const autoStarted = useRef(false)
@@ -340,6 +349,7 @@ export function NodeInstallWizard({
   const networkId = (workload?.network || '').toLowerCase()
   const wantsDiskLayout = MULTI_DISK_NETWORKS.has(networkId)
   const wantsXrplHistory = isXrplNetwork(networkId)
+  const wantsInstallOptions = installGroups.length > 0
 
   const agentVer = unsupported?.agentVersion || server?.agent_version || ''
   const latestVer = channelLatest || server?.latest_agent_version || ''
@@ -570,6 +580,18 @@ export function NodeInstallWizard({
         drifted: !!(res as { drifted?: boolean }).drifted,
         source: 'agent',
       })
+      const planGroups = parseInstallOptionGroups(res.install_options)
+      if (planGroups.length) {
+        setInstallGroups(planGroups)
+        setInstallOptions((prev) => {
+          const next = { ...prev }
+          const saved = workload.install_options || {}
+          for (const g of planGroups) {
+            if (!next[g.id]) next[g.id] = saved[g.id] || g.default || g.choices[0]?.id || ''
+          }
+          return next
+        })
+      }
       const planned = (res as { checked_ports?: CheckedCatalogPort[] }).checked_ports
       if (Array.isArray(planned) && planned.length > 0) {
         setCheckedPorts(planned)
@@ -786,6 +808,20 @@ export function NodeInstallWizard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wantsDiskLayout, networkId, active, stepPending, workload?.server_id, env])
 
+  useEffect(() => {
+    const groups = fallbackInstallGroups(networkId, env)
+    setInstallGroups(groups)
+    const saved = workload?.install_options || {}
+    const next: Record<string, string> = {}
+    for (const g of groups) {
+      next[g.id] = saved[g.id] || g.default || g.choices[0]?.id || ''
+    }
+    for (const [k, v] of Object.entries(saved)) {
+      if (v && !next[k]) next[k] = v
+    }
+    setInstallOptions(next)
+  }, [networkId, env, workload?.id])
+
   async function loadHostDisks() {
     if (!workload?.server_id || !networkId) return
     setDiskLoading(true)
@@ -915,6 +951,9 @@ export function NodeInstallWizard({
           .join(' ')
         pushLog(`Disk layout: ${layout.strategy || '?'} ${roleSummary || layout.ledger_dir || ''}`.trim())
       }
+      if (wantsInstallOptions) {
+        pushLog(`Install options: ${installOptionLabel(installGroups, installOptions)}`)
+      }
       const res = await api.workloadsProvision({
         server_id: workload.server_id,
         network: workload.network || 'tron',
@@ -925,7 +964,10 @@ export function NodeInstallWizard({
         node_http_port: ports.node_http_port,
         p2p_port: ports.p2p_port,
         ...(layout ? diskLayoutPayload(layout) : {}),
-        ...(wantsXrplHistory ? { xrpl_history: xrplHistory } : {}),
+        ...(wantsXrplHistory
+          ? { xrpl_history: installOptions.xrpl_history || xrplHistory }
+          : {}),
+        ...(wantsInstallOptions ? { install_options: installOptions } : {}),
       })
       if (!res.ok) {
         const blocked = detectUnsupportedCapability(res)
@@ -1055,7 +1097,10 @@ export function NodeInstallWizard({
           node_http_port: ports?.node_http_port || workload.node_http_port,
           p2p_port: ports?.p2p_port || workload.p2p_port,
           ...(layout ? diskLayoutPayload(layout) : {}),
-          ...(wantsXrplHistory ? { xrpl_history: xrplHistory } : {}),
+          ...(wantsXrplHistory
+          ? { xrpl_history: installOptions.xrpl_history || xrplHistory }
+          : {}),
+          ...(wantsInstallOptions ? { install_options: installOptions } : {}),
         })
         if (!prov.ok) {
           throw new Error(prov.message || prov.error || 'provision failed')
@@ -1606,7 +1651,16 @@ export function NodeInstallWizard({
                 </Alert>
               )}
 
-              {wantsXrplHistory && !unsupported && (
+              {wantsInstallOptions && !unsupported && (
+                <InstallOptionsPicker
+                  groups={installGroups}
+                  value={installOptions}
+                  onChange={setInstallOptions}
+                  disabled={portsConfirming}
+                />
+              )}
+
+              {wantsXrplHistory && !wantsInstallOptions && !unsupported && (
                 <Stack gap="xs">
                   <Text size="sm" fw={600}>
                     History to install
@@ -1682,9 +1736,11 @@ export function NodeInstallWizard({
                     ? `Check status in ${portsConfirmCountdown}s`
                     : portsConfirming
                       ? 'Installing…'
-                      : wantsXrplHistory
-                        ? `Install · ${xrplHistoryInstallLabel(xrplHistory)}`
-                        : 'Install'}
+                      : wantsInstallOptions
+                        ? `Install · ${installOptionLabel(installGroups, installOptions)}`
+                        : wantsXrplHistory
+                          ? `Install · ${xrplHistoryInstallLabel(xrplHistory)}`
+                          : 'Install'}
                 </Button>
               </Group>
 

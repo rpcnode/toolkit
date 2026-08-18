@@ -32,7 +32,7 @@ func main() {
 	listen := flag.String("listen", env("CLIENT_WATCH_LISTEN", "127.0.0.1:8094"), "HTTP bind")
 	catalog := flag.String("catalog", env("CLIENT_WATCH_CATALOG", ""), "path to clients/catalog.json")
 	clients := flag.String("clients", env("CLIENT_WATCH_CLIENTS", ""), "clients dir (catalog parent if empty)")
-	public := flag.String("public-base", env("CLIENT_WATCH_PUBLIC_BASE", "https://rpcnode.dev/install"), "public install URL")
+	public := flag.String("public-base", env("CLIENT_WATCH_PUBLIC_BASE", "https://toolkit.rpcnode.dev"), "public clients CDN URL")
 	statePath := flag.String("state", env("CLIENT_WATCH_STATE", ""), "state.json (telegram + seen)")
 	interval := flag.Duration("interval", parseDuration(env("CLIENT_WATCH_INTERVAL", "1h"), time.Hour), "check interval")
 	apiToken := flag.String("api-token", env("CLIENT_WATCH_TOKEN", ""), "optional Bearer for /api/v1/*")

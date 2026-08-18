@@ -287,7 +287,7 @@ toolkit_update_apply() {
 
   write_toolkit_update_state "progress=2/3 reinstall agents"
   # Re-run public installer (downloads matching OS/arch binaries, restarts units).
-  if ! curl -fsSL "${AGENT_DOWNLOAD_URL:-https://rpcnode.dev/install/agent.sh}" | bash; then
+  if ! curl -fsSL "${AGENT_DOWNLOAD_URL:-https://toolkit.rpcnode.dev/install/agent.sh}" | bash; then
     write_toolkit_update_state "status=error" "message=agent.sh reinstall failed" "progress="
     return 1
   fi

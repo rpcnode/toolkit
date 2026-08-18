@@ -19,7 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api'
 import { copyText } from '../lib/copyText'
 
-const DEFAULT_INSTALL = 'https://rpcnode.dev/install/agent.sh'
+const DEFAULT_INSTALL = 'https://toolkit.rpcnode.dev/install/agent.sh'
 
 type Props = {
   opened: boolean

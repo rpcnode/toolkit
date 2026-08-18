@@ -470,11 +470,48 @@ func ensureTronConfig(confPath, env string, nodeHTTP, p2p int) error {
 	if normalizeEnv(env) == "nile" {
 		t = patchTronNileP2P(t)
 	}
+	t = patchTronInstallOptions(t, env)
 
 	if t == orig {
 		return nil
 	}
 	return os.WriteFile(confPath, []byte(t), 0o640)
+}
+
+func patchTronInstallOptions(t, env string) string {
+	opts := loadInstallOptions("tron", env)
+	ch := findInstallChoice("tron", env, "snapshot", opts["snapshot"])
+	if ch == nil {
+		return t
+	}
+	if ch.SaveInternalTx != nil {
+		t = patchTronHOCONBool(t, "saveInternalTx", *ch.SaveInternalTx)
+	}
+	if ch.SaveFeaturedInternalTx != nil {
+		t = patchTronHOCONBool(t, "saveFeaturedInternalTx", *ch.SaveFeaturedInternalTx)
+	}
+	if ch.BalanceHistoryLookup != nil {
+		t = patchTronHOCONBool(t, "balance.history.lookup", *ch.BalanceHistoryLookup)
+	}
+	return t
+}
+
+func patchTronHOCONBool(t, key string, val bool) string {
+	lit := "false"
+	if val {
+		lit = "true"
+	}
+	re := regexp.MustCompile(`(?m)^(\s*)` + regexp.QuoteMeta(key) + `\s*=\s*(true|false)\s*$`)
+	if re.MatchString(t) {
+		return re.ReplaceAllString(t, "${1}"+key+" = "+lit)
+	}
+	if key == "saveFeaturedInternalTx" {
+		reIns := regexp.MustCompile(`(?m)^(\s*)saveInternalTx\s*=\s*(true|false)\s*$`)
+		if reIns.MatchString(t) {
+			return reIns.ReplaceAllString(t, "${1}saveInternalTx = ${2}\n${1}saveFeaturedInternalTx = "+lit)
+		}
+	}
+	return t
 }
 
 // nileex / nile-testnet config-nile.conf (2026). tron-docker 47.252.* seeds
@@ -914,6 +951,17 @@ if [[ -z "$URL" ]]; then
   echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) no snapshot URL — skip" >>"$LOG"
   exit 0
 fi
+# Mirror root (http://IP/) → latest official backupYYYYMMDD/FullNode_output-directory.tgz
+if [[ "$URL" != *.tgz && "$URL" != *.tar.gz ]]; then
+  BASE="${URL%/}"
+  HTML=$(wget -qO- --timeout=45 "$BASE/" || true)
+  LATEST=$(printf '%s\n' "$HTML" | grep -oE 'backup[0-9]{8}' | sort | tail -1 || true)
+  if [[ -n "$LATEST" ]]; then
+    URL="$BASE/$LATEST/FullNode_output-directory.tgz"
+  else
+    URL="$BASE/FullNode_output-directory.tgz"
+  fi
+fi
 cd "$DATA"
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) START $URL" >>"$LOG"
 wget -O - "$URL" 2>>"$LOG" | tar -xzf - >>"$LOG" 2>&1
@@ -933,7 +981,7 @@ echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DONE" >>"$LOG"
 
 func writeTronSnapshotScript(env string) (string, error) {
 	env = normalizeEnv(env)
-	url := strings.TrimSpace(lookupPortProfile("tron", env).SnapshotURL)
+	url := resolveSnapshotURLForOptions("tron", env, loadInstallOptions("tron", env))
 	if url == "" {
 		url = strings.TrimSpace(os.Getenv("TRON_SNAPSHOT_URL"))
 	}

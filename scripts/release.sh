@@ -58,7 +58,7 @@ cmd_status() {
   else
     printf 'upstream         (none — git push -u origin HEAD)\n'
   fi
-  printf 'CDN              https://rpcnode.dev/install/TOOLKIT_VERSION\n'
+  printf 'CDN              https://toolkit.rpcnode.dev/install/TOOLKIT_VERSION\n'
 }
 
 cmd_bump() {

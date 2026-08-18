@@ -280,7 +280,7 @@ func TestNodeUnitsForRemoveAllSupported(t *testing.T) {
 		"ltc":         {"ltc-mainnet.service"},
 		"dash":        {"dash-mainnet.service"},
 		"bch":         {"bch-mainnet.service"},
-		"cardano":     {"cardano-mainnet.service", "cardano-ogmios-mainnet.service"},
+		"cardano":     {"cardano-mainnet.service", "cardano-ogmios-mainnet.service", "cardano-mainnet-snapshot.service"},
 		"hyperliquid": {"hyperliquid-mainnet.service"},
 		"xrpl":        {"xrpl-mainnet.service", "xrpl-clio-mainnet.service"},
 		"tron":        {"tron-mainnet.service", "tron-mainnet-snapshot.service"},

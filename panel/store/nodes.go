@@ -43,11 +43,11 @@ func NewNodeID() string {
 // nodeSelectCols — keep scanNode / ListNodeViews in lockstep.
 const nodeSelectCols = `id, server_id, name, network, env, public_port, agent_port, node_http_port, p2p_port,
        agent_url, status, client_version, client_latest, client_update_available,
-       COALESCE(disk_layout_json,''), COALESCE(install_started_at,''), COALESCE(synced_at,''), created_at, updated_at`
+       COALESCE(disk_layout_json,''), COALESCE(install_started_at,''), COALESCE(synced_at,''), COALESCE(install_options_json,''), created_at, updated_at`
 
 const nodeViewSelectCols = `n.id, n.server_id, n.name, n.network, n.env, n.public_port, n.agent_port, n.node_http_port, n.p2p_port,
        n.agent_url, n.status, n.client_version, n.client_latest, n.client_update_available,
-       COALESCE(n.disk_layout_json,''), COALESCE(n.install_started_at,''), COALESCE(n.synced_at,''), n.created_at, n.updated_at,
+       COALESCE(n.disk_layout_json,''), COALESCE(n.install_started_at,''), COALESCE(n.synced_at,''), COALESCE(n.install_options_json,''), n.created_at, n.updated_at,
        COALESCE(s.phase,''), COALESCE(s.label,''), COALESCE(s.detail,''), s.height, s.snapshot_pct,
        COALESCE(s.error,''), COALESCE(s.collected_at,''), COALESCE(s.last_seen_at,''), COALESCE(s.rpc_proxy,''),
        COALESCE(s.raw_json,'')`
@@ -101,7 +101,7 @@ ORDER BY n.network, n.env, n.id`)
 	out := []NodeView{}
 	for rows.Next() {
 		var v NodeView
-		var created, updated, collected, lastSeen, rpcProxy, diskLayoutJSON, rawJSON, installStarted, syncedAt string
+		var created, updated, collected, lastSeen, rpcProxy, diskLayoutJSON, rawJSON, installStarted, syncedAt, installOptsJSON string
 		var height sql.NullInt64
 		var snapPct sql.NullFloat64
 		var updAvail int
@@ -109,7 +109,7 @@ ORDER BY n.network, n.env, n.id`)
 			&v.ID, &v.ServerID, &v.Name, &v.Network, &v.Env,
 			&v.PublicPort, &v.AgentPort, &v.NodeHTTPPort, &v.P2PPort,
 			&v.AgentURL, &v.Status, &v.ClientVersion, &v.ClientLatest, &updAvail,
-			&diskLayoutJSON, &installStarted, &syncedAt, &created, &updated,
+			&diskLayoutJSON, &installStarted, &syncedAt, &installOptsJSON, &created, &updated,
 			&v.LifecyclePhase, &v.LifecycleLabel, &v.LifecycleDetail,
 			&height, &snapPct, &v.StatusError, &collected, &lastSeen, &rpcProxy, &rawJSON,
 		)
@@ -118,6 +118,7 @@ ORDER BY n.network, n.env, n.id`)
 		}
 		v.ClientUpdateAvailable = updAvail != 0
 		v.DiskLayout = ParseDiskLayoutJSON(diskLayoutJSON)
+		v.InstallOptions = ParseInstallOptionsJSON(installOptsJSON)
 		v.InstallStartedAt = strings.TrimSpace(installStarted)
 		v.SyncedAt = strings.TrimSpace(syncedAt)
 		v.CreatedAt = parseTime(created)
@@ -323,6 +324,7 @@ func (db *DB) UpsertNode(w Node) (Node, error) {
 			w.P2PPort = 0
 			w.AgentURL = ""
 			w.DiskLayout = nil // fresh Add — drop prior JBOD confirmation
+			w.InstallOptions = nil
 			w.InstallStartedAt = ""
 			w.SyncedAt = ""
 		} else {
@@ -343,6 +345,9 @@ func (db *DB) UpsertNode(w Node) (Node, error) {
 			}
 			if w.DiskLayout == nil {
 				w.DiskLayout = prev.DiskLayout
+			}
+			if w.InstallOptions == nil {
+				w.InstallOptions = prev.InstallOptions
 			}
 			if strings.TrimSpace(w.InstallStartedAt) == "" {
 				w.InstallStartedAt = prev.InstallStartedAt
@@ -382,11 +387,15 @@ func (db *DB) UpsertNode(w Node) (Node, error) {
 	if err != nil {
 		return Node{}, fmt.Errorf("disk_layout: %w", err)
 	}
+	optsJSON, err := MarshalInstallOptionsJSON(w.InstallOptions)
+	if err != nil {
+		return Node{}, fmt.Errorf("install_options: %w", err)
+	}
 	_, err = db.sql.Exec(`
 INSERT INTO nodes(id, server_id, name, network, env, public_port, agent_port, node_http_port, p2p_port,
                   agent_url, status, client_version, client_latest, client_update_available,
-                  disk_layout_json, install_started_at, synced_at, created_at, updated_at)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                  disk_layout_json, install_started_at, synced_at, install_options_json, created_at, updated_at)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(id) DO UPDATE SET
   server_id=excluded.server_id, name=excluded.name, network=excluded.network, env=excluded.env,
   public_port=excluded.public_port, agent_port=excluded.agent_port,
@@ -395,6 +404,7 @@ ON CONFLICT(id) DO UPDATE SET
   disk_layout_json=excluded.disk_layout_json,
   install_started_at=excluded.install_started_at,
   synced_at=excluded.synced_at,
+  install_options_json=excluded.install_options_json,
   client_version=CASE
     WHEN excluded.client_version != '' THEN excluded.client_version
     ELSE nodes.client_version
@@ -407,7 +417,7 @@ ON CONFLICT(id) DO UPDATE SET
 		w.ID, w.ServerID, w.Name, w.Network, w.Env,
 		w.PublicPort, w.AgentPort, w.NodeHTTPPort, w.P2PPort,
 		w.AgentURL, w.Status, w.ClientVersion, w.ClientLatest, updAvail,
-		diskJSON, strings.TrimSpace(w.InstallStartedAt), strings.TrimSpace(w.SyncedAt),
+		diskJSON, strings.TrimSpace(w.InstallStartedAt), strings.TrimSpace(w.SyncedAt), optsJSON,
 		formatTime(w.CreatedAt), formatTime(w.UpdatedAt),
 	)
 	if err != nil {
@@ -560,24 +570,48 @@ func (db *DB) NodeIDsByServer(serverID string) ([]string, error) {
 
 func scanNode(row rowScanner) (Node, error) {
 	var n Node
-	var created, updated, diskLayoutJSON, installStarted, syncedAt string
+	var created, updated, diskLayoutJSON, installStarted, syncedAt, installOptsJSON string
 	var updAvail int
 	err := row.Scan(
 		&n.ID, &n.ServerID, &n.Name, &n.Network, &n.Env,
 		&n.PublicPort, &n.AgentPort, &n.NodeHTTPPort, &n.P2PPort,
 		&n.AgentURL, &n.Status, &n.ClientVersion, &n.ClientLatest, &updAvail,
-		&diskLayoutJSON, &installStarted, &syncedAt, &created, &updated,
+		&diskLayoutJSON, &installStarted, &syncedAt, &installOptsJSON, &created, &updated,
 	)
 	if err != nil {
 		return Node{}, err
 	}
 	n.ClientUpdateAvailable = updAvail != 0
 	n.DiskLayout = ParseDiskLayoutJSON(diskLayoutJSON)
+	n.InstallOptions = ParseInstallOptionsJSON(installOptsJSON)
 	n.InstallStartedAt = strings.TrimSpace(installStarted)
 	n.SyncedAt = strings.TrimSpace(syncedAt)
 	n.CreatedAt = parseTime(created)
 	n.UpdatedAt = parseTime(updated)
 	return n, nil
+}
+
+func (db *DB) SetNodeInstallOptions(id string, opts map[string]string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("node id required")
+	}
+	raw, err := MarshalInstallOptionsJSON(opts)
+	if err != nil {
+		return err
+	}
+	res, err := db.sql.Exec(`
+UPDATE nodes SET install_options_json=?, updated_at=? WHERE id=?`,
+		raw, formatTime(time.Now().UTC()), id,
+	)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("node not found")
+	}
+	return nil
 }
 
 // NodeStatusPreInstall — Add/Confirm ports; install has not started.

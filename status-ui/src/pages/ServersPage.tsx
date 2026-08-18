@@ -59,7 +59,7 @@ const AGENT_UPDATE_POLL_MS = 45_000
 
 /** Host cleanup after Panel → Remove server (agents only; fullnodes stay). */
 const UNINSTALL_AGENTS_CMD =
-  'curl -fsSL "https://rpcnode.dev/install/uninstall-agents.sh" | sudo bash'
+  'curl -fsSL "https://toolkit.rpcnode.dev/install/uninstall-agents.sh" | sudo bash'
 
 function platformLabel(s: RegistryNode): string {
   if (s.os_pretty) return s.os_pretty

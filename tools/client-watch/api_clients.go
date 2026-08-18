@@ -18,6 +18,7 @@ type clientFileDTO struct {
 	Rel      string `json:"rel,omitempty"`
 	Ready    bool   `json:"ready"`
 	Bytes    int64  `json:"bytes,omitempty"`
+	Optional bool   `json:"optional,omitempty"`
 }
 
 type clientPackDTO struct {
@@ -140,6 +141,7 @@ func (w *watcher) packFromCache(e catalogEntry, cached cachedLatest) clientPackD
 			Name:     j.name,
 			Upstream: j.url,
 			URL:      j.url,
+			Optional: j.optional,
 		}
 		if rel, n, ok := w.fileOnDisk(e, ver, j); ok {
 			dto.Ready = true

@@ -1097,6 +1097,7 @@ func nodeUnitsForRemove(network, env string) []string {
 		return []string{
 			fmt.Sprintf("cardano-%s.service", env),
 			fmt.Sprintf("cardano-ogmios-%s.service", env),
+			fmt.Sprintf("cardano-%s-snapshot.service", env),
 		}
 	case "tron", "":
 		return []string{
@@ -1247,7 +1248,7 @@ func killNodeProcesses(network, env string) {
 		killCoreDaemonProcs("geth", etc, data, opt, "etc-"+env)
 	case "cardano":
 		_ = exec.Command("bash", "-lc", fmt.Sprintf(
-			`pgrep -af 'cardano-node|ogmios' | grep -E %q | awk '{print $1}' | while read p; do kill "$p" 2>/dev/null; sleep 0.2; kill -9 "$p" 2>/dev/null; done`,
+			`pgrep -af 'cardano-node|ogmios|mithril-client' | grep -E %q | awk '{print $1}' | while read p; do kill "$p" 2>/dev/null; sleep 0.2; kill -9 "$p" 2>/dev/null; done`,
 			pathGrep,
 		)).Run()
 	case "tron", "":

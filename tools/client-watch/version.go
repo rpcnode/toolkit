@@ -4,6 +4,6 @@ package main
 // Bump apiVersion when /api/v1/clients or /files/ change in a breaking way.
 const (
 	watchService = "client-watch"
-	watchVersion = "0.2.1"
+	watchVersion = "0.2.2"
 	watchAPI     = 2
 )

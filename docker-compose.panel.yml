@@ -44,7 +44,7 @@ services:
       # Optional fallback only — UI should resolve agents via registry/workload server_id.
       PANEL_DEFAULT_AGENT_URL: ${PANEL_DEFAULT_AGENT_URL:-}
       PANEL_DEFAULT_AGENT_TOKEN: ${AGENT_API_TOKEN:-}
-      AGENT_DOWNLOAD_URL: ${AGENT_DOWNLOAD_URL:-https://rpcnode.dev/install/agent.sh}
+      AGENT_DOWNLOAD_URL: ${AGENT_DOWNLOAD_URL:-https://toolkit.rpcnode.dev/install/agent.sh}
       # SPA is compiled in Dockerfile (status-ui → go:embed). Do not mount host panel/ui.
     extra_hosts:
       - "host.docker.internal:host-gateway"

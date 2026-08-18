@@ -358,6 +358,8 @@ export type Workload = {
   node_net?: NodeNetStats | null
   /** Confirmed multi-disk layout (panel SQLite; set on Install/provision). */
   disk_layout?: ProvisionDiskLayout | MultiDiskLayoutPlan | null
+  /** Wizard choices (snapshot flavor, xrpl_history, …) persisted at Install. */
+  install_options?: Record<string, string> | null
 }
 
 export type WorkloadPort = {
@@ -564,6 +566,7 @@ export const api = {
       network?: string
       env?: string
       disk_layout?: ProvisionDiskLayout | MultiDiskLayoutPlan | null
+      install_options?: Record<string, string> | null
       error?: string
       message?: string
     }>(`/api/workloads/${encodeURIComponent(id)}/disk-layout`),
@@ -709,6 +712,7 @@ export const api = {
       agent_version?: string
       supported_networks?: string[]
       supported_envs?: string[]
+      install_options?: unknown
       agent?: { error?: string; message?: string; agent_version?: string; version?: string }
     }
     // Keep structured unsupported_* even on HTTP 4xx/502 — wizard shows Update CTA.
@@ -739,6 +743,7 @@ export const api = {
     snapshots_dir?: string
     disk_layout?: ProvisionDiskLayout
     xrpl_history?: string
+    install_options?: Record<string, string>
   }) => {
     const res = await fetch('/api/workloads/provision', {
       method: 'POST',

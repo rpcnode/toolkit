@@ -46,6 +46,8 @@ type nodeProvisionRequest struct {
 	DiskLayout   *solanaDiskLayoutIn `json:"disk_layout,omitempty"`
 	// XRPL: stock | day | weeks | full (default weeks ≈ 2 weeks / 300k ledgers).
 	XRPLHistory string `json:"xrpl_history,omitempty"`
+	// InstallOptions — wizard choices (e.g. snapshot=internal_tx). Persisted on the host.
+	InstallOptions map[string]string `json:"install_options,omitempty"`
 }
 
 // solanaDiskLayoutIn — panel/wizard confirmed mounts or absolute dirs.
@@ -1325,6 +1327,7 @@ func (s *Server) handleNodesPlan(w http.ResponseWriter, r *http.Request) {
 		"supported_networks":  supportedNetworks(),
 		"network_constraints": networkHostConstraints(),
 		"capabilities":        lifecycleCapabilities(req.Network, req.Env),
+		"install_options":     installOptionGroups(req.Network, req.Env),
 	}
 	if c := networkConstraint(req.Network); c != nil {
 		out["network_constraint"] = c
@@ -1354,6 +1357,8 @@ func (s *Server) handleNodesProvisionBody(w http.ResponseWriter, req nodeProvisi
 		writeJSON(w, http.StatusBadRequest, unsupportedNetworkEnvPayload(req.Network, req.Env))
 		return
 	}
+	req.InstallOptions = mergeInstallOptions(req.Network, req.Env, req.InstallOptions)
+	_ = writeInstallOptions(req.Network, req.Env, req.InstallOptions)
 	if err := checkOneEnvPerHost(req.Network, req.Env); err != nil {
 		c := networkConstraint(req.Network)
 		writeJSON(w, http.StatusConflict, map[string]any{
@@ -2364,7 +2369,9 @@ func provisionNodeEnv(req nodeProvisionRequest) (map[string]any, error) {
 	// Canonical: ports.sh 29090/29091/29092.
 	sysListen := systemAgentListenPort("tron", req.Env)
 
-	snapURL := lookupPortProfile(req.Network, req.Env).SnapshotURL
+	opts := mergeInstallOptions(req.Network, req.Env, req.InstallOptions)
+	_ = writeInstallOptions(req.Network, req.Env, opts)
+	snapURL := resolveSnapshotURLForOptions(req.Network, req.Env, opts)
 	// Clients → Go RPC :public_port (sleep/maintenance) → FullNode :node_http (loopback).
 	// Node Agent API on :agent_port for panel/control.
 	envBody := fmt.Sprintf(`# managed by rpcnode provision %s

@@ -40,6 +40,8 @@ type Node struct {
 	ClientUpdateAvailable bool           `json:"client_update_available,omitempty"`
 	// DiskLayout — confirmed multi-disk roles→paths (wizard / provision). Nil when unset.
 	DiskLayout map[string]any `json:"disk_layout,omitempty"`
+	// InstallOptions — wizard choices persisted at Install (snapshot flavor, …).
+	InstallOptions map[string]string `json:"install_options,omitempty"`
 	// InstallStartedAt — first Install/provision (empty until then). RFC3339.
 	InstallStartedAt string `json:"install_started_at,omitempty"`
 	// SyncedAt — first honestly-synced / working (empty until then). RFC3339.
@@ -62,6 +64,59 @@ func MarshalDiskLayoutJSON(layout map[string]any) (string, error) {
 		return "", nil
 	}
 	return s, nil
+}
+
+func MarshalInstallOptionsJSON(opts map[string]string) (string, error) {
+	if len(opts) == 0 {
+		return "", nil
+	}
+	b, err := json.Marshal(opts)
+	if err != nil {
+		return "", err
+	}
+	s := string(b)
+	if s == "" || s == "null" || s == "{}" {
+		return "", nil
+	}
+	return s, nil
+}
+
+func ParseInstallOptionsJSON(raw string) map[string]string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "null" || raw == "{}" {
+		return nil
+	}
+	var out map[string]string
+	if json.Unmarshal([]byte(raw), &out) != nil || len(out) == 0 {
+		var anyMap map[string]any
+		if json.Unmarshal([]byte(raw), &anyMap) != nil {
+			return nil
+		}
+		out = map[string]string{}
+		for k, v := range anyMap {
+			s, ok := v.(string)
+			if !ok || strings.TrimSpace(k) == "" || strings.TrimSpace(s) == "" {
+				continue
+			}
+			out[strings.ToLower(strings.TrimSpace(k))] = strings.ToLower(strings.TrimSpace(s))
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	}
+	clean := map[string]string{}
+	for k, v := range out {
+		k = strings.ToLower(strings.TrimSpace(k))
+		v = strings.ToLower(strings.TrimSpace(v))
+		if k != "" && v != "" {
+			clean[k] = v
+		}
+	}
+	if len(clean) == 0 {
+		return nil
+	}
+	return clean
 }
 
 // ParseDiskLayoutJSON unmarshals nodes.disk_layout_json.

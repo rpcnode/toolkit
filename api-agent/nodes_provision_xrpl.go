@@ -553,7 +553,11 @@ func writeXRPLConfig(etc, data string, req nodeProvisionRequest, cluster xrplNet
 	b.WriteString("[node_size]\n")
 	b.WriteString(xrplNodeSize(hostMemTotalGiB(), xrplDatadirHasLedger(data)) + "\n\n")
 
-	pol := resolveXRPLHistoryPolicy(etc, req.XRPLHistory)
+	hist := strings.TrimSpace(req.XRPLHistory)
+	if hist == "" {
+		hist = mergeInstallOptions("xrpl", req.Env, req.InstallOptions)["xrpl_history"]
+	}
+	pol := resolveXRPLHistoryPolicy(etc, hist)
 	_ = writeXRPLHistoryPolicy(etc, pol)
 
 	b.WriteString("[node_db]\n")

@@ -16,7 +16,7 @@ import (
 //go:embed schema.sql
 var schemaFS embed.FS
 
-const schemaVersion = 11
+const schemaVersion = 12
 
 type DB struct {
 	sql  *sql.DB
@@ -165,6 +165,12 @@ func (db *DB) migrate() error {
 			return err
 		}
 		if err := db.ensureColumn("nodes", "synced_at", "TEXT NOT NULL DEFAULT ''"); err != nil {
+			return err
+		}
+	}
+
+	if ver < 12 {
+		if err := db.ensureColumn("nodes", "install_options_json", "TEXT NOT NULL DEFAULT ''"); err != nil {
 			return err
 		}
 	}

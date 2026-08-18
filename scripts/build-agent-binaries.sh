@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Cross-compile host agents and stage them into the marketing site tree.
+# Cross-compile host agents and stage them into the toolkit CDN tree.
 #
 #   ./scripts/build-agent-binaries.sh
 #
 # Writes:
 #   dist/binaries/                          scratch
-#   frontend/site/public/install/           live origin (rpcnode.dev/install/...)
+#   frontend/toolkit/public/install/        live origin (toolkit.rpcnode.dev/install/...)
 #
 #   agent.sh
 #   uninstall-agents.sh
@@ -22,7 +22,7 @@ OUT_DIR="${OUT_DIR:-$ROOT/dist/binaries}"
 if [[ "${CONNECT_PUBLIC_INSTALL+x}" == "x" ]]; then
   CONNECT_INSTALL="$CONNECT_PUBLIC_INSTALL"
 else
-  CONNECT_INSTALL="${MONOREPO_ROOT}/frontend/site/public/install"
+  CONNECT_INSTALL="${MONOREPO_ROOT}/frontend/toolkit/public/install"
 fi
 # linux first (prod hosts); darwin for a Mac agent.
 TARGETS="${TARGETS:-linux/amd64 linux/arm64 darwin/amd64 darwin/arm64}"
@@ -113,8 +113,8 @@ ok  ${VERSION}
     ${CONNECT_INSTALL}/agent.sh
     ${CONNECT_INSTALL}/binaries/
 
-agent.sh downloads from https://rpcnode.dev/install/binaries/
-redeploy connect for the site to serve the new files.
+agent.sh downloads from https://toolkit.rpcnode.dev/install/binaries/
+redeploy frontend/toolkit for the CDN to serve the new files.
 
 linux-only:
   TARGETS='linux/amd64 linux/arm64' ./scripts/build-agent-binaries.sh

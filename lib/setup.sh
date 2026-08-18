@@ -167,7 +167,7 @@ TRON_PANEL_USER=${TRON_PANEL_USER:-admin}
 # Agent key for /api/v1 and future central registration (also as TRON_API_TOKEN).
 AGENT_API_TOKEN=${AGENT_API_TOKEN:-}
 TRON_API_TOKEN=${TRON_API_TOKEN:-${AGENT_API_TOKEN:-}}
-AGENT_DOWNLOAD_URL=${AGENT_DOWNLOAD_URL:-https://rpcnode.dev/install/agent.sh}
+AGENT_DOWNLOAD_URL=${AGENT_DOWNLOAD_URL:-https://toolkit.rpcnode.dev/install/agent.sh}
 EOF
   chown "root:${TRON_GROUP}" "$dest" 2>/dev/null || true
   chmod 640 "$dest"
@@ -626,7 +626,7 @@ EOF
   ensure_dirs
   TRON_PANEL_USER="${PANEL_USER:-admin}"
   ensure_agent_api_token
-  : "${AGENT_DOWNLOAD_URL:=https://rpcnode.dev/install/agent.sh}"
+  : "${AGENT_DOWNLOAD_URL:=https://toolkit.rpcnode.dev/install/agent.sh}"
   export AGENT_DOWNLOAD_URL
   write_toolkit_env_from_setup
   write_panel_htpasswd "${PANEL_USER:-admin}" "${PANEL_PASSWORD}"
@@ -708,11 +708,11 @@ EOF
   write_instance_registry "$mode"
 
   # Host agents = Go binaries + systemd (not Docker).
-  info "installing/updating host agents via ${AGENT_DOWNLOAD_URL:-https://rpcnode.dev/install/agent.sh}"
-  if curl -fsSL "${AGENT_DOWNLOAD_URL:-https://rpcnode.dev/install/agent.sh}" | bash; then
+  info "installing/updating host agents via ${AGENT_DOWNLOAD_URL:-https://toolkit.rpcnode.dev/install/agent.sh}"
+  if curl -fsSL "${AGENT_DOWNLOAD_URL:-https://toolkit.rpcnode.dev/install/agent.sh}" | bash; then
     ok "host agents installed (systemd)"
   else
-    warn "agent install failed — run: curl -fsSL https://rpcnode.dev/install/agent.sh | sudo bash"
+    warn "agent install failed — run: curl -fsSL https://toolkit.rpcnode.dev/install/agent.sh | sudo bash"
   fi
   cmd_agents status 2>/dev/null || true
 

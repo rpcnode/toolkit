@@ -12,7 +12,7 @@ import (
 )
 
 // ClientRelease — canonical download for a network/env client (install + check + update).
-// Primary source is the vendored CDN catalog (RpcNode.app → connect/public/install/clients).
+// Primary source is the vendored CDN catalog (RpcNode.app → frontend/toolkit/public/clients).
 // GitHub / pin is fallback only. Env TRON_TAG / TRON_JAR_URL still wins.
 type ClientRelease struct {
 	Network        string `json:"network"`

@@ -637,6 +637,7 @@ func (s *Server) handleWorkloadPlan(w http.ResponseWriter, r *http.Request) {
 		},
 		"next_after_provision": nextAfterProvision(body.Network, body.Env),
 		"agent":                agent,
+		"install_options":      agent["install_options"],
 	}
 	base := strings.TrimRight(srv.AgentURL, "/")
 	if supports := s.probeAgentSupportsNetwork(s.client, base, srv.AgentKey, body.Network); supports {
@@ -1041,7 +1042,8 @@ func (s *Server) handleWorkloadDiskLayout(w http.ResponseWriter, r *http.Request
 	case http.MethodGet:
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok": true, "node_id": wl.ID, "network": wl.Network, "env": wl.Env,
-			"disk_layout": wl.DiskLayout,
+			"disk_layout":     wl.DiskLayout,
+			"install_options": wl.InstallOptions,
 		})
 	case http.MethodPut:
 		var body struct {
@@ -1082,7 +1084,8 @@ func (s *Server) handleWorkloadProvision(w http.ResponseWriter, r *http.Request)
 		AccountsDir  string         `json:"accounts_dir,omitempty"`
 		SnapshotsDir string         `json:"snapshots_dir,omitempty"`
 		DiskLayout   map[string]any `json:"disk_layout,omitempty"`
-		XrplHistory  string         `json:"xrpl_history,omitempty"`
+		XrplHistory     string            `json:"xrpl_history,omitempty"`
+		InstallOptions  map[string]string `json:"install_options,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "invalid_json"})
@@ -1167,8 +1170,28 @@ func (s *Server) handleWorkloadProvision(w http.ResponseWriter, r *http.Request)
 	if diskLayout != nil {
 		payloadMap["disk_layout"] = diskLayout
 	}
+	installOpts := map[string]string{}
+	if len(body.InstallOptions) > 0 {
+		for k, v := range body.InstallOptions {
+			k = strings.ToLower(strings.TrimSpace(k))
+			v = strings.ToLower(strings.TrimSpace(v))
+			if k != "" && v != "" {
+				installOpts[k] = v
+			}
+		}
+	} else if hasPrev && len(prevWL.InstallOptions) > 0 {
+		for k, v := range prevWL.InstallOptions {
+			installOpts[k] = v
+		}
+	}
 	if h := strings.TrimSpace(body.XrplHistory); h != "" {
 		payloadMap["xrpl_history"] = h
+		installOpts["xrpl_history"] = strings.ToLower(strings.TrimSpace(h))
+	}
+	var persistOpts map[string]string
+	if len(installOpts) > 0 {
+		persistOpts = installOpts
+		payloadMap["install_options"] = installOpts
 	}
 	payload, _ := json.Marshal(payloadMap)
 	url := strings.TrimRight(srv.AgentURL, "/") + "/api/v1/nodes/provision" // server host agent
@@ -1241,11 +1264,18 @@ func (s *Server) handleWorkloadProvision(w http.ResponseWriter, r *http.Request)
 		P2PPort:      p2p,
 		AgentURL:     agentURL,
 		Status:       status,
-		DiskLayout:   diskLayout,
+		DiskLayout:     diskLayout,
+		InstallOptions: persistOpts,
 	})
 	// Persist confirmed layout for Node Config + re-provision (even if Upsert race).
 	if diskLayout != nil && wl.ID != "" {
 		_ = s.workloads.SetDiskLayout(wl.ID, diskLayout)
+		if refreshed, ok := s.workloads.Get(wl.ID); ok {
+			wl = refreshed
+		}
+	}
+	if len(persistOpts) > 0 && wl.ID != "" {
+		_ = s.workloads.SetInstallOptions(wl.ID, persistOpts)
 		if refreshed, ok := s.workloads.Get(wl.ID); ok {
 			wl = refreshed
 		}
@@ -1259,8 +1289,9 @@ func (s *Server) handleWorkloadProvision(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true, "item": wl, "updated": updated, "server_agent_url_updated": serverURLUpdated,
 		"server_agent_url": srv.AgentURL, "agent": agent,
-		"disk_layout": wl.DiskLayout,
-		"rpc_mode":    "go_proxy",
+		"disk_layout":     wl.DiskLayout,
+		"install_options": wl.InstallOptions,
+		"rpc_mode":        "go_proxy",
 		"external_ports": []map[string]any{
 			{"port": pub, "proto": "tcp", "role": "rpc_proxy", "open_in_firewall": true,
 				"desc": "Go RPC proxy (clients; sleep/maintenance on update)"},

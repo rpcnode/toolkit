@@ -20,10 +20,10 @@ agent_units() {
 }
 
 require_agent_units() {
-  command -v systemctl >/dev/null 2>&1 || die "systemctl not found — install host agent via https://rpcnode.dev/install/agent.sh"
+  command -v systemctl >/dev/null 2>&1 || die "systemctl not found — install host agent via https://toolkit.rpcnode.dev/install/agent.sh"
   local u
   for u in $(agent_units); do
-    [[ -f "/etc/systemd/system/${u}" ]] || die "missing ${u} — run: curl -fsSL https://rpcnode.dev/install/agent.sh | sudo bash"
+    [[ -f "/etc/systemd/system/${u}" ]] || die "missing ${u} — run: curl -fsSL https://toolkit.rpcnode.dev/install/agent.sh | sudo bash"
   done
 }
 
@@ -70,7 +70,7 @@ cmd_agents() {
     ps|status)
       if command -v systemctl >/dev/null 2>&1; then
         systemctl --no-pager --full status rpcnode-system-agent.service rpcnode-api-agent.service 2>/dev/null \
-          || warn "agent units not installed — https://rpcnode.dev/install/agent.sh"
+          || warn "agent units not installed — https://toolkit.rpcnode.dev/install/agent.sh"
       fi
       local port
       port="$(agent_port)"

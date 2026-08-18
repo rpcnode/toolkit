@@ -52,7 +52,7 @@ func vendoredNamedConfURL(network, env, name string) string {
 	if name == "" {
 		return ""
 	}
-	base := strings.TrimRight(agentInstallBaseURL(), "/")
+	base := strings.TrimRight(clientsBaseURL(), "/")
 	return fmt.Sprintf("%s/clients/%s/%s/conf/%s", base, network, env, name)
 }
 
@@ -70,7 +70,7 @@ func downloadNamedConf(network, env, name, fallback, dest string) error {
 }
 
 func fetchVendoredClientRelease(network, env string) (tronClientRelease, error) {
-	base := agentInstallBaseURL()
+	base := clientsBaseURL()
 	manURL := fmt.Sprintf("%s/clients/%s/%s/manifest.json", strings.TrimRight(base, "/"), network, env)
 	client := &http.Client{Timeout: 20 * time.Second}
 	req, err := http.NewRequest(http.MethodGet, manURL, nil)

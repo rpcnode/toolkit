@@ -27,7 +27,7 @@ flowchart LR
 
 | Step | In the panel | On the machine |
 |---|---|---|
-| **1. Add server** | **Servers → Add server** — paste the agent URL | <code>curl -fsSL https://rpcnode.dev/install/agent.sh \| sudo bash</code> once per host |
+| **1. Add server** | **Servers → Add server** — paste the agent URL | <code>curl -fsSL https://toolkit.rpcnode.dev/install/agent.sh \| sudo bash</code> once per host |
 | **2. Add node** | **Nodes → Add node** → network → env → server → **Install** | Agent provisions units, conf, snapshot — no SSH playbook |
 | **3. Wait** | NODE SETUP + honest **sync %** and logs | Chain client downloads / IBD / catch-up until **SYNCED** |
 | **4. Update client** | Node card / detail → **Update client** when the badge is not LATEST | Agent swaps the chain binary and restarts that node |
@@ -86,7 +86,7 @@ SQLite (`panel.db`) lives in the Docker volume `panel-lib` (`/var/lib/rpcnode`).
 ### 2. Agent (blockchain server)
 
 ```bash
-curl -fsSL https://rpcnode.dev/install/agent.sh | sudo bash
+curl -fsSL https://toolkit.rpcnode.dev/install/agent.sh | sudo bash
 ```
 
 The installer prints a register URL + API key. In the panel: **Servers → Add server** (paste the agent URL).  
@@ -155,7 +155,7 @@ docker restart rpcnode-panel
 # → dist/binaries/rpcnode-{api,system}-agent-{linux,darwin}-{amd64,arm64}
 ```
 
-Install URLs: [rpcnode.dev/install/agent.sh](https://rpcnode.dev/install/agent.sh) · [binaries](https://rpcnode.dev/install/binaries/)
+Install URLs: [toolkit.rpcnode.dev/install/agent.sh](https://toolkit.rpcnode.dev/install/agent.sh) · [binaries](https://toolkit.rpcnode.dev/install/binaries/)
 
 ## Releases
 

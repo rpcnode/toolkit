@@ -67,15 +67,10 @@ func (c *ClientUpdateController) statePath() string {
 }
 
 func clientInstallBaseURL() string {
-	if u := strings.TrimSpace(os.Getenv("INSTALL_BASE_URL")); u != "" {
+	if u := strings.TrimSpace(os.Getenv("CLIENTS_BASE_URL")); u != "" {
 		return strings.TrimRight(u, "/")
 	}
-	if u := strings.TrimSpace(os.Getenv("AGENT_DOWNLOAD_URL")); u != "" {
-		u = strings.TrimRight(u, "/")
-		u = strings.TrimSuffix(u, "/agent.sh")
-		return u
-	}
-	return "https://rpcnode.dev/install"
+	return "https://toolkit.rpcnode.dev"
 }
 
 func (c *ClientUpdateController) channelBase() string {

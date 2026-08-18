@@ -81,7 +81,8 @@ func (c *SnapshotController) Start() error {
 	unitState := systemctlActive(c.cfg.SnapshotService)
 	// oneshot units stay "activating" for the whole download (Sui formal / long TRON).
 	if unitState == "active" || unitState == "activating" || wgetRunning(c.cfg) ||
-		(strings.EqualFold(c.cfg.Network, "sui") && suiToolSnapshotRunning(c.cfg)) {
+		(strings.EqualFold(c.cfg.Network, "sui") && suiToolSnapshotRunning(c.cfg)) ||
+		(strings.EqualFold(c.cfg.Network, "cardano") && cardanoMithrilSnapshotRunning(c.cfg)) {
 		return fmt.Errorf("snapshot already running")
 	}
 	// Pre-start disk gate: free ≥ archive×mult + margin (TRON streams → ×1.0).
@@ -99,7 +100,8 @@ func (c *SnapshotController) Start() error {
 		// After start race: unit may already be activating — treat as success.
 		st := systemctlActive(c.cfg.SnapshotService)
 		if st == "active" || st == "activating" ||
-			(strings.EqualFold(c.cfg.Network, "sui") && suiToolSnapshotRunning(c.cfg)) {
+			(strings.EqualFold(c.cfg.Network, "sui") && suiToolSnapshotRunning(c.cfg)) ||
+			(strings.EqualFold(c.cfg.Network, "cardano") && cardanoMithrilSnapshotRunning(c.cfg)) {
 			c.writeSnapshotState("download", "started via API", "")
 			return nil
 		}
@@ -143,7 +145,7 @@ func (c *SnapshotController) Actions() map[string]any {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	ready := fileExists(c.cfg.SnapshotMarker)
-	running := systemctlActive(c.cfg.SnapshotService) == "active" || wgetRunning(c.cfg)
+	running := snapshotUnitOrToolRunning(c.cfg)
 	return map[string]any{
 		"can_start": !ready && !running,
 		"can_stop":  running,
@@ -157,7 +159,7 @@ func (c *SnapshotController) GuardDiskDuringDownload() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	running := systemctlActive(c.cfg.SnapshotService) == "active" || wgetRunning(c.cfg)
+	running := snapshotUnitOrToolRunning(c.cfg)
 	if !running {
 		return
 	}
@@ -169,6 +171,19 @@ func (c *SnapshotController) GuardDiskDuringDownload() {
 		stopEnvSnapshotWget(c.cfg)
 		c.writeSnapshotState("error", msg, msg)
 	}
+}
+
+func snapshotUnitOrToolRunning(cfg Config) bool {
+	if systemctlActive(cfg.SnapshotService) == "active" || wgetRunning(cfg) {
+		return true
+	}
+	if strings.EqualFold(cfg.Network, "sui") && suiToolSnapshotRunning(cfg) {
+		return true
+	}
+	if strings.EqualFold(cfg.Network, "cardano") && cardanoMithrilSnapshotRunning(cfg) {
+		return true
+	}
+	return false
 }
 
 // stopEnvSnapshotWget kills wget whose cmdline references this env's data dir.

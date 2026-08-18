@@ -17,9 +17,17 @@ import (
 	"time"
 )
 
-const defaultAgentInstallBase = "https://rpcnode.dev/install"
+const defaultAgentInstallBase = "https://toolkit.rpcnode.dev/install"
+const defaultClientsBase = "https://toolkit.rpcnode.dev"
 
 var agentUpdateMu sync.Mutex
+
+func clientsBaseURL() string {
+	if u := strings.TrimSpace(os.Getenv("CLIENTS_BASE_URL")); u != "" {
+		return strings.TrimRight(u, "/")
+	}
+	return defaultClientsBase
+}
 
 func agentInstallBaseURL() string {
 	if u := strings.TrimSpace(os.Getenv("INSTALL_BASE_URL")); u != "" {

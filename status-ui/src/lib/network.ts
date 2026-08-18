@@ -60,7 +60,6 @@ export function isNoSnapshotNetwork(network?: string | null): boolean {
     n === 'ltc' ||
     n === 'dash' ||
     n === 'bch' ||
-    n === 'cardano' ||
     n === 'xrpl' ||
     n === 'stellar' ||
     n === 'ton' ||

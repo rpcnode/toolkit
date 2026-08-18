@@ -21,6 +21,7 @@ ENV_NAME=""
 DISPLAY_NAME=""
 START=1
 TIMEOUT_SEC="${TIMEOUT_SEC:-180}"
+SNAPSHOT=""
 COOKIE_JAR="${COOKIE_JAR:-}"
 
 usage() {
@@ -40,6 +41,7 @@ Options:
   --name NAME          Display name (default: <network>-<env>)
   --no-start           Stop after provision (Confirm ports); skip start ACK
   --timeout SEC        Lifecycle poll timeout (default 180)
+  --snapshot FLAVOR    TRON mainnet: standard | internal_tx | balance_history
   --help               This help
 
 Environment:
@@ -72,6 +74,7 @@ while [[ $# -gt 0 ]]; do
     --panel-url) PANEL_URL="${2:-}"; shift 2 ;;
     --no-start) START=0; shift ;;
     --timeout) TIMEOUT_SEC="${2:-}"; shift 2 ;;
+    --snapshot) SNAPSHOT="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown arg: $1 (see --help)" ;;
   esac
@@ -213,7 +216,7 @@ echo "$chk" | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d.get(
 log "provision (Install)…"
 prov=$(api POST /api/workloads/provision -d "$(python3 -c "
 import json
-print(json.dumps({
+body={
   'server_id': '''$SERVER_ID''',
   'network': '''$NETWORK''',
   'env': '''$ENV_NAME''',
@@ -222,7 +225,11 @@ print(json.dumps({
   'agent_port': int('''$AGENT''' or 0),
   'node_http_port': int('''$NHTTP''' or 0),
   'p2p_port': int('''$P2P''' or 0),
-}))
+}
+snap='''$SNAPSHOT'''
+if snap:
+  body['install_options']={'snapshot': snap}
+print(json.dumps(body))
 ")")
 echo "$prov" | python3 -c 'import sys,json; d=json.load(sys.stdin); assert d.get("ok") and d.get("item"), d' \
   || die "provision failed: $prov"

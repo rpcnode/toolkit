@@ -45,6 +45,8 @@ import {
 } from '../api'
 import { copyText } from '../lib/copyText'
 import { officialDocsUrl } from '../lib/networkDocs'
+import { fallbackInstallGroups } from './InstallOptionsPicker'
+import { xrplHistoryInstallLabel, type XrplHistoryMode } from './XrplHistoryPicker'
 
 type KvRow = {
   key: string
@@ -408,6 +410,37 @@ function diskLayoutRoles(
   return legacy
 }
 
+function installOptionDisplayRows(
+  network: string,
+  env: string,
+  opts: Record<string, string> | null | undefined,
+): { id: string; label: string; value: string }[] {
+  if (!opts || !Object.keys(opts).length) return []
+  const groups = fallbackInstallGroups(network, env)
+  const seen = new Set<string>()
+  const rows: { id: string; label: string; value: string }[] = []
+  for (const g of groups) {
+    const id = opts[g.id] || g.default || ''
+    const ch = g.choices.find((c) => c.id === id)
+    if (!ch) continue
+    seen.add(g.id)
+    rows.push({ id: g.id, label: g.label, value: ch.title })
+  }
+  for (const [k, v] of Object.entries(opts)) {
+    if (seen.has(k) || !v) continue
+    if (k === 'xrpl_history') {
+      rows.push({
+        id: k,
+        label: 'History',
+        value: xrplHistoryInstallLabel(v as XrplHistoryMode),
+      })
+      continue
+    }
+    rows.push({ id: k, label: k, value: v })
+  }
+  return rows
+}
+
 /** Stable identity for AgentTarget — parent often passes a fresh `{ node }` object each render. */
 function agentTargetKey(t: AgentTarget): string {
   return `${t.node || ''}\0${t.server || ''}\0${t.env || ''}\0${t.network || ''}`
@@ -435,6 +468,7 @@ export function NodeConfigPanel({
   const [newKey, setNewKey] = useState('')
   const [newVal, setNewVal] = useState('')
   const [diskLayout, setDiskLayout] = useState<ProvisionDiskLayout | MultiDiskLayoutPlan | null>(null)
+  const [installOptions, setInstallOptions] = useState<Record<string, string> | null>(null)
 
   const active = mode === 'modal' ? enabled && opened : enabled
   const targetKey = agentTargetKey(target)
@@ -458,11 +492,14 @@ export function NodeConfigPanel({
         try {
           const dl = await api.workloadsDiskLayout(nodeId)
           setDiskLayout(dl.disk_layout || null)
+          setInstallOptions(dl.install_options || null)
         } catch {
           setDiskLayout(null)
+          setInstallOptions(null)
         }
       } else {
         setDiskLayout(null)
+        setInstallOptions(null)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -526,6 +563,10 @@ export function NodeConfigPanel({
   }, [filtered])
 
   const diskRoles = useMemo(() => diskLayoutRoles(diskLayout), [diskLayout])
+  const installOptionRows = useMemo(
+    () => installOptionDisplayRows(network, env, installOptions),
+    [network, env, installOptions],
+  )
 
   const applyRows = (nextRows: KvRow[]) => {
     if (!doc) return
@@ -732,6 +773,44 @@ export function NodeConfigPanel({
             <Alert color="red" icon={<IconAlertTriangle size={16} />} title="Config unavailable">
               {error}
             </Alert>
+          ) : null}
+
+          {installOptionRows.length > 0 ? (
+            <Card withBorder padding="sm" radius="md">
+              <Group justify="space-between" mb={6} wrap="wrap">
+                <div>
+                  <Text size="sm" fw={600}>
+                    Install options
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Chosen at Install · panel DB · used on re-provision
+                  </Text>
+                </div>
+                <Badge size="sm" variant="light" color="gray" leftSection={<IconLock size={12} />}>
+                  read-only
+                </Badge>
+              </Group>
+              <Table striped highlightOnHover withTableBorder={false} verticalSpacing={4}>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Option</Table.Th>
+                    <Table.Th>Choice</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {installOptionRows.map((r) => (
+                    <Table.Tr key={r.id}>
+                      <Table.Td>
+                        <Text size="sm">{r.label}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm">{r.value}</Text>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Card>
           ) : null}
 
           {diskRoles.length > 0 ? (

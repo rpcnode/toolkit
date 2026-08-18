@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Stage agent installer + binaries into frontend/site and push that repo.
-# Does NOT rsync to a host. CDN is whatever site deploys from git.
+# Stage agent installer + binaries into frontend/toolkit and push that repo.
+# Does NOT rsync to a host. CDN is whatever toolkit.rpcnode.dev deploys from git.
 #
-#   https://rpcnode.dev/install/agent.sh
-#   https://rpcnode.dev/install/TOOLKIT_VERSION
-#   https://rpcnode.dev/install/binaries/...
+#   https://toolkit.rpcnode.dev/install/agent.sh
+#   https://toolkit.rpcnode.dev/install/TOOLKIT_VERSION
+#   https://toolkit.rpcnode.dev/install/binaries/...
 #
 # Usage:
 #   ./scripts/build-agent-binaries.sh
-#   ./scripts/publish-install.sh              # stage → commit site → git push
+#   ./scripts/publish-install.sh              # stage → commit frontend/toolkit → git push
 #   ./scripts/publish-install.sh --local-only # stage only (no git)
 #   ./scripts/publish-install.sh --no-push    # commit, do not push
 #   ./scripts/publish-install.sh --dry-run
@@ -18,7 +18,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MONOREPO_ROOT="$(cd "$ROOT/../../../.." && pwd 2>/dev/null || true)"
 BIN_DIR="${BIN_DIR:-$ROOT/dist/binaries}"
 ARCHIVE_DIR="${ARCHIVE_DIR:-$ROOT/dist/archives}"
-DEFAULT_LOCAL_INSTALL="${MONOREPO_ROOT}/frontend/site/public/install"
+DEFAULT_LOCAL_INSTALL="${MONOREPO_ROOT}/frontend/toolkit/public/install"
 LOCAL_INSTALL="${CONNECT_PUBLIC_INSTALL:-$DEFAULT_LOCAL_INSTALL}"
 DRY_RUN=0
 GIT_MODE=push # push | commit | none
@@ -103,14 +103,7 @@ stage_local() {
   cp -f "${ARCHIVE_DIR}/rpcnode-agent-${VERSION}.tar.gz" \
     "${ARCHIVE_DIR}/rpcnode-agent-latest.tar.gz" \
     "${dest}/archives/"
-  if [[ -d "$ROOT/install/clients" ]]; then
-    mkdir -p "${dest}/clients"
-    # Catalog + manifests + conf from toolkit. Do not overwrite site dist/
-    # (RpcNode.app already fetched jars/tarballs there — that is the CDN payload).
-    tar -C "$ROOT/install/clients" \
-      --exclude dist --exclude FETCH_REPORT.md --exclude FETCH_LOG.txt \
-      -cf - . | tar -C "${dest}/clients" -xf -
-  fi
+  # Clients live at frontend/toolkit/public/clients — not under /install.
   if find "${dest}" -name '*.go' -print -quit | grep -q .; then
     die "refusing to stage .go sources into ${dest}"
   fi
@@ -123,7 +116,7 @@ commit_connect() {
   local repo rel
   dest="$(cd "$dest" && pwd)"
   repo="$(git -C "$dest" rev-parse --show-toplevel 2>/dev/null || true)"
-  [[ -n "$repo" ]] || die "not a git repo: $dest (expected frontend/site public/install)"
+  [[ -n "$repo" ]] || die "not a git repo: $dest (expected frontend/toolkit public/install)"
   repo="$(cd "$repo" && pwd)"
   rel="${dest#"$repo"/}"
   [[ "$rel" != "$dest" && -n "$rel" ]] || die "dest $dest is not inside git repo $repo"
@@ -140,7 +133,7 @@ commit_connect() {
   git -C "$repo" commit -m "$(cat <<EOF
 Release agent ${VERSION}
 
-Publish rpcnode.dev/install from toolkit TOOLKIT_VERSION.
+Publish toolkit.rpcnode.dev/install from toolkit TOOLKIT_VERSION.
 EOF
 )"
   log "install CDN commit $(git -C "$repo" rev-parse --short HEAD) agent ${VERSION}"
@@ -161,7 +154,7 @@ EOF
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   log "[dry-run] would pack archive + stage → ${LOCAL_INSTALL}/"
-  log "[dry-run] would git commit frontend/site public/install (${VERSION})"
+  log "[dry-run] would git commit frontend/toolkit public/install (${VERSION})"
   if [[ "$GIT_MODE" == "push" ]]; then
     log "[dry-run] would git push origin"
   fi
@@ -171,7 +164,7 @@ fi
 [[ -n "$LOCAL_INSTALL" ]] || die "CONNECT_PUBLIC_INSTALL / local dest unresolved"
 parent="$(dirname "$LOCAL_INSTALL")"
 if [[ ! -d "$parent" ]]; then
-  die "site public dir missing: $parent (set CONNECT_PUBLIC_INSTALL)"
+  die "toolkit public dir missing: $parent (set CONNECT_PUBLIC_INSTALL)"
 fi
 
 pack_archive
@@ -189,7 +182,7 @@ else
 fi
 
 log "published ${VERSION}"
-log "  https://rpcnode.dev/install/agent.sh"
-log "  https://rpcnode.dev/install/TOOLKIT_VERSION"
-log "  https://rpcnode.dev/install/binaries/"
-log "  https://rpcnode.dev/install/archives/rpcnode-agent-${VERSION}.tar.gz"
+log "  https://toolkit.rpcnode.dev/install/agent.sh"
+log "  https://toolkit.rpcnode.dev/install/TOOLKIT_VERSION"
+log "  https://toolkit.rpcnode.dev/install/binaries/"
+log "  https://toolkit.rpcnode.dev/install/archives/rpcnode-agent-${VERSION}.tar.gz"

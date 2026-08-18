@@ -69,7 +69,7 @@ TRON_PANEL_USER="${TRON_PANEL_USER:-admin}"
 
 # Toolkit self-update channel (agents/UI/nginx — not java-tron).
 # VERSION URL returns plain text version; UPDATE_URL optional tarball or git repo.
-TOOLKIT_VERSION_URL="${TOOLKIT_VERSION_URL:-https://rpcnode.dev/install/TOOLKIT_VERSION}"
+TOOLKIT_VERSION_URL="${TOOLKIT_VERSION_URL:-https://toolkit.rpcnode.dev/install/TOOLKIT_VERSION}"
 TOOLKIT_UPDATE_URL="${TOOLKIT_UPDATE_URL:-}"
 TRON_TOOLKIT_UPDATE_STATE="${TRON_TOOLKIT_UPDATE_STATE:-${RPCNODE_LIB_DIR}/tron-${TRON_ENV}/toolkit-update.json}"
 
