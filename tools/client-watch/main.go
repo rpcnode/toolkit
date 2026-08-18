@@ -79,6 +79,9 @@ func main() {
 		} else {
 			fmt.Fprintf(os.Stderr, "github token: да (%d символов)\n", len(w.githubTok))
 		}
+		if err := w.checkOnce(); err != nil {
+			log.Printf("check: %v", err)
+		}
 		rows, err := w.listVersions()
 		if err != nil {
 			log.Fatal(err)
@@ -129,28 +132,25 @@ func (w *watcher) listVersions() ([]versionRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	client := httpClient()
-	cache := map[string]ghLatest{}
-	cacheErr := map[string]error{}
+	st := w.state.snapshot()
 	out := make([]versionRow, 0, len(cat.Entries))
 	for _, e := range cat.Entries {
 		row := versionRow{ID: e.id(), Pin: e.pin(), Status: "no-source"}
-		latest, src, err := w.lookupLatest(e, client, cache, cacheErr)
-		if src != "" {
-			row.Repo = src
+		if repo, _, ok := e.githubHint(); ok {
+			row.Repo = repo
+		} else if u := e.httpProbeURL(); u != "" {
+			row.Repo = u
 		}
-		if err != nil {
+		cached := cachedOf(st, e.id())
+		if cached.Error != "" && cached.Version == "" && cached.Tag == "" {
 			row.Status = "error"
-			row.Error = err.Error()
+			row.Error = cached.Error
 			out = append(out, row)
 			continue
 		}
-		if latest.Version == "" && latest.Tag == "" {
-			out = append(out, row)
-			continue
-		}
-		row.Latest = firstNonEmpty(latest.Version, latest.Tag)
-		row.Tag = latest.Tag
+		row.Latest = firstNonEmpty(cached.Version, cached.Tag)
+		row.Tag = cached.Tag
+		row.Error = cached.Error
 		switch {
 		case row.Latest == "":
 			row.Status = "unknown"
@@ -220,7 +220,6 @@ func printVersionTable(rows []versionRow) {
 }
 
 func (w *watcher) loop() {
-	time.Sleep(3 * time.Second)
 	if err := w.checkOnce(); err != nil {
 		log.Printf("check: %v", err)
 	}
@@ -246,19 +245,35 @@ func (w *watcher) checkOnce() error {
 	client := httpClient()
 	cache := map[string]ghLatest{}
 	cacheErr := map[string]error{}
+	gotLatest := map[string]cachedLatest{}
+	if st.Latest != nil {
+		for k, v := range st.Latest {
+			gotLatest[k] = v
+		}
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
 	var firstErr error
 	found := 0
 	log.Printf("проверка %d профилей…", len(cat.Entries))
 	for _, e := range cat.Entries {
 		log.Printf("%s: смотрю latest…", e.id())
 		latest, _, lookErr := w.lookupLatest(e, client, cache, cacheErr)
+		rec := cachedLatest{At: now}
 		if lookErr != nil {
+			rec.Error = lookErr.Error()
+			if prev, ok := gotLatest[e.id()]; ok {
+				rec.Version, rec.Tag = prev.Version, prev.Tag
+			}
+			gotLatest[e.id()] = rec
 			log.Printf("%s: %v", e.id(), lookErr)
 			if firstErr == nil {
 				firstErr = lookErr
 			}
 			continue
 		}
+		rec.Version = latest.Version
+		rec.Tag = latest.Tag
+		gotLatest[e.id()] = rec
 		if latest.Tag == "" && latest.Version == "" {
 			continue
 		}
@@ -323,6 +338,9 @@ func (w *watcher) checkOnce() error {
 		}
 		log.Printf("%s pin=%s latest=%s %s", e.id(), pin, latest.Version, dlNote)
 	}
+	if err := w.state.setLatest(gotLatest); err != nil {
+		log.Printf("state latest: %v", err)
+	}
 	if err := w.state.markCheck(firstErr); err != nil {
 		log.Printf("state: %v", err)
 	}
@@ -338,6 +356,20 @@ func formatUpdate(e catalogEntry, latest ghLatest) string {
 		return e.id() + " — вышла новая версия"
 	}
 	return e.id() + " — вышла новая версия " + ver
+}
+
+func cachedOf(st watchState, id string) cachedLatest {
+	if st.Latest != nil {
+		if got, ok := st.Latest[id]; ok {
+			return got
+		}
+	}
+	if st.Seen != nil {
+		if seen, ok := st.Seen[id]; ok {
+			return cachedLatest{Tag: seen.Tag, Version: seen.Version}
+		}
+	}
+	return cachedLatest{}
 }
 
 func githubTokenFromEnv() string {

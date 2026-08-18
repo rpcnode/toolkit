@@ -9,11 +9,19 @@ import (
 )
 
 type watchState struct {
-	TelegramToken string                `json:"telegram_token,omitempty"`
-	TelegramChat  string                `json:"telegram_chat,omitempty"`
-	Seen          map[string]seenUpdate `json:"seen,omitempty"`
-	LastCheck     string                `json:"last_check,omitempty"`
-	LastError     string                `json:"last_error,omitempty"`
+	TelegramToken string                  `json:"telegram_token,omitempty"`
+	TelegramChat  string                  `json:"telegram_chat,omitempty"`
+	Seen          map[string]seenUpdate   `json:"seen,omitempty"`
+	Latest        map[string]cachedLatest `json:"latest,omitempty"`
+	LastCheck     string                  `json:"last_check,omitempty"`
+	LastError     string                  `json:"last_error,omitempty"`
+}
+
+type cachedLatest struct {
+	Tag     string `json:"tag,omitempty"`
+	Version string `json:"version,omitempty"`
+	Error   string `json:"error,omitempty"`
+	At      string `json:"at,omitempty"`
 }
 
 type seenUpdate struct {
@@ -44,6 +52,9 @@ func loadState(path string) (*stateStore, error) {
 	if s.cur.Seen == nil {
 		s.cur.Seen = map[string]seenUpdate{}
 	}
+	if s.cur.Latest == nil {
+		s.cur.Latest = map[string]cachedLatest{}
+	}
 	return s, nil
 }
 
@@ -58,7 +69,30 @@ func (s *stateStore) snapshot() watchState {
 		}
 		out.Seen = cp
 	}
+	if out.Latest != nil {
+		cp := make(map[string]cachedLatest, len(out.Latest))
+		for k, v := range out.Latest {
+			cp[k] = v
+		}
+		out.Latest = cp
+	}
 	return out
+}
+
+func (s *stateStore) setLatest(got map[string]cachedLatest) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cur.Latest = got
+	if s.cur.Latest == nil {
+		s.cur.Latest = map[string]cachedLatest{}
+	}
+	return s.writeLocked()
+}
+
+func (s *stateStore) hasLatest() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.cur.Latest) > 0
 }
 
 func (s *stateStore) setTelegram(token, chat string) error {

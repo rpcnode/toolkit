@@ -5,8 +5,10 @@
 `GET /healthz` (без токена) отдаёт бинарь и контракт API. FetchClients требует **api ≥ 2** (`/api/v1/clients` + `/files/`). Старый бинарь: `{"ok":true,"service":"client-watch"}` без `api` — приложение скажет «вотчер старый».
 
 ```json
-{"ok":true,"service":"client-watch","version":"0.2.0","api":2}
+{"ok":true,"service":"client-watch","version":"0.2.1","api":2}
 ```
+
+`GET /api/v1/clients` и `/versions` отдают **кэш** последней часовой проверки (без GitHub). Живой опрос: `?refresh=1` или `POST /api/v1/check`.
 
 ```bash
 ./rpcnode-client-watch -version

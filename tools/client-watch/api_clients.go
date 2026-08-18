@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 	"os"
 	"path"
@@ -38,12 +39,31 @@ func (w *watcher) handleClients(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	if r.URL.Query().Get("refresh") == "1" {
+		if err := w.checkOnce(); err != nil {
+			log.Printf("refresh: %v", err)
+		}
+	} else if !w.state.hasLatest() {
+		go func() {
+			if err := w.checkOnce(); err != nil {
+				log.Printf("check: %v", err)
+			}
+		}()
+	}
 	packs, err := w.listClientPacks()
 	if err != nil {
 		writeJSON(rw, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "api": watchAPI, "version": watchVersion, "entries": packs})
+	st := w.state.snapshot()
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"ok":         true,
+		"api":        watchAPI,
+		"version":    watchVersion,
+		"cached":     true,
+		"last_check": st.LastCheck,
+		"entries":    packs,
+	})
 }
 
 func (w *watcher) handleFiles(rw http.ResponseWriter, r *http.Request) {
@@ -73,61 +93,63 @@ func (w *watcher) listClientPacks() ([]clientPackDTO, error) {
 	if err != nil {
 		return nil, err
 	}
-	client := httpClient()
-	cache := map[string]ghLatest{}
-	cacheErr := map[string]error{}
+	st := w.state.snapshot()
 	out := make([]clientPackDTO, 0, len(cat.Entries))
 	for _, e := range cat.Entries {
-		pack := clientPackDTO{
-			ID:      e.id(),
-			Network: e.Network,
-			Env:     e.Env,
-			Pin:     e.pin(),
-			Status:  "no-source",
-			Notes:   firstNonEmpty(e.SkipReason),
-			Entry:   e,
-			Files:   []clientFileDTO{},
-		}
-		latest, _, lookErr := w.lookupLatest(e, client, cache, cacheErr)
-		if lookErr != nil {
-			pack.Status = "error"
-			pack.Error = lookErr.Error()
-			out = append(out, pack)
-			continue
-		}
-		pack.Latest = firstNonEmpty(latest.Version, latest.Tag)
-		pack.Tag = latest.Tag
-		switch {
-		case pack.Latest == "":
-			pack.Status = "unknown"
-		case pack.Pin != "" && sameVersion(pack.Latest, pack.Pin):
-			pack.Status = "ok"
-		case pack.Pin == "":
-			pack.Status = "new"
-		default:
-			pack.Status = "update"
-		}
-		ver := firstNonEmpty(pack.Latest, pack.Pin)
-		jobs := e.downloadJobs(latest)
-		for _, j := range jobs {
-			dto := clientFileDTO{
-				Role:     j.role,
-				Arch:     j.arch,
-				Name:     j.name,
-				Upstream: j.url,
-				URL:      j.url,
-			}
-			if rel, n, ok := w.fileOnDisk(e, ver, j); ok {
-				dto.Ready = true
-				dto.Bytes = n
-				dto.Rel = rel
-				dto.URL = "/files/" + rel
-			}
-			pack.Files = append(pack.Files, dto)
-		}
-		out = append(out, pack)
+		out = append(out, w.packFromCache(e, cachedOf(st, e.id())))
 	}
 	return out, nil
+}
+
+func (w *watcher) packFromCache(e catalogEntry, cached cachedLatest) clientPackDTO {
+	pack := clientPackDTO{
+		ID:      e.id(),
+		Network: e.Network,
+		Env:     e.Env,
+		Pin:     e.pin(),
+		Status:  "no-source",
+		Notes:   firstNonEmpty(e.SkipReason),
+		Entry:   e,
+		Files:   []clientFileDTO{},
+	}
+	if cached.Error != "" && cached.Version == "" && cached.Tag == "" {
+		pack.Status = "error"
+		pack.Error = cached.Error
+		return pack
+	}
+	latest := ghLatest{Version: cached.Version, Tag: cached.Tag}
+	pack.Latest = firstNonEmpty(latest.Version, latest.Tag)
+	pack.Tag = latest.Tag
+	pack.Error = cached.Error
+	switch {
+	case pack.Latest == "":
+		pack.Status = "unknown"
+	case pack.Pin != "" && sameVersion(pack.Latest, pack.Pin):
+		pack.Status = "ok"
+	case pack.Pin == "":
+		pack.Status = "new"
+	default:
+		pack.Status = "update"
+	}
+	ver := firstNonEmpty(pack.Latest, pack.Pin)
+	jobs := e.downloadJobs(latest)
+	for _, j := range jobs {
+		dto := clientFileDTO{
+			Role:     j.role,
+			Arch:     j.arch,
+			Name:     j.name,
+			Upstream: j.url,
+			URL:      j.url,
+		}
+		if rel, n, ok := w.fileOnDisk(e, ver, j); ok {
+			dto.Ready = true
+			dto.Bytes = n
+			dto.Rel = rel
+			dto.URL = "/files/" + rel
+		}
+		pack.Files = append(pack.Files, dto)
+	}
+	return pack
 }
 
 func (w *watcher) fileOnDisk(e catalogEntry, ver string, j downloadJob) (rel string, bytes int64, ok bool) {

@@ -104,12 +104,17 @@ func (w *watcher) handleVersions(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	if r.URL.Query().Get("refresh") == "1" {
+		if err := w.checkOnce(); err != nil {
+			log.Printf("refresh: %v", err)
+		}
+	}
 	rows, err := w.listVersions()
 	if err != nil {
 		writeJSON(rw, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "api": watchAPI, "version": watchVersion, "entries": rows})
+	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "api": watchAPI, "version": watchVersion, "cached": true, "entries": rows})
 }
 
 func (w *watcher) handleCheck(rw http.ResponseWriter, r *http.Request) {
