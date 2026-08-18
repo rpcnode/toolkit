@@ -88,9 +88,11 @@
         }
       ],
       "env": "mainnet",
+      "github_repo": "bitcoin/bitcoin",
       "network": "bitcoin",
       "notes": "Official share/examples/bitcoin.conf is vendored. Agent writes the live bitcoin.conf (txindex=1, prune=0, ports) on provision.",
       "source": "bitcoincore.org",
+      "tag": "v28.1",
       "version": "28.1"
     },
     {
@@ -109,9 +111,11 @@
         }
       ],
       "env": "testnet4",
+      "github_repo": "bitcoin/bitcoin",
       "network": "bitcoin",
       "notes": "Official share/examples/bitcoin.conf is vendored. Agent writes the live bitcoin.conf (txindex=1, prune=0, ports) on provision.",
       "source": "bitcoincore.org",
+      "tag": "v28.1",
       "version": "28.1"
     },
     {
@@ -130,9 +134,11 @@
         }
       ],
       "env": "signet",
+      "github_repo": "bitcoin/bitcoin",
       "network": "bitcoin",
       "notes": "Official share/examples/bitcoin.conf is vendored. Agent writes the live bitcoin.conf (txindex=1, prune=0, ports) on provision.",
       "source": "bitcoincore.org",
+      "tag": "v28.1",
       "version": "28.1"
     },
     {
@@ -151,9 +157,11 @@
         }
       ],
       "env": "regtest",
+      "github_repo": "bitcoin/bitcoin",
       "network": "bitcoin",
       "notes": "Official share/examples/bitcoin.conf is vendored. Agent writes the live bitcoin.conf (txindex=1, prune=0, ports) on provision.",
       "source": "bitcoincore.org",
+      "tag": "v28.1",
       "version": "28.1"
     },
     {
@@ -319,9 +327,9 @@
       "configs": [],
       "env": "mainnet",
       "network": "hyperliquid",
-      "notes": "Non-validator visor. Gossip peers are in agent catalog, not a conf file.",
+      "notes": "Rolling hl-visor (no GitHub tag). Pin = Last-Modified + ETag from binaries.hyperliquid.xyz.",
       "source": "binaries.hyperliquid.xyz",
-      "version": "hl-visor"
+      "version": "2026-06-20-a955094a"
     },
     {
       "artifacts": [
@@ -335,7 +343,7 @@
       "env": "testnet",
       "network": "hyperliquid",
       "source": "binaries.hyperliquid-testnet.xyz",
-      "version": "hl-visor"
+      "version": "2026-06-19-866bcd59"
     },
     {
       "artifacts": [],
@@ -698,6 +706,7 @@
       "env": "mainnet",
       "network": "ltc",
       "notes": "Official share/examples/litecoin.conf is vendored. Agent writes the live litecoin.conf (txindex=1, prune=0, ports) on provision.",
+      "github_repo": "litecoin-project/litecoin",
       "source": "download.litecoin.org",
       "version": "0.21.5.6",
       "tag": "v0.21.5.6"
@@ -719,6 +728,7 @@
       ],
       "env": "testnet",
       "network": "ltc",
+      "github_repo": "litecoin-project/litecoin",
       "source": "download.litecoin.org",
       "version": "0.21.5.6",
       "notes": "Official share/examples/litecoin.conf is vendored. Agent writes the live litecoin.conf (txindex=1, prune=0, ports) on provision.",
@@ -741,6 +751,7 @@
       ],
       "env": "regtest",
       "network": "ltc",
+      "github_repo": "litecoin-project/litecoin",
       "source": "download.litecoin.org",
       "version": "0.21.5.6",
       "notes": "Official share/examples/litecoin.conf is vendored. Agent writes the live litecoin.conf (txindex=1, prune=0, ports) on provision.",
@@ -1033,7 +1044,9 @@
       "env": "mainnet",
       "network": "stellar",
       "notes": "stellar-rpc + stellar-core via SDF apt. Captive-core cfg is downloaded and port-patched by the agent.",
+      "github_repo": "stellar/stellar-rpc",
       "source": "apt.stellar.org",
+      "tag": "v27.1.1",
       "version": "27.1.1"
     },
     {
@@ -1052,7 +1065,9 @@
       ],
       "env": "testnet",
       "network": "stellar",
+      "github_repo": "stellar/stellar-rpc",
       "source": "apt.stellar.org",
+      "tag": "v27.1.1",
       "version": "27.1.1"
     },
     {
@@ -1071,7 +1086,9 @@
       ],
       "env": "futurenet",
       "network": "stellar",
+      "github_repo": "stellar/stellar-rpc",
       "source": "apt.stellar.org",
+      "tag": "v27.1.1",
       "version": "27.1.1"
     },
     {

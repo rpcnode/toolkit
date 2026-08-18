@@ -10,9 +10,10 @@ import (
 )
 
 type ghRelease struct {
-	TagName string    `json:"tag_name"`
-	Draft   bool      `json:"draft"`
-	Assets  []ghAsset `json:"assets"`
+	TagName    string    `json:"tag_name"`
+	Draft      bool      `json:"draft"`
+	Prerelease bool      `json:"prerelease"`
+	Assets     []ghAsset `json:"assets"`
 }
 
 type ghAsset struct {

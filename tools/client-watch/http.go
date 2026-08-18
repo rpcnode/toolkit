@@ -45,10 +45,11 @@ func (w *watcher) handleStatus(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	st := w.state.snapshot()
+	tgTok, tgChat := telegramCreds(st)
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"ok":          true,
-		"telegram":    strings.TrimSpace(st.TelegramToken) != "" && strings.TrimSpace(st.TelegramChat) != "",
-		"chat":        st.TelegramChat,
+		"telegram":    tgTok != "" && tgChat != "",
+		"chat":        tgChat,
 		"last_check":  st.LastCheck,
 		"last_error":  st.LastError,
 		"interval":    w.interval.String(),

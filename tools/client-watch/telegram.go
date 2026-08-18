@@ -10,6 +10,22 @@ import (
 	"time"
 )
 
+func telegramCreds(st watchState) (token, chat string) {
+	token = firstNonEmpty(
+		env("TELEGRAM_BOT_TOKEN", ""),
+		env("TELEGRAM_TOKEN", ""),
+		env("CLIENT_WATCH_TELEGRAM_TOKEN", ""),
+		st.TelegramToken,
+	)
+	chat = firstNonEmpty(
+		env("TELEGRAM_CHAT", ""),
+		env("TELEGRAM_CHAT_ID", ""),
+		env("CLIENT_WATCH_TELEGRAM_CHAT", ""),
+		st.TelegramChat,
+	)
+	return strings.TrimSpace(token), strings.TrimSpace(chat)
+}
+
 func sendTelegram(token, chat, text string) error {
 	token = strings.TrimSpace(token)
 	chat = strings.TrimSpace(chat)

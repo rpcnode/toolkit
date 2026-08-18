@@ -2,6 +2,10 @@
 # Telegram token/chat come from FetchClients (PUT /api/v1/telegram), not from this file.
 # State volume survives image rebuild. Do not `down -v` if you want to keep Telegram.
 #
+# network_mode: bridge = docker0, no new subnet, no compose aliases
+# (avoids "address pools fully subnetted" and "aliases only on user-defined networks").
+# default network is the existing `none` so compose does not allocate a pool.
+#
 #   docker compose -f docker-compose.client-watch.yml up -d --build --pull never
 # FetchClients → Настройки: http://<этот-хост>:8094
 #
@@ -19,16 +23,17 @@ services:
       pull: false
     container_name: rpcnode-client-watch
     restart: unless-stopped
+    network_mode: bridge
     ports:
       - "${CLIENT_WATCH_PORT:-8094}:8094"
+    env_file:
+      - client-watch.env
     environment:
       CLIENT_WATCH_LISTEN: "0.0.0.0:8094"
       CLIENT_WATCH_CATALOG: /data/clients/catalog.json
       CLIENT_WATCH_CLIENTS: /data/clients
       CLIENT_WATCH_STATE: /var/lib/client-watch/state.json
       CLIENT_WATCH_INTERVAL: ${CLIENT_WATCH_INTERVAL:-1h}
-      CLIENT_WATCH_TOKEN: ${CLIENT_WATCH_TOKEN:-}
-      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     volumes:
       - ${CLIENT_WATCH_CLIENTS_HOST:-./install/clients}:/data/clients
       - client-watch-state:/var/lib/client-watch
@@ -41,3 +46,8 @@ services:
 
 volumes:
   client-watch-state:
+
+networks:
+  default:
+    name: none
+    external: true

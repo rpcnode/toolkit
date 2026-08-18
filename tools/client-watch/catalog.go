@@ -56,8 +56,12 @@ func (e catalogEntry) githubHint() (repo, prefix string, ok bool) {
 		}
 		return repo, prefix, true
 	}
-	for _, a := range e.Artifacts {
-		if parsedRepo, tag, parsed := parseGitHubRelease(a.URL); parsed {
+	for _, a := range append(append([]asset{}, e.Artifacts...), e.Configs...) {
+		parsedRepo, tag, parsed := parseGitHubRelease(a.URL)
+		if !parsed {
+			parsedRepo, tag, parsed = parseRawGitHub(a.URL)
+		}
+		if parsed {
 			prefix = e.TagPrefix
 			if prefix == "" {
 				prefix = tagPrefix(firstNonEmpty(e.Tag, tag))
@@ -72,7 +76,23 @@ func (e catalogEntry) githubHint() (repo, prefix string, ok bool) {
 		}
 		return repo, prefix, true
 	}
+	if repo, prefix, ok = wellKnownRepo(e.Network); ok {
+		return repo, prefix, true
+	}
 	return "", "", false
+}
+
+func wellKnownRepo(network string) (repo, prefix string, ok bool) {
+	switch strings.ToLower(strings.TrimSpace(network)) {
+	case "bitcoin":
+		return "bitcoin/bitcoin", "v", true
+	case "ltc":
+		return "litecoin-project/litecoin", "v", true
+	case "stellar":
+		return "stellar/stellar-rpc", "v", true
+	default:
+		return "", "", false
+	}
 }
 
 func repoFromSource(raw string) (string, bool) {
@@ -105,6 +125,21 @@ func parseGitHubRelease(url string) (repo, tag string, ok bool) {
 			continue
 		}
 		return parts[i+1] + "/" + parts[i+2], parts[i+5], true
+	}
+	return "", "", false
+}
+
+func parseRawGitHub(url string) (repo, tag string, ok bool) {
+	parts := strings.Split(url, "/")
+	for i := 0; i < len(parts); i++ {
+		if parts[i] != "raw.githubusercontent.com" || i+3 >= len(parts) {
+			continue
+		}
+		owner, name, tag := parts[i+1], parts[i+2], parts[i+3]
+		if owner == "" || name == "" || tag == "" || tag == "master" || tag == "main" || tag == "HEAD" {
+			return "", "", false
+		}
+		return owner + "/" + name, tag, true
 	}
 	return "", "", false
 }
