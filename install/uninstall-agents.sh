@@ -2,11 +2,11 @@
 # RpcNode — remove host tip + leaf agents + watchdog ONLY.
 # Fullnode chain units and /data|/etc|/opt/<network> are left untouched.
 #
-#   curl -fsSL "https://rpcnode.dev/install/uninstall-agents.sh" | sudo bash
+#   curl -fsSL "https://toolkit.rpcnode.dev/install/uninstall-agents.sh" | sudo bash
 #
 # Use after Panel → Servers → Remove (panel only drops the registry row).
 # For full wipe (agents + fullnodes + datadirs) use:
-#   curl -fsSL "https://rpcnode.dev/install/agent.sh" | sudo bash -s -- --uninstall
+#   curl -fsSL "https://toolkit.rpcnode.dev/install/agent.sh" | sudo bash -s -- --uninstall
 set -euo pipefail
 
 BIN_DIR="${BIN_DIR:-/opt/rpcnode/bin}"
@@ -25,7 +25,7 @@ warn() { printf '! %s\n' "$*" >&2; hostlog WARN "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; hostlog ERROR "$*"; exit 1; }
 
 if [[ "$(id -u)" -ne 0 ]]; then
-  die "run as root (sudo), e.g. curl -fsSL \"https://rpcnode.dev/install/uninstall-agents.sh\" | sudo bash"
+  die "run as root (sudo), e.g. curl -fsSL \"https://toolkit.rpcnode.dev/install/uninstall-agents.sh\" | sudo bash"
 fi
 
 purge_unit() {
@@ -122,6 +122,6 @@ cat <<'EOF'
 
 OK  RpcNode agents removed (tip + leaves + watchdog).
     Fullnode units and /data|/etc|/opt/<network> were NOT touched.
-    Re-install tip:  curl -fsSL "https://rpcnode.dev/install/agent.sh" | sudo bash
+    Re-install tip:  curl -fsSL "https://toolkit.rpcnode.dev/install/agent.sh" | sudo bash
 
 EOF

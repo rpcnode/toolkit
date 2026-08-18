@@ -1,12 +1,12 @@
 # Chain client update channel
 
-Primary source of truth is the **vendored CDN catalog** (RpcNode.app → `frontend/site/public/install/clients`):
+Primary source of truth is the **vendored CDN catalog** (RpcNode.app → `frontend/toolkit/public/clients`):
 
 ```text
-GET {INSTALL_BASE_URL}/clients/<network>/<env>/manifest.json
+GET {CLIENTS_BASE_URL}/clients/<network>/<env>/manifest.json
 ```
 
-Default `INSTALL_BASE_URL` is `https://rpcnode.dev/install`. Agent does **not** invent jar/conf URLs when this file exists.
+Default `CLIENTS_BASE_URL` is `https://toolkit.rpcnode.dev`. Agent does **not** invent jar/conf URLs when this file exists. Agent binaries: `https://toolkit.rpcnode.dev/install`.
 
 | field | meaning |
 |-------|---------|
@@ -36,7 +36,7 @@ macOS UI (RpcNode.app — клиенты + выпуск агента):
 ./scripts/open-rpcnode.sh
 ```
 
-Таблица **сейчас / новая**. Скачивание пишет в `frontend/site/public/install/clients/<сеть>/<env>/` (`VERSION`, `manifest.json`, `conf/`, **`dist/`**). После commit+push **site** это и есть CDN: агент качает **наши** копии с `https://rpcnode.dev/install/clients/…`, не с GitHub. См. `tools/FetchClients/README.md`.
+Таблица **сейчас / новая**. Скачивание пишет в `frontend/toolkit/public/clients/<сеть>/<env>/`. После деплоя `frontend/toolkit` агент качает с `https://toolkit.rpcnode.dev/clients/…`. См. `tools/FetchClients/README.md`.
 
 Терминал:
 
@@ -52,11 +52,11 @@ Layout after a fetch:
 install/clients/catalog.json
 install/clients/<network>/<env>/conf/
 
-# connect repo = CDN (git + deploy):
-frontend/site/public/install/clients/<network>/<env>/VERSION
-frontend/site/public/install/clients/<network>/<env>/manifest.json
-frontend/site/public/install/clients/<network>/<env>/conf/
-frontend/site/public/install/clients/<network>/<env>/dist/   # jars / tarballs — publish these
+# toolkit CDN repo (git + deploy):
+frontend/toolkit/public/clients/<network>/<env>/VERSION
+frontend/toolkit/public/clients/<network>/<env>/manifest.json
+frontend/toolkit/public/clients/<network>/<env>/conf/
+frontend/toolkit/public/clients/<network>/<env>/dist/   # jars / tarballs — publish these
 ```
 
 Snapshots are **not** fetched here (lifecycle Snapshot step). Apt clients (geth, stellar-rpc, rippled) are recorded, not downloaded.

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# RpcNode host agent. Downloads binaries from rpcnode.dev and sets up systemd.
+# RpcNode host agent. Downloads binaries from toolkit.rpcnode.dev and sets up systemd.
 #
-#   curl -fsSL "https://rpcnode.dev/install/agent.sh" | sudo bash
+#   curl -fsSL "https://toolkit.rpcnode.dev/install/agent.sh" | sudo bash
 #
 set -euo pipefail
 
-AGENT_DOWNLOAD_URL="${AGENT_DOWNLOAD_URL:-https://rpcnode.dev/install/agent.sh}"
-INSTALL_BASE_URL="${INSTALL_BASE_URL:-https://rpcnode.dev/install}"
+AGENT_DOWNLOAD_URL="${AGENT_DOWNLOAD_URL:-https://toolkit.rpcnode.dev/install/agent.sh}"
+INSTALL_BASE_URL="${INSTALL_BASE_URL:-https://toolkit.rpcnode.dev/install}"
 BINARIES_BASE_URL="${BINARIES_BASE_URL:-${INSTALL_BASE_URL}/binaries}"
 # Unpacked tarball (agent.sh + binaries/ + watchdog). Skips the download.
 LOCAL_ARTIFACT_DIR="${LOCAL_ARTIFACT_DIR:-}"
@@ -33,7 +33,7 @@ usage() {
   cat <<'EOF'
 RpcNode host agent
 
-  curl -fsSL "https://rpcnode.dev/install/agent.sh" | sudo bash
+  curl -fsSL "https://toolkit.rpcnode.dev/install/agent.sh" | sudo bash
 
   # offline:
   #   tar -xzf rpcnode-agent-VERSION.tar.gz -C /tmp
@@ -47,14 +47,14 @@ Options:
   --toolkit-dir DIR   install root (default /opt/rpcnode)
 
 Env:
-  INSTALL_BASE_URL      https://rpcnode.dev/install
+  INSTALL_BASE_URL      https://toolkit.rpcnode.dev/install
   BINARIES_BASE_URL     $INSTALL_BASE_URL/binaries
   LOCAL_ARTIFACT_DIR    unpacked archive
   AGENT_RPC_PORT        preferred port (default 38990; not TRON public 39090)
   RPCNODE_INSTALL_MODE  reinstall | uninstall-agents | uninstall | cancel
 
 Agents only:
-  curl -fsSL "https://rpcnode.dev/install/uninstall-agents.sh" | sudo bash
+  curl -fsSL "https://toolkit.rpcnode.dev/install/uninstall-agents.sh" | sudo bash
 
 Needs curl. After install, paste Agent URL + key into the panel.
 EOF
@@ -1691,7 +1691,7 @@ for x in d.get("units") or []:
 
 OK  RpcNode FULL uninstall complete.
     Removed: all rpcnode* agents, RpcNode fullnode units, matching /data|/etc|/opt dirs.
-    Re-install:  curl -fsSL "https://rpcnode.dev/install/agent.sh" | sudo bash
+    Re-install:  curl -fsSL "https://toolkit.rpcnode.dev/install/agent.sh" | sudo bash
 
 EOF
 }
