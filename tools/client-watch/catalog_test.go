@@ -9,6 +9,15 @@ func TestNormalizeVer(t *testing.T) {
 	if normalizeVer("3.3.0") != "3.3.0" {
 		t.Fatalf("got %q", normalizeVer("3.3.0"))
 	}
+	if !sameVersion("4.8.2.1", "GreatVoyage-v4.8.2.1") {
+		t.Fatal("tron pin vs tag")
+	}
+	if sameVersion("4.8.2.1", "GreatVoyage-v4.8.3.0") {
+		t.Fatal("tron next must differ")
+	}
+	if !sameVersion("v28.1", "28.1") {
+		t.Fatal("bitcoin pin vs tag")
+	}
 }
 
 func TestRepoFromSource(t *testing.T) {

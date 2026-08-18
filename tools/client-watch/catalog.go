@@ -171,11 +171,18 @@ func displayVersion(tag string) string {
 }
 
 func normalizeVer(raw string) string {
-	s := strings.ToLower(strings.TrimSpace(raw))
+	s := strings.ToLower(strings.TrimSpace(displayVersion(raw)))
 	if len(s) > 1 && s[0] == 'v' && s[1] >= '0' && s[1] <= '9' {
 		s = s[1:]
 	}
 	return s
+}
+
+func sameVersion(a, b string) bool {
+	if strings.TrimSpace(a) == "" || strings.TrimSpace(b) == "" {
+		return false
+	}
+	return normalizeVer(a) == normalizeVer(b)
 }
 
 func firstNonEmpty(vals ...string) string {

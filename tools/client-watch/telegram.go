@@ -23,7 +23,9 @@ func telegramCreds(st watchState) (token, chat string) {
 		env("CLIENT_WATCH_TELEGRAM_CHAT", ""),
 		st.TelegramChat,
 	)
-	return strings.TrimSpace(token), strings.TrimSpace(chat)
+	token = strings.Trim(strings.TrimSpace(token), "\"'")
+	chat = strings.Trim(strings.TrimSpace(chat), "\"'")
+	return token, chat
 }
 
 func sendTelegram(token, chat, text string) error {

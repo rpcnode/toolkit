@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Cross-compile host agents and stage them into the connect site tree.
+# Cross-compile host agents and stage them into the marketing site tree.
 #
 #   ./scripts/build-agent-binaries.sh
 #
 # Writes:
 #   dist/binaries/                          scratch
-#   frontend/connect/public/install/        live origin (rpcnode.dev/install/...)
+#   frontend/site/public/install/           live origin (rpcnode.dev/install/...)
 #
 #   agent.sh
 #   uninstall-agents.sh
@@ -22,7 +22,7 @@ OUT_DIR="${OUT_DIR:-$ROOT/dist/binaries}"
 if [[ "${CONNECT_PUBLIC_INSTALL+x}" == "x" ]]; then
   CONNECT_INSTALL="$CONNECT_PUBLIC_INSTALL"
 else
-  CONNECT_INSTALL="${MONOREPO_ROOT}/frontend/connect/public/install"
+  CONNECT_INSTALL="${MONOREPO_ROOT}/frontend/site/public/install"
 fi
 # linux first (prod hosts); darwin for a Mac agent.
 TARGETS="${TARGETS:-linux/amd64 linux/arm64 darwin/amd64 darwin/arm64}"

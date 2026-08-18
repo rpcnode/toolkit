@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Stage agent installer + binaries into frontend/connect and push that repo.
-# Does NOT rsync to a host. CDN is whatever connect deploys from git.
+# Stage agent installer + binaries into frontend/site and push that repo.
+# Does NOT rsync to a host. CDN is whatever site deploys from git.
 #
 #   https://rpcnode.dev/install/agent.sh
 #   https://rpcnode.dev/install/TOOLKIT_VERSION
@@ -8,7 +8,7 @@
 #
 # Usage:
 #   ./scripts/build-agent-binaries.sh
-#   ./scripts/publish-install.sh              # stage → commit connect → git push
+#   ./scripts/publish-install.sh              # stage → commit site → git push
 #   ./scripts/publish-install.sh --local-only # stage only (no git)
 #   ./scripts/publish-install.sh --no-push    # commit, do not push
 #   ./scripts/publish-install.sh --dry-run
@@ -18,7 +18,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MONOREPO_ROOT="$(cd "$ROOT/../../../.." && pwd 2>/dev/null || true)"
 BIN_DIR="${BIN_DIR:-$ROOT/dist/binaries}"
 ARCHIVE_DIR="${ARCHIVE_DIR:-$ROOT/dist/archives}"
-DEFAULT_LOCAL_INSTALL="${MONOREPO_ROOT}/frontend/connect/public/install"
+DEFAULT_LOCAL_INSTALL="${MONOREPO_ROOT}/frontend/site/public/install"
 LOCAL_INSTALL="${CONNECT_PUBLIC_INSTALL:-$DEFAULT_LOCAL_INSTALL}"
 DRY_RUN=0
 GIT_MODE=push # push | commit | none
@@ -32,7 +32,7 @@ for arg in "$@"; do
     --local-only) GIT_MODE=none ;;
     --no-push) GIT_MODE=commit ;;
     --remote)
-      die "rsync-to-server is removed — publish commits frontend/connect and git push"
+      die "rsync-to-server is removed — publish commits frontend/site and git push"
       ;;
     -h|--help)
       sed -n '2,20p' "$0"
@@ -105,7 +105,7 @@ stage_local() {
     "${dest}/archives/"
   if [[ -d "$ROOT/install/clients" ]]; then
     mkdir -p "${dest}/clients"
-    # Catalog + manifests + conf from toolkit. Do not overwrite connect dist/
+    # Catalog + manifests + conf from toolkit. Do not overwrite site dist/
     # (RpcNode.app already fetched jars/tarballs there — that is the CDN payload).
     tar -C "$ROOT/install/clients" \
       --exclude dist --exclude FETCH_REPORT.md --exclude FETCH_LOG.txt \
@@ -117,13 +117,13 @@ stage_local() {
   log "staged ${dest} (version ${VERSION})"
 }
 
-# Commit the install CDN directory (connect public/install, or dest itself), then push.
+# Commit the install CDN directory (site public/install, or dest itself), then push.
 commit_connect() {
   local dest="$1"
   local repo rel
   dest="$(cd "$dest" && pwd)"
   repo="$(git -C "$dest" rev-parse --show-toplevel 2>/dev/null || true)"
-  [[ -n "$repo" ]] || die "not a git repo: $dest (expected frontend/connect public/install)"
+  [[ -n "$repo" ]] || die "not a git repo: $dest (expected frontend/site public/install)"
   repo="$(cd "$repo" && pwd)"
   rel="${dest#"$repo"/}"
   [[ "$rel" != "$dest" && -n "$rel" ]] || die "dest $dest is not inside git repo $repo"
@@ -161,7 +161,7 @@ EOF
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
   log "[dry-run] would pack archive + stage → ${LOCAL_INSTALL}/"
-  log "[dry-run] would git commit frontend/connect public/install (${VERSION})"
+  log "[dry-run] would git commit frontend/site public/install (${VERSION})"
   if [[ "$GIT_MODE" == "push" ]]; then
     log "[dry-run] would git push origin"
   fi
@@ -171,7 +171,7 @@ fi
 [[ -n "$LOCAL_INSTALL" ]] || die "CONNECT_PUBLIC_INSTALL / local dest unresolved"
 parent="$(dirname "$LOCAL_INSTALL")"
 if [[ ! -d "$parent" ]]; then
-  die "connect public dir missing: $parent (set CONNECT_PUBLIC_INSTALL)"
+  die "site public dir missing: $parent (set CONNECT_PUBLIC_INSTALL)"
 fi
 
 pack_archive

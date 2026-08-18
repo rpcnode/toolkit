@@ -1,6 +1,6 @@
 # Chain client update channel
 
-Primary source of truth is the **vendored CDN catalog** (RpcNode.app → `frontend/connect/public/install/clients`):
+Primary source of truth is the **vendored CDN catalog** (RpcNode.app → `frontend/site/public/install/clients`):
 
 ```text
 GET {INSTALL_BASE_URL}/clients/<network>/<env>/manifest.json
@@ -36,7 +36,7 @@ macOS UI (RpcNode.app — клиенты + выпуск агента):
 ./scripts/open-rpcnode.sh
 ```
 
-Таблица **сейчас / новая**. Скачивание пишет в `frontend/connect/public/install/clients/<сеть>/<env>/` (`VERSION`, `manifest.json`, `conf/`, **`dist/`**). После commit+push connect это и есть CDN: агент качает **наши** копии с `https://rpcnode.dev/install/clients/…`, не с GitHub. См. `tools/FetchClients/README.md`.
+Таблица **сейчас / новая**. Скачивание пишет в `frontend/site/public/install/clients/<сеть>/<env>/` (`VERSION`, `manifest.json`, `conf/`, **`dist/`**). После commit+push **site** это и есть CDN: агент качает **наши** копии с `https://rpcnode.dev/install/clients/…`, не с GitHub. См. `tools/FetchClients/README.md`.
 
 Терминал:
 
@@ -53,10 +53,10 @@ install/clients/catalog.json
 install/clients/<network>/<env>/conf/
 
 # connect repo = CDN (git + deploy):
-frontend/connect/public/install/clients/<network>/<env>/VERSION
-frontend/connect/public/install/clients/<network>/<env>/manifest.json
-frontend/connect/public/install/clients/<network>/<env>/conf/
-frontend/connect/public/install/clients/<network>/<env>/dist/   # jars / tarballs — publish these
+frontend/site/public/install/clients/<network>/<env>/VERSION
+frontend/site/public/install/clients/<network>/<env>/manifest.json
+frontend/site/public/install/clients/<network>/<env>/conf/
+frontend/site/public/install/clients/<network>/<env>/dist/   # jars / tarballs — publish these
 ```
 
 Snapshots are **not** fetched here (lifecycle Snapshot step). Apt clients (geth, stellar-rpc, rippled) are recorded, not downloaded.

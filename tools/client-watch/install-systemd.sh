@@ -29,17 +29,17 @@ install -m 0755 "$bin_src" /usr/local/bin/rpcnode-client-watch
 install -m 0600 "$env_src" /etc/rpcnode/client-watch.env
 install -m 0644 "$unit_src" /etc/systemd/system/rpcnode-client-watch.service
 
-# Override catalog paths if toolkit is not at /opt/rpcnode/toolkit.
-if [[ $toolkit != /opt/rpcnode/toolkit ]]; then
-  drop=/etc/systemd/system/rpcnode-client-watch.service.d
-  install -d -m 0755 "$drop"
-  cat >"$drop/paths.conf" <<EOF
-[Service]
-Environment=CLIENT_WATCH_CATALOG=$toolkit/install/clients/catalog.json
-Environment=CLIENT_WATCH_CLIENTS=$toolkit/install/clients
-EOF
-  chmod 0644 "$drop/paths.conf"
-fi
+drop=/etc/systemd/system/rpcnode-client-watch.service.d
+install -d -m 0755 "$drop"
+{
+  echo "[Service]"
+  echo "EnvironmentFile=-$env_src"
+  if [[ $toolkit != /opt/rpcnode/toolkit ]]; then
+    echo "Environment=CLIENT_WATCH_CATALOG=$toolkit/install/clients/catalog.json"
+    echo "Environment=CLIENT_WATCH_CLIENTS=$toolkit/install/clients"
+  fi
+} >"$drop/paths.conf"
+chmod 0644 "$drop/paths.conf"
 
 systemctl daemon-reload
 systemctl enable --now rpcnode-client-watch.service

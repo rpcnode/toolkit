@@ -17,6 +17,8 @@ func (w *watcher) serveHTTP() error {
 	mux.HandleFunc("/api/v1/telegram", w.withAuth(w.handleTelegram))
 	mux.HandleFunc("/api/v1/check", w.withAuth(w.handleCheck))
 	mux.HandleFunc("/api/v1/versions", w.withAuth(w.handleVersions))
+	mux.HandleFunc("/api/v1/clients", w.withAuth(w.handleClients))
+	mux.HandleFunc("/files/", w.withAuth(w.handleFiles))
 	srv := &http.Server{
 		Addr:              w.listen,
 		Handler:           mux,

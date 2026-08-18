@@ -37,7 +37,7 @@ git commit -m "Release 0.4.114"
 # 3) Annotated tag on that commit, then push commit + tag
 ./scripts/release.sh tag --push
 
-# 4) Build agents, commit frontend/connect public/install, git push
+# 4) Build agents, commit frontend/site public/install, git push
 ./scripts/release.sh publish
 ```
 

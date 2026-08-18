@@ -40,10 +40,10 @@ Archive contents (runtime only):
 
 ## Publish (CI or laptop)
 
-Origin is the **connect** site tree — Vite copies `public/` into `dist/client`:
+Origin is the **site** tree — Vite copies `public/` into `dist/client`:
 
 ```text
-frontend/connect/public/install/          →  https://rpcnode.dev/install/
+frontend/site/public/install/             →  https://rpcnode.dev/install/
   agent.sh
   uninstall-agents.sh
   rpcnode-agent-watchdog.sh
@@ -55,7 +55,7 @@ frontend/connect/public/install/          →  https://rpcnode.dev/install/
 ❌ Not `public/toolkit` — `/toolkit` is the marketing page.
 
 ```bash
-# from toolkit repo — stage + commit frontend/connect + git push (no rsync)
+# from toolkit repo — stage + commit frontend/site + git push (no rsync)
 ./scripts/release.sh publish
 # or:
 ./scripts/build-agent-binaries.sh
@@ -64,7 +64,7 @@ frontend/connect/public/install/          →  https://rpcnode.dev/install/
 ./scripts/publish-install.sh --no-push      # commit, no push
 ```
 
-Connect deploy from that git push serves `https://rpcnode.dev/install/agent.sh`.
+Site deploy from that git push serves `https://rpcnode.dev/install/agent.sh`.
 
 Override local dest: `CONNECT_PUBLIC_INSTALL=/path/to/public/install`.
 

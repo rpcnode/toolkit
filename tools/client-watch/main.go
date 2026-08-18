@@ -93,6 +93,13 @@ func main() {
 		return
 	}
 
+	if tok, chat := telegramCreds(w.state.snapshot()); tok == "" || chat == "" {
+		log.Printf("telegram: нет — systemd читает /etc/rpcnode/client-watch.env (TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT), не файл в toolkit")
+	} else {
+		log.Printf("telegram: да chat=%s", chat)
+		_ = w.state.setTelegram(tok, chat)
+	}
+
 	go w.loop()
 	if err := w.serveHTTP(); err != nil {
 		log.Fatal(err)
@@ -139,7 +146,7 @@ func (w *watcher) listVersions() ([]versionRow, error) {
 		switch {
 		case row.Latest == "":
 			row.Status = "unknown"
-		case row.Pin != "" && normalizeVer(row.Latest) == normalizeVer(row.Pin):
+		case row.Pin != "" && sameVersion(row.Latest, row.Pin):
 			row.Status = "ok"
 		case row.Pin == "":
 			row.Status = "new"
@@ -250,9 +257,9 @@ func (w *watcher) checkOnce() error {
 		pin := e.pin()
 		ver := firstNonEmpty(latest.Version, latest.Tag)
 		jobs := e.downloadJobs(latest)
-		isNew := pin == "" || normalizeVer(ver) != normalizeVer(pin)
+		isNew := pin == "" || !sameVersion(ver, pin)
 		seenSame := false
-		if seen, ok := st.Seen[e.id()]; ok && normalizeVer(seen.Tag) == normalizeVer(latest.Tag) {
+		if seen, ok := st.Seen[e.id()]; ok && sameVersion(seen.Tag, latest.Tag) {
 			seenSame = true
 		}
 		onDisk := len(jobs) > 0 && versionOnDisk(w.clients, e, ver, jobs)
@@ -291,7 +298,7 @@ func (w *watcher) checkOnce() error {
 			msg := formatUpdate(e, latest)
 			tgTok, tgChat := telegramCreds(st)
 			if tgTok != "" && tgChat != "" {
-				if seen, ok := st.Seen[e.id()]; ok && normalizeVer(seen.Tag) == normalizeVer(latest.Tag) {
+				if seen, ok := st.Seen[e.id()]; ok && sameVersion(seen.Tag, latest.Tag) {
 					// already notified
 				} else if tgErr := sendTelegram(tgTok, tgChat, msg); tgErr != nil {
 					log.Printf("telegram %s: %v", e.id(), tgErr)
@@ -299,7 +306,7 @@ func (w *watcher) checkOnce() error {
 						firstErr = tgErr
 					}
 				}
-			} else if _, ok := st.Seen[e.id()]; !ok || normalizeVer(st.Seen[e.id()].Tag) != normalizeVer(latest.Tag) {
+			} else if _, ok := st.Seen[e.id()]; !ok || !sameVersion(st.Seen[e.id()].Tag, latest.Tag) {
 				log.Printf("telegram не настроен: %s", e.id())
 			}
 			if err := w.state.markSeen(e.id(), latest, public); err != nil {
