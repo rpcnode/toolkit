@@ -2,12 +2,22 @@
 
 Раз в час: GitHub **или HEAD CDN-бинаря** vs `catalog.json`. Версия — с GitHub/HEAD, папка на диске для этого не нужна. Если есть что качать и `_updates/<сеть>/<env>/<версия>/` ещё нет — кладёт туда, старые папки не удаляет. Нет linux-файлов (nitro/docker) — только версия + Telegram, пустую папку не создаёт. Каталог не меняет.
 
-Cron (один проход, без HTTP):
+## systemd (API + час)
+
+FetchClients ходит сюда (`:8094`). Cron `-check` не нужен — юнит сам крутит loop.
 
 ```bash
-# один раз собрать на сервере:
-#   cd /path/to/toolkit/tools/client-watch && go build -o rpcnode-client-watch .
+cd /path/to/toolkit/tools/client-watch && go build -o rpcnode-client-watch .
+sudo ./install-systemd.sh
+# журнал: journalctl -u rpcnode-client-watch -f
+# healthz: curl -fsS http://127.0.0.1:8094/healthz
+```
 
+Юнит: `rpcnode-client-watch.service` → `/usr/local/bin/rpcnode-client-watch`, env `/etc/rpcnode/client-watch.env` (копия `client-watch.env`). Каталог не в `/opt/rpcnode/toolkit` — скрипт пишет drop-in с реальным путём. Файрвол не трогает.
+
+Cron (один проход, без HTTP) — только если systemd не ставишь:
+
+```bash
 0 * * * * set -a && . /path/to/toolkit/client-watch.env && set +a && /path/to/toolkit/tools/client-watch/rpcnode-client-watch -check -catalog /path/to/toolkit/install/clients/catalog.json -clients /path/to/toolkit/install/clients >> /var/log/rpcnode-client-watch.log 2>&1
 ```
 

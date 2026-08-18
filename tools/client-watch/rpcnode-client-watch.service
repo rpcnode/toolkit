@@ -1,0 +1,26 @@
+[Unit]
+Description=RpcNode client-watch (catalog vs GitHub, Telegram, API :8094)
+Documentation=file:///opt/rpcnode/toolkit/tools/client-watch/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/rpcnode/client-watch.env
+Environment=CLIENT_WATCH_LISTEN=0.0.0.0:8094
+Environment=CLIENT_WATCH_CATALOG=/opt/rpcnode/toolkit/install/clients/catalog.json
+Environment=CLIENT_WATCH_CLIENTS=/opt/rpcnode/toolkit/install/clients
+Environment=CLIENT_WATCH_STATE=/var/lib/rpcnode/client-watch/state.json
+Environment=CLIENT_WATCH_INTERVAL=1h
+ExecStart=/usr/local/bin/rpcnode-client-watch
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+WorkingDirectory=/var/lib/rpcnode/client-watch
+SyslogIdentifier=rpcnode-client-watch
+# Do not tee into /var/log/rpcnode.log (audit only).
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
