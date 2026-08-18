@@ -55,7 +55,7 @@ frontend/toolkit/public/install/          →  https://toolkit.rpcnode.dev/insta
 frontend/toolkit/public/clients/          →  https://toolkit.rpcnode.dev/clients/
 ```
 
-`rpcnode.dev/install/…` **MUST** 301 → `toolkit.rpcnode.dev/install/…` (old agents still request the connect host; without 301, Servers → Update is HTTP 404). Agent ≥ 0.4.187 rewrites that host itself.
+`rpcnode.dev/install/…` must **serve** the file (connect proxies to toolkit, HTTP 200 — not a 301). Old agents still request the connect host; a 404 there breaks Servers → Update. Agent ≥ 0.4.187 rewrites the host to `toolkit.rpcnode.dev`.
 
 ❌ Marketing `/toolkit` page is `frontend/site` — not this CDN.
 
