@@ -9,7 +9,7 @@
 | Git tag | `v0.4.115` (always the `v` prefix) |
 | Embedded in binaries | `-ldflags -X main.toolkitVersion=…` at compile time |
 | CDN | `https://toolkit.rpcnode.dev/install/TOOLKIT_VERSION` + binaries / archives |
-| Public notes | [`docs/versions.json`](versions.json) → site [`/versions/`](https://toolkit.rpcnode.dev/versions/) + `/install/VERSIONS.json` |
+| Public notes | [`docs/versions.json`](versions.json) → [`/versions/`](https://toolkit.rpcnode.dev/versions/) + `/versions/<X.Y.Z>/` (sitemap) + `/install/VERSIONS.json` |
 
 Do **not** move a tag after it is on CDN. Ship the next patch instead.
 
