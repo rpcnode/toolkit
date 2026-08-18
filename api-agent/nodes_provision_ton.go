@@ -577,6 +577,7 @@ line = m.group(1).strip()
 line = re.sub(r"\s+--celldb-cache-size(?:=|\s+)\S+", "", line)
 line = re.sub(r"\s+--celldb-preload-all\b", "", line)
 line = re.sub(r"\s+--celldb-in-memory\b", "", line)
+line = re.sub(r"\s+--celldb-direct-io\b", "", line)
 line = re.sub(r"\s+--fast-state-serializer\b", "", line)
 flag = f"--celldb-cache-size={cache}"
 if flag not in line:

@@ -146,9 +146,27 @@ func (t *ToolkitUpdateController) Snapshot() map[string]any {
 	return t.load()
 }
 
+func canonToolkitCDNHost(u string) string {
+	u = strings.TrimSpace(u)
+	if u == "" {
+		return u
+	}
+	for _, old := range []string{
+		"https://www.rpcnode.dev/",
+		"http://www.rpcnode.dev/",
+		"https://rpcnode.dev/",
+		"http://rpcnode.dev/",
+	} {
+		if strings.HasPrefix(u, old) {
+			return "https://toolkit.rpcnode.dev/" + strings.TrimPrefix(u, old)
+		}
+	}
+	return u
+}
+
 func toolkitVersionURL() string {
 	if u := strings.TrimSpace(os.Getenv("TOOLKIT_VERSION_URL")); u != "" {
-		return u
+		return canonToolkitCDNHost(u)
 	}
 	return "https://toolkit.rpcnode.dev/install/TOOLKIT_VERSION"
 }

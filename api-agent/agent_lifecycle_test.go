@@ -6,6 +6,26 @@ import (
 	"testing"
 )
 
+func TestCanonToolkitCDNHost(t *testing.T) {
+	if got := canonToolkitCDNHost("https://rpcnode.dev/install/TOOLKIT_VERSION"); got != "https://toolkit.rpcnode.dev/install/TOOLKIT_VERSION" {
+		t.Fatalf("got %q", got)
+	}
+	if got := canonToolkitCDNHost("https://rpcnode.dev/install"); got != "https://toolkit.rpcnode.dev/install" {
+		t.Fatalf("got %q", got)
+	}
+	if got := canonToolkitCDNHost("https://toolkit.rpcnode.dev/install"); got != "https://toolkit.rpcnode.dev/install" {
+		t.Fatalf("must keep toolkit host: %q", got)
+	}
+}
+
+func TestAgentInstallBaseURLRewritesLegacyHost(t *testing.T) {
+	t.Setenv("INSTALL_BASE_URL", "https://rpcnode.dev/install")
+	t.Setenv("AGENT_DOWNLOAD_URL", "")
+	if got := agentInstallBaseURL(); got != "https://toolkit.rpcnode.dev/install" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestAgentUnitNamesStellarLeaf(t *testing.T) {
 	t.Setenv("TRON_NETWORK", "stellar")
 	got := agentUnitNames("mainnet")

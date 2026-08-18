@@ -9,6 +9,7 @@
 | Git tag | `v0.4.115` (always the `v` prefix) |
 | Embedded in binaries | `-ldflags -X main.toolkitVersion=…` at compile time |
 | CDN | `https://toolkit.rpcnode.dev/install/TOOLKIT_VERSION` + binaries / archives |
+| Public notes | [`docs/versions.json`](versions.json) → site [`/versions/`](https://toolkit.rpcnode.dev/versions/) + `/install/VERSIONS.json` |
 
 Do **not** move a tag after it is on CDN. Ship the next patch instead.
 
@@ -30,14 +31,17 @@ From a clean-enough tree on `master` (or the branch you push):
 # 1) Bump the channel file (writes TOOLKIT_VERSION only)
 ./scripts/release.sh bump patch        # or: minor | major | 0.4.114
 
-# 2) Commit the bump with the rest of the change
-git add TOOLKIT_VERSION
+# 2) Add a release note at the top of docs/versions.json (same version)
+#    publish-install refuses if latest != TOOLKIT_VERSION
+
+# 3) Commit the bump with the rest of the change
+git add TOOLKIT_VERSION docs/versions.json
 git commit -m "Release 0.4.114"
 
-# 3) Annotated tag on that commit, then push commit + tag
+# 4) Annotated tag on that commit, then push commit + tag
 ./scripts/release.sh tag --push
 
-# 4) Build agents, commit frontend/toolkit public/install, git push
+# 5) Build agents, commit frontend/toolkit public/install (+ versions.json), git push
 ./scripts/release.sh publish
 ```
 
@@ -66,4 +70,5 @@ Hosts install from CDN only (`docs/agent-install.md`) — not from a source chec
 - Publish CDN without a matching git tag (you cannot rebuild that exact ship later).
 - Tag without bumping `TOOLKIT_VERSION` (panel/CDN would disagree with git).
 - Reuse `0.4.113` after it was already on CDN — bump to `0.4.114`.
+- Publish without a new first entry in `docs/versions.json` (site `/versions/` and CDN feed would lie).
 - Commit `.cursor/secrets`, `update-remote-*.sh`, host IPs, or `panel.db`.

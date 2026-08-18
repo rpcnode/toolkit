@@ -63,7 +63,14 @@ func healTonValidatorExecStart(body string, cacheBytes int64) (string, bool) {
 }
 
 func healTonValidatorMemory() (bool, error) {
-	cache := tonCelldbCacheBytes(float64(ramGB()))
+	return healTonValidatorMemoryCache(tonCelldbCacheBytes(float64(ramGB())))
+}
+
+func healTonValidatorMemoryCache(cache int64) (bool, error) {
+	if cache <= 0 {
+		cache = 1 << 30
+	}
+	_ = writeTonValidatorMemoryDropin()
 	anyChanged := false
 	for _, path := range tonValidatorUnitPaths() {
 		raw, err := os.ReadFile(path)
@@ -86,6 +93,39 @@ func healTonValidatorMemory() (bool, error) {
 		_ = exec.Command("systemctl", "daemon-reload").Run()
 	}
 	return anyChanged, nil
+}
+
+func writeTonValidatorMemoryDropin() error {
+	dir := "/etc/systemd/system/validator.service.d"
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(dir, "rpcnode-memory.conf")
+	body := `[Service]
+MemoryAccounting=yes
+MemoryMax=85%
+`
+	prev, _ := os.ReadFile(path)
+	if string(prev) == body {
+		return nil
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		return err
+	}
+	_ = exec.Command("systemctl", "daemon-reload").Run()
+	return nil
+}
+
+func tonValidatorApplyCrashLoop() bool {
+	p := probeSystemdUnit("validator")
+	if p.NRestarts >= 1 {
+		return true
+	}
+	res := strings.ToLower(p.Result)
+	if p.ActiveState == "activating" && (strings.Contains(res, "oom") || res == "signal" || res == "core-dump") {
+		return true
+	}
+	return false
 }
 
 func tonValidatorUnitPaths() []string {
@@ -138,13 +178,17 @@ func tonCatchupHonest(oos float64, seqno int64, oom bool) bool {
 
 func tonValidatorOOM() bool {
 	p := probeSystemdUnit("validator")
-	// Historical journal "OOM killer" stays after a successful recycle — ignore while up.
-	if p.ActiveState == "active" || p.ActiveState == "activating" {
-		return false
-	}
 	if strings.Contains(strings.ToLower(p.Result), "oom") {
 		return true
 	}
 	j := strings.ToLower(journalUnitSnippet("validator.service", 40))
-	return strings.Contains(j, "oom killer") || strings.Contains(j, "oom-kill")
+	oom := strings.Contains(j, "oom killer") || strings.Contains(j, "oom-kill")
+	if !oom {
+		return false
+	}
+	// Journal line survives a healthy recycle — ignore only when stable at tip apply.
+	if p.ActiveState == "active" && p.NRestarts == 0 {
+		return false
+	}
+	return true
 }

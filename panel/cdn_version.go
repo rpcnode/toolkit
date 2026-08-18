@@ -19,21 +19,40 @@ var (
 	cdnVerAt    time.Time
 )
 
-func installBaseURL() string {
-	if u := strings.TrimSpace(os.Getenv("INSTALL_BASE_URL")); u != "" {
-		return strings.TrimRight(u, "/")
-	}
-	if u := strings.TrimSpace(os.Getenv("AGENT_DOWNLOAD_URL")); u != "" {
-		u = strings.TrimRight(u, "/")
-		u = strings.TrimSuffix(u, "/agent.sh")
+func canonToolkitCDNHost(u string) string {
+	u = strings.TrimSpace(u)
+	if u == "" {
 		return u
 	}
-	return "https://toolkit.rpcnode.dev/install"
+	for _, old := range []string{
+		"https://www.rpcnode.dev/",
+		"http://www.rpcnode.dev/",
+		"https://rpcnode.dev/",
+		"http://rpcnode.dev/",
+	} {
+		if strings.HasPrefix(u, old) {
+			return "https://toolkit.rpcnode.dev/" + strings.TrimPrefix(u, old)
+		}
+	}
+	return u
+}
+
+func installBaseURL() string {
+	var u string
+	if v := strings.TrimSpace(os.Getenv("INSTALL_BASE_URL")); v != "" {
+		u = strings.TrimRight(v, "/")
+	} else if v := strings.TrimSpace(os.Getenv("AGENT_DOWNLOAD_URL")); v != "" {
+		u = strings.TrimRight(v, "/")
+		u = strings.TrimSuffix(u, "/agent.sh")
+	} else {
+		u = "https://toolkit.rpcnode.dev/install"
+	}
+	return strings.TrimRight(canonToolkitCDNHost(u), "/")
 }
 
 func toolkitVersionURL() string {
 	if u := strings.TrimSpace(os.Getenv("TOOLKIT_VERSION_URL")); u != "" {
-		return u
+		return canonToolkitCDNHost(u)
 	}
 	return installBaseURL() + "/TOOLKIT_VERSION"
 }

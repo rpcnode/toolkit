@@ -479,6 +479,12 @@ func tonSyncDetail(info tonRPCInfo, syncing bool) string {
 		return fmt.Sprintf("Synced · %s sec behind · seqno %d", formatTonBehind(info.OutOfSyncSec), info.Seqno)
 	}
 	if info.DumpPct > 0 && syncing {
+		if tonValidatorOOM() {
+			return fmt.Sprintf("MyTonCtrl dump %d%% · apply OOM (seqno 0)", info.DumpPct)
+		}
+		if tonValidatorApplyCrashLoop() {
+			return fmt.Sprintf("MyTonCtrl dump %d%% · validator restart during apply (seqno 0)", info.DumpPct)
+		}
 		return fmt.Sprintf("MyTonCtrl dump %d%% · applying state", info.DumpPct)
 	}
 	if info.OK {

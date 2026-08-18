@@ -4,6 +4,7 @@
 #
 #   https://toolkit.rpcnode.dev/install/agent.sh
 #   https://toolkit.rpcnode.dev/install/TOOLKIT_VERSION
+#   https://toolkit.rpcnode.dev/install/VERSIONS.json
 #   https://toolkit.rpcnode.dev/install/binaries/...
 #
 # Usage:
@@ -48,6 +49,21 @@ ls "$BIN_DIR"/rpcnode-*-* >/dev/null 2>&1 || die "no binaries in $BIN_DIR"
 
 VERSION="$(tr -d '[:space:]' <"$ROOT/TOOLKIT_VERSION" 2>/dev/null || echo unknown)"
 [[ -n "$VERSION" && "$VERSION" != "unknown" ]] || die "TOOLKIT_VERSION missing/empty"
+
+# Public changelog: docs/versions.json → /install/VERSIONS.json + site /versions/.
+# Latest release.version MUST equal TOOLKIT_VERSION (publish fails otherwise).
+stage_versions() {
+  local dest="$1" src="$ROOT/docs/versions.json" latest site_data
+  [[ -f "$src" ]] || die "docs/versions.json missing — add a release note for ${VERSION}"
+  latest="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["releases"][0]["version"])' "$src")"
+  [[ "$latest" == "$VERSION" ]] || die "docs/versions.json latest (${latest}) != TOOLKIT_VERSION (${VERSION})"
+  cp -f "$src" "${dest}/VERSIONS.json"
+  site_data="$(cd "$(dirname "$dest")/.." && pwd)/src/data/versions.json"
+  if [[ -d "$(dirname "$site_data")" ]]; then
+    cp -f "$src" "$site_data"
+    log "staged site versions.json (${VERSION})"
+  fi
+}
 
 pack_archive() {
   local stage name tgz
@@ -94,6 +110,7 @@ stage_local() {
     chmod 755 "${dest}/rpcnode-agent-watchdog.sh"
   fi
   printf '%s\n' "$VERSION" >"${dest}/TOOLKIT_VERSION"
+  stage_versions "$dest"
   if [[ -f "$ROOT/install/donate.json" ]]; then
     cp -f "$ROOT/install/donate.json" "${dest}/donate.json"
   fi
@@ -124,6 +141,9 @@ commit_connect() {
 
   log "git -C ${repo} add ${rel}"
   git -C "$repo" add -- "$rel"
+  if [[ -f "$repo/src/data/versions.json" ]]; then
+    git -C "$repo" add -- src/data/versions.json
+  fi
 
   if git -C "$repo" diff --cached --quiet; then
     log "install CDN: nothing to commit (already ${VERSION})"
@@ -184,5 +204,7 @@ fi
 log "published ${VERSION}"
 log "  https://toolkit.rpcnode.dev/install/agent.sh"
 log "  https://toolkit.rpcnode.dev/install/TOOLKIT_VERSION"
+log "  https://toolkit.rpcnode.dev/install/VERSIONS.json"
+log "  https://toolkit.rpcnode.dev/versions/"
 log "  https://toolkit.rpcnode.dev/install/binaries/"
 log "  https://toolkit.rpcnode.dev/install/archives/rpcnode-agent-${VERSION}.tar.gz"

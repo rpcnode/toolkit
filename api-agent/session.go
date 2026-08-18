@@ -153,7 +153,7 @@ func sessionTokenFromRequest(r *http.Request) string {
 
 func defaultAgentDownloadURL() string {
 	if v := strings.TrimSpace(os.Getenv("AGENT_DOWNLOAD_URL")); v != "" {
-		return v
+		return canonToolkitCDNHost(v)
 	}
 	return "https://toolkit.rpcnode.dev/install/agent.sh"
 }

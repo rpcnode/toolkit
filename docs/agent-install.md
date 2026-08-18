@@ -23,6 +23,8 @@ Version truth = **embedded** in the binary (`rpcnode-api-agent -version`). CDN `
 https://toolkit.rpcnode.dev/install/agent.sh
 https://toolkit.rpcnode.dev/install/rpcnode-agent-watchdog.sh
 https://toolkit.rpcnode.dev/install/TOOLKIT_VERSION
+https://toolkit.rpcnode.dev/install/VERSIONS.json
+https://toolkit.rpcnode.dev/versions/
 https://toolkit.rpcnode.dev/install/binaries/rpcnode-*-agent-<os>-<arch>
 https://toolkit.rpcnode.dev/install/binaries/sha256sums.txt
 https://toolkit.rpcnode.dev/install/archives/rpcnode-agent-<VERSION>.tar.gz
@@ -53,7 +55,7 @@ frontend/toolkit/public/install/          →  https://toolkit.rpcnode.dev/insta
 frontend/toolkit/public/clients/          →  https://toolkit.rpcnode.dev/clients/
 ```
 
-`rpcnode.dev/install/…` 301 → `toolkit.rpcnode.dev/install/…` (old curl|bash and in-field agents).
+`rpcnode.dev/install/…` **MUST** 301 → `toolkit.rpcnode.dev/install/…` (old agents still request the connect host; without 301, Servers → Update is HTTP 404). Agent ≥ 0.4.187 rewrites that host itself.
 
 ❌ Marketing `/toolkit` page is `frontend/site` — not this CDN.
 

@@ -68,7 +68,7 @@ func (c *ClientUpdateController) statePath() string {
 
 func clientInstallBaseURL() string {
 	if u := strings.TrimSpace(os.Getenv("CLIENTS_BASE_URL")); u != "" {
-		return strings.TrimRight(u, "/")
+		return strings.TrimRight(canonToolkitCDNHost(u), "/")
 	}
 	return "https://toolkit.rpcnode.dev"
 }

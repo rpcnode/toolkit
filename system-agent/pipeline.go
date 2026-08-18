@@ -264,17 +264,25 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 	provisioning := provisionLockPending(p.cfg.Network, p.cfg.Env)
 
 	// TON: dump apply OOMs if celldb cache / preload-all is huge. Cap + start.
+	// MyTonCtrl rewrites ExecStart; do NOT recycle while apply is in progress
+	// (seqno stays 0 for a day if we SIGKILL every heal tick).
 	if isTon && !removing && !provisioning && tonBootstrapDone(p.cfg) {
-		changed, err := healTonValidatorMemory()
+		cache := tonCelldbCacheBytes(float64(ramGB()))
+		if tonValidatorOOM() || tonValidatorApplyCrashLoop() {
+			cache = 1 << 30
+		}
+		changed, err := healTonValidatorMemoryCache(cache)
 		if err != nil {
 			log.Printf("pipeline: ton celldb heal: %v", err)
 		}
-		if changed {
+		if changed && (tonValidatorDown() || tonValidatorOOM()) {
 			if err := recycleTonValidator(); err != nil {
 				log.Printf("pipeline: ton validator recycle after celldb heal: %v", err)
 			} else {
 				hostLogf("INFO", "system-agent", "start", "capped validator celldb cache + recycle")
 			}
+		} else if changed {
+			hostLogf("INFO", "system-agent", "start", "capped validator celldb cache (apply in progress — no recycle)")
 		} else if tonValidatorDown() {
 			if err := nudgeTonValidatorStack(); err != nil {
 				log.Printf("pipeline: ton validator start: %v", err)
@@ -660,9 +668,13 @@ func (p *LifecyclePipeline) startNode() error {
 		// Also nudge stock MyTonCtrl units when bootstrap already finished.
 		// ❌ /usr/bin/ton/validator-engine is a build dir mid-dump — only marker or real binary.
 		if fileExists(filepath.Join(etc, "bootstrap.done")) || tonValidatorEngineBin() != "" {
-			if changed, err := healTonValidatorMemory(); err != nil {
+			cache := tonCelldbCacheBytes(float64(ramGB()))
+			if tonValidatorOOM() || tonValidatorApplyCrashLoop() {
+				cache = 1 << 30
+			}
+			if changed, err := healTonValidatorMemoryCache(cache); err != nil {
 				log.Printf("pipeline: ton celldb heal: %v", err)
-			} else if changed {
+			} else if changed && (tonValidatorDown() || tonValidatorOOM()) {
 				hostLogf("INFO", "system-agent", "start", "capped validator celldb cache + recycle")
 				if err := recycleTonValidator(); err != nil {
 					log.Printf("pipeline: ton validator recycle: %v", err)

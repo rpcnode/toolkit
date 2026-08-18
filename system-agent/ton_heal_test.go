@@ -42,6 +42,16 @@ ExecStart=/usr/bin/ton/validator-engine/validator-engine --threads 16 --daemoniz
 	}
 }
 
+func TestHealTonValidatorExecStart_Force1G(t *testing.T) {
+	src := `[Service]
+ExecStart=/usr/bin/ton/validator-engine/validator-engine --db /var/ton-work/db/ --celldb-cache-size=8589934592
+`
+	out, changed := healTonValidatorExecStart(src, 1<<30)
+	if !changed || !strings.Contains(out, "--celldb-cache-size=1073741824") {
+		t.Fatalf("want 1G after crash-loop cap:\n%s", out)
+	}
+}
+
 func TestTonCatchupNotSyncedWithoutSeqno(t *testing.T) {
 	if tonCatchupHonest(1, 0, false) {
 		t.Fatal("oos=1 seqno=0 is not tip")

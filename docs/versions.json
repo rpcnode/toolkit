@@ -1,0 +1,235 @@
+{
+  "channel": "https://toolkit.rpcnode.dev/install/TOOLKIT_VERSION",
+  "feed": "https://toolkit.rpcnode.dev/install/VERSIONS.json",
+  "releases": [
+    {
+      "version": "0.4.187",
+      "date": "2026-08-18",
+      "title": "TON getVersion + install CDN host",
+      "panel": "0.1.32",
+      "networks": ["ton"],
+      "notes": [
+        "Admin/node version check was status=unsupported — toncenter HTTP API has no version method.",
+        "Public Go RPC now answers version / getVersion / getNodeVersion with the same client_version as the panel (validator-engine --version).",
+        "Bare POST / is rewritten to /api/v2/jsonRPC so the public base URL works as a TON JSON-RPC endpoint.",
+        "Update no longer fetches rpcnode.dev/install (404). Channel is toolkit.rpcnode.dev; old env/unit URLs are rewritten."
+      ]
+    },
+    {
+      "version": "0.4.186",
+      "date": "2026-08-18",
+      "title": "TON dump apply — stop killing validator at 99%",
+      "networks": ["ton"],
+      "notes": [
+        "After a MyTonCtrl dump, seqno stayed 0 and the bar sat at 99% «applying state» for a day (testnet and mainnet).",
+        "MyTonCtrl rewrites validator ExecStart; heal no longer SIGKILL-recycles while apply is running.",
+        "After OOM or a restart, celldb cache is capped to 1G and MemoryMax=85%.",
+        "Sync shows restart / apply OOM instead of a fake «applying» line."
+      ]
+    },
+    {
+      "version": "0.4.184",
+      "date": "2026-08-18",
+      "panel": "0.1.31",
+      "title": "Cardano Mithril snapshot + XRPL history picker",
+      "networks": ["cardano", "xrpl"],
+      "notes": [
+        "Cardano Snapshot step downloads official Mithril latest (include-ancillary), mithril-client 2630.0.",
+        "Honest snapshot % from N/7 files and MiB in the log.",
+        "XRPL install picker: stock / 1 day / 2 weeks / full history (default weeks)."
+      ]
+    },
+    {
+      "version": "0.4.183",
+      "date": "2026-08-18",
+      "panel": "0.1.30",
+      "title": "TRON mainnet snapshot flavors",
+      "networks": ["tron"],
+      "notes": [
+        "Install picker: standard / internal_tx / balance_history — matching official LevelDB mirrors and HOCON.",
+        "Choice is persisted on the panel and on the host; re-add from awaiting_ports clears it."
+      ]
+    },
+    {
+      "version": "0.4.179",
+      "date": "2026-08-17",
+      "title": "XRPL provision compile",
+      "networks": ["xrpl"],
+      "notes": [
+        "ensureXRPLDInstalled takes the environment so panel Docker builds again."
+      ]
+    },
+    {
+      "version": "0.4.178",
+      "date": "2026-08-17",
+      "title": "XRPL client pin 3.3.0",
+      "networks": ["xrpl"],
+      "notes": [
+        "catalog.json pins xrpld 3.3.0. Empty version + unpinned apt was installing 3.2.0."
+      ]
+    },
+    {
+      "version": "0.4.177",
+      "date": "2026-08-17",
+      "title": "XRPL first ledger + hub peers",
+      "networks": ["xrpl"],
+      "notes": [
+        "seq=0 with overlay flap and 0–2 peers now pins official hubs in ips_fixed.",
+        "LoadManager stall recycles at medium node size."
+      ]
+    },
+    {
+      "version": "0.4.176",
+      "date": "2026-08-17",
+      "title": "XRPL dead server_stop is not a start fault",
+      "networks": ["xrpl"],
+      "notes": [
+        "no response from server / ExecMainCode=1 during ExecStop on a dead xrpld is ignored; the unit is started."
+      ]
+    },
+    {
+      "version": "0.4.174",
+      "date": "2026-08-17",
+      "panel": "0.1.28",
+      "title": "TON OOM after dump is not Synced",
+      "networks": ["ton"],
+      "notes": [
+        "seqno=0 after dump is apply/OOM, not tip — no 99.9% / 0.1% lag-closed bounce.",
+        "Cap --celldb-cache-size from RAM; strip preload-all / in-memory / fast-state-serializer."
+      ]
+    },
+    {
+      "version": "0.4.163",
+      "date": "2026-08-17",
+      "panel": "0.1.25",
+      "title": "Ethereum tip after sync",
+      "networks": ["ethereum"],
+      "notes": [
+        "Public tip shows blocks / headers after sync. eth_syncing=false has no highestBlock."
+      ]
+    },
+    {
+      "version": "0.4.155",
+      "date": "2026-08-16",
+      "title": "XRPL history peers",
+      "networks": ["xrpl"],
+      "notes": [
+        "peers_max=100, official hubs, ips_fixed s2.ripple.com. Heal on start.",
+        "No official snapshot — full history is still a long peer backfill."
+      ]
+    },
+    {
+      "version": "0.4.154",
+      "date": "2026-08-16",
+      "panel": "0.1.18",
+      "title": "Synced means tip and history proof",
+      "networks": ["xrpl", "stellar", "bitcoin", "doge", "ltc", "dash", "bch", "zcash"],
+      "notes": [
+        "Live tip alone is not Synced. XRPL complete_ledgers, Stellar oldestLedger, Bitcoin-family not pruned.",
+        "UI and panel require verification_pct ≥ 99.9."
+      ]
+    },
+    {
+      "version": "0.4.153",
+      "date": "2026-08-16",
+      "title": "XRPL false Synced",
+      "networks": ["xrpl"],
+      "notes": [
+        "server_state=full on a short complete_ledgers window is live tip, not history.",
+        "Synced only when complete_ledgers reaches genesis (32570) and the tip."
+      ]
+    },
+    {
+      "version": "0.4.152",
+      "date": "2026-08-16",
+      "panel": "0.1.17",
+      "title": "XRPL Sync bar from complete_ledgers",
+      "networks": ["xrpl"],
+      "notes": [
+        "verification_pct from complete_ledgers high / tip. No official tarball (~39 TiB via peers)."
+      ]
+    },
+    {
+      "version": "0.4.149",
+      "date": "2026-08-16",
+      "panel": "0.1.16",
+      "title": "Port holder + Kill",
+      "notes": [
+        "Check ports shows the program holding a catalog port. Kill (with confirm) goes through the tip agent."
+      ]
+    },
+    {
+      "version": "0.4.137",
+      "date": "2026-08-16",
+      "panel": "0.1.14",
+      "title": "Check ports does not parse ufw",
+      "notes": [
+        "Reach is a panel dial to the Server public IP. The agent never runs ufw allow / deny."
+      ]
+    },
+    {
+      "version": "0.4.136",
+      "date": "2026-08-16",
+      "panel": "0.1.13",
+      "title": "Outbound reach on public / agent / p2p",
+      "notes": [
+        "Check ports: panel dials the Server public IP while the tip holds a nonce listener. reach = reachable or filtered."
+      ]
+    },
+    {
+      "version": "0.4.117",
+      "date": "2026-08-15",
+      "title": "Host audit log",
+      "notes": [
+        "/var/log/rpcnode.log is discrete hostLog ops only (update, provision, start, snapshot, errors). Agent stdout stays per-unit."
+      ]
+    },
+    {
+      "version": "0.4.116",
+      "date": "2026-08-15",
+      "title": "TRON Java 8",
+      "networks": ["tron"],
+      "notes": [
+        "ensureJava8 checks java -version. Missing or wrong Java → apt openjdk-8-jre-headless, else Temurin 8.",
+        "Unit ExecStart is pinned to Java 8 so a host default of 17 does not crash GreatVoyage."
+      ]
+    },
+    {
+      "version": "0.4.115",
+      "date": "2026-08-13",
+      "title": "Sepolia L1 RPC for Orbit / OP-stack",
+      "networks": ["ethereum", "robinhood", "optimism", "base", "arb"],
+      "notes": [
+        "Parent-chain default is publicnode ethereum-sepolia. Mainnet L1 stays on the host ethereum port.",
+        "Override with RPCNODE_L1_RPC_URL."
+      ]
+    },
+    {
+      "version": "0.4.112",
+      "date": "2026-08-13",
+      "title": "Optimism sepolia + Bitcoin Core 28.1",
+      "networks": ["optimism", "bitcoin"],
+      "notes": [
+        "Optimism sepolia provision (was a mainnet-only stub). Bitcoin Core default 28.1 for testnet4."
+      ]
+    },
+    {
+      "version": "0.4.111",
+      "date": "2026-08-13",
+      "title": "Base sepolia JWT, BSC cache, Arb sepolia",
+      "networks": ["base", "bsc", "arb"],
+      "notes": [
+        "Write JWT before waiting on authrpc. Sepolia parent-chain uses sepolia L1.",
+        "BSC --cache capped to ~25% RAM. Arb sepolia provision added."
+      ]
+    },
+    {
+      "version": "0.4.110",
+      "date": "2026-08-13",
+      "title": "Host OS deps on provision and start",
+      "notes": [
+        "The agent apt-installs what the network needs. TRON Java 8 is no longer a manual SSH step."
+      ]
+    }
+  ]
+}

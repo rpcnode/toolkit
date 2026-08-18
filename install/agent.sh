@@ -5,9 +5,19 @@
 #
 set -euo pipefail
 
-AGENT_DOWNLOAD_URL="${AGENT_DOWNLOAD_URL:-https://toolkit.rpcnode.dev/install/agent.sh}"
-INSTALL_BASE_URL="${INSTALL_BASE_URL:-https://toolkit.rpcnode.dev/install}"
-BINARIES_BASE_URL="${BINARIES_BASE_URL:-${INSTALL_BASE_URL}/binaries}"
+# Install CDN is toolkit.rpcnode.dev. Old units/env still have rpcnode.dev (404).
+canon_toolkit_cdn() {
+  local u="$1"
+  case "$u" in
+    https://www.rpcnode.dev/*|http://www.rpcnode.dev/*|https://rpcnode.dev/*|http://rpcnode.dev/*)
+      echo "https://toolkit.rpcnode.dev/${u#*rpcnode.dev/}"
+      ;;
+    *) echo "$u" ;;
+  esac
+}
+AGENT_DOWNLOAD_URL="$(canon_toolkit_cdn "${AGENT_DOWNLOAD_URL:-https://toolkit.rpcnode.dev/install/agent.sh}")"
+INSTALL_BASE_URL="$(canon_toolkit_cdn "${INSTALL_BASE_URL:-https://toolkit.rpcnode.dev/install}")"
+BINARIES_BASE_URL="$(canon_toolkit_cdn "${BINARIES_BASE_URL:-${INSTALL_BASE_URL}/binaries}")"
 # Unpacked tarball (agent.sh + binaries/ + watchdog). Skips the download.
 LOCAL_ARTIFACT_DIR="${LOCAL_ARTIFACT_DIR:-}"
 INSTALL_ROOT="${INSTALL_ROOT:-/opt/rpcnode}"

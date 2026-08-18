@@ -24,26 +24,44 @@ var agentUpdateMu sync.Mutex
 
 func clientsBaseURL() string {
 	if u := strings.TrimSpace(os.Getenv("CLIENTS_BASE_URL")); u != "" {
-		return strings.TrimRight(u, "/")
+		return strings.TrimRight(canonToolkitCDNHost(u), "/")
 	}
 	return defaultClientsBase
 }
 
-func agentInstallBaseURL() string {
-	if u := strings.TrimSpace(os.Getenv("INSTALL_BASE_URL")); u != "" {
-		return strings.TrimRight(u, "/")
-	}
-	if u := strings.TrimSpace(os.Getenv("AGENT_DOWNLOAD_URL")); u != "" {
-		u = strings.TrimRight(u, "/")
-		if strings.HasSuffix(u, "/agent.sh") {
-			return strings.TrimSuffix(u, "/agent.sh")
-		}
-		if strings.HasSuffix(u, "/install/agent.sh") {
-			return strings.TrimSuffix(u, "/agent.sh")
-		}
+// canonToolkitCDNHost — install/clients live on toolkit.rpcnode.dev.
+// Old binaries and unit env still point at rpcnode.dev (connect) → 404.
+func canonToolkitCDNHost(u string) string {
+	u = strings.TrimSpace(u)
+	if u == "" {
 		return u
 	}
-	return defaultAgentInstallBase
+	for _, old := range []string{
+		"https://www.rpcnode.dev/",
+		"http://www.rpcnode.dev/",
+		"https://rpcnode.dev/",
+		"http://rpcnode.dev/",
+	} {
+		if strings.HasPrefix(u, old) {
+			return "https://toolkit.rpcnode.dev/" + strings.TrimPrefix(u, old)
+		}
+	}
+	return u
+}
+
+func agentInstallBaseURL() string {
+	var u string
+	if v := strings.TrimSpace(os.Getenv("INSTALL_BASE_URL")); v != "" {
+		u = strings.TrimRight(v, "/")
+	} else if v := strings.TrimSpace(os.Getenv("AGENT_DOWNLOAD_URL")); v != "" {
+		u = strings.TrimRight(v, "/")
+		if strings.HasSuffix(u, "/agent.sh") {
+			u = strings.TrimSuffix(u, "/agent.sh")
+		}
+	} else {
+		u = defaultAgentInstallBase
+	}
+	return strings.TrimRight(canonToolkitCDNHost(u), "/")
 }
 
 func agentBinDir() string {

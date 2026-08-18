@@ -1028,6 +1028,12 @@ func (s *Server) proxyRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = r.Body.Close()
 
+	if networkIsTonCfg() {
+		if s.serveTonVersionRPC(w, body, start) {
+			return
+		}
+	}
+
 	upPath := r.URL.RequestURI()
 	// Hyperliquid EVM JSON-RPC lives at /evm; rewrite bare / so eth_chainId clients work.
 	if networkIsHyperliquid(s.cfg) {
@@ -1037,6 +1043,13 @@ func (s *Server) proxyRequest(w http.ResponseWriter, r *http.Request) {
 			if q := r.URL.RawQuery; q != "" {
 				upPath += "?" + q
 			}
+		}
+	}
+	// TON THA lives at /api/v2/jsonRPC — rewrite bare POST / so admin GetVersion
+	// and getMasterchainInfo work on the public Go RPC base URL.
+	if networkIsTonCfg() {
+		if next := rewriteTonUpstreamPath(r.Method, r.URL.Path, r.URL.RawQuery); next != "" {
+			upPath = next
 		}
 	}
 	// Avalanche product RPC = C-Chain eth JSON-RPC at /ext/bc/C/rpc.
