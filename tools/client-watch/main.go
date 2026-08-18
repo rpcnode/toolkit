@@ -38,7 +38,13 @@ func main() {
 	apiToken := flag.String("api-token", env("CLIENT_WATCH_TOKEN", ""), "optional Bearer for /api/v1/*")
 	once := flag.Bool("once", false, "print pin vs latest for every catalog row and exit")
 	check := flag.Bool("check", false, "one poll: download new into _updates and exit")
+	showVer := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVer {
+		fmt.Printf("rpcnode-client-watch version=%s api=%d\n", watchVersion, watchAPI)
+		return
+	}
 
 	if strings.TrimSpace(*catalog) == "" {
 		log.Fatal("укажи -catalog или CLIENT_WATCH_CATALOG")
@@ -100,6 +106,8 @@ func main() {
 		_ = w.state.setTelegram(tok, chat)
 	}
 
+	log.Printf("демон version=%s api=%d listen=%s catalog=%s clients=%s", watchVersion, watchAPI, w.listen, w.catalog, w.clients)
+	log.Printf("это HTTP-сервер, он не печатает таблицу. таблица: ./rpcnode-client-watch -once  |  одна проверка: -check  |  обновить юнит: ./update.sh")
 	go w.loop()
 	if err := w.serveHTTP(); err != nil {
 		log.Fatal(err)

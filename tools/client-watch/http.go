@@ -11,7 +11,12 @@ import (
 func (w *watcher) serveHTTP() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(rw http.ResponseWriter, _ *http.Request) {
-		writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "service": "client-watch"})
+		writeJSON(rw, http.StatusOK, map[string]any{
+			"ok":      true,
+			"service": watchService,
+			"version": watchVersion,
+			"api":     watchAPI,
+		})
 	})
 	mux.HandleFunc("/api/v1/status", w.withAuth(w.handleStatus))
 	mux.HandleFunc("/api/v1/telegram", w.withAuth(w.handleTelegram))
@@ -50,6 +55,9 @@ func (w *watcher) handleStatus(rw http.ResponseWriter, r *http.Request) {
 	tgTok, tgChat := telegramCreds(st)
 	writeJSON(rw, http.StatusOK, map[string]any{
 		"ok":          true,
+		"service":     watchService,
+		"version":     watchVersion,
+		"api":         watchAPI,
 		"telegram":    tgTok != "" && tgChat != "",
 		"chat":        tgChat,
 		"last_check":  st.LastCheck,
@@ -101,7 +109,7 @@ func (w *watcher) handleVersions(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "entries": rows})
+	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "api": watchAPI, "version": watchVersion, "entries": rows})
 }
 
 func (w *watcher) handleCheck(rw http.ResponseWriter, r *http.Request) {

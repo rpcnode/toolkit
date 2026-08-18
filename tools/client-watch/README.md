@@ -2,15 +2,32 @@
 
 Раз в час: GitHub **или HEAD CDN-бинаря** vs `catalog.json`. Версия — с GitHub/HEAD, папка на диске для этого не нужна. Если есть что качать и `_updates/<сеть>/<env>/<версия>/` ещё нет — кладёт туда, старые папки не удаляет. Нет linux-файлов (nitro/docker) — только версия + Telegram, пустую папку не создаёт. Каталог не меняет.
 
+`GET /healthz` (без токена) отдаёт бинарь и контракт API. FetchClients требует **api ≥ 2** (`/api/v1/clients` + `/files/`). Старый бинарь: `{"ok":true,"service":"client-watch"}` без `api` — приложение скажет «вотчер старый».
+
+```json
+{"ok":true,"service":"client-watch","version":"0.2.0","api":2}
+```
+
+```bash
+./rpcnode-client-watch -version
+curl -fsS http://127.0.0.1:8094/healthz
+```
+
+`go build` сам по себе юнит не меняет. На сервере один шаг — сборка + `/usr/local/bin` + restart + проверка `healthz`:
+
+```bash
+cd /path/to/toolkit/tools/client-watch
+./update.sh
+```
+
 ## systemd (API + час)
 
 FetchClients ходит сюда (`:8094`). Cron `-check` не нужен — юнит сам крутит loop.
 
 ```bash
-cd /path/to/toolkit/tools/client-watch && go build -o rpcnode-client-watch .
-sudo ./install-systemd.sh
+cd /path/to/toolkit/tools/client-watch
+./update.sh
 # журнал: journalctl -u rpcnode-client-watch -f
-# healthz: curl -fsS http://127.0.0.1:8094/healthz
 ```
 
 Юнит: `rpcnode-client-watch.service` → `/usr/local/bin/rpcnode-client-watch`, env `/etc/rpcnode/client-watch.env` (копия `client-watch.env`). Каталог не в `/opt/rpcnode/toolkit` — скрипт пишет drop-in с реальным путём. Файрвол не трогает.

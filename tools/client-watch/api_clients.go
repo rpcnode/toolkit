@@ -43,7 +43,7 @@ func (w *watcher) handleClients(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, http.StatusInternalServerError, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "entries": packs})
+	writeJSON(rw, http.StatusOK, map[string]any{"ok": true, "api": watchAPI, "version": watchVersion, "entries": packs})
 }
 
 func (w *watcher) handleFiles(rw http.ResponseWriter, r *http.Request) {

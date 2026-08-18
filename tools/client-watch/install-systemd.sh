@@ -16,7 +16,7 @@ unit_src="$here/rpcnode-client-watch.service"
 
 if [[ ! -x $bin_src ]]; then
   echo "нет бинарника $bin_src" >&2
-  echo "собери: cd $here && go build -o rpcnode-client-watch ." >&2
+  echo "собери и поставь одним шагом: $here/update.sh" >&2
   exit 1
 fi
 if [[ ! -f $env_src ]]; then
@@ -42,7 +42,9 @@ install -d -m 0755 "$drop"
 chmod 0644 "$drop/paths.conf"
 
 systemctl daemon-reload
-systemctl enable --now rpcnode-client-watch.service
+systemctl enable rpcnode-client-watch.service
+# enable --now does not restart an already-running unit — old binary would keep :8094.
+systemctl restart rpcnode-client-watch.service
 echo "ok  $(systemctl is-active rpcnode-client-watch)"
 echo "API  http://<этот-хост>:8094"
 echo "лог  journalctl -u rpcnode-client-watch -f"
