@@ -242,26 +242,49 @@ export function nodeRestartAllowed(
   }
   if (Number(workload?.agent_port || 0) <= 0) return false
   const p = (phase || '').toLowerCase()
-  if (p === 'restarting' || p === 'updating' || p === 'stopping') return false
+  if (p === 'restarting' || p === 'updating' || p === 'stopping' || p === 'starting') return false
   return true
 }
 
-/** Client update only after Stop — apply replaces the binary, Restart starts it. */
+/** Version is clickable except during in-flight update / restart / stop. */
+export function clientUpdateClickable(phase?: string | null): boolean {
+  const p = (phase || '').toLowerCase()
+  return p !== 'updating' && p !== 'restarting' && p !== 'stopping' && p !== 'starting'
+}
+
+/** Apply only after Stop. Click still works — UI tells the operator to stop first. */
 export function clientUpdateAllowed(phase?: string | null): boolean {
   return (phase || '').toLowerCase() === 'stopped'
 }
 
-/** Soft-stop the chain unit. Restart afterwards to start it again. */
+/** Soft-stop the chain unit. Start afterwards to bring it up. */
 export function nodeStopAllowed(
   workload?: { status?: string; agent_port?: number } | null,
   phase?: string | null,
   nrPhase?: string | null,
 ): boolean {
   if (!nodeRestartAllowed(workload, phase)) return false
+  if (nodeIsStopped(phase, nrPhase)) return false
   const p = (phase || '').toLowerCase()
   const nr = (nrPhase || '').toLowerCase()
-  if (p === 'stopped' || p === 'stopping' || nr === 'stopped' || nr === 'stopping') return false
+  if (p === 'stopping' || nr === 'stopping') return false
   return true
+}
+
+export function nodeIsStopped(phase?: string | null, nrPhase?: string | null): boolean {
+  const p = (phase || '').toLowerCase()
+  const nr = (nrPhase || '').toLowerCase()
+  return p === 'stopped' || nr === 'stopped'
+}
+
+/** Start the chain unit after Stop / client update. */
+export function nodeStartAllowed(
+  workload?: { status?: string; agent_port?: number } | null,
+  phase?: string | null,
+  nrPhase?: string | null,
+): boolean {
+  if (!nodeRestartAllowed(workload, phase)) return false
+  return nodeIsStopped(phase, nrPhase)
 }
 
 /** True when ops UI (not install wizard) should take over — Healthy / connect.ready. */
@@ -650,7 +673,7 @@ export function deriveNodeLifecycle(
     return {
       phase: 'updating',
       label: 'Updating client',
-      detail: cu?.detail || 'Public RPC sleeping (503) during client update',
+      detail: cu?.detail || 'Replacing client',
       color: 'yellow',
       busy: true,
       progress: typeof cu?.pct === 'number' ? cu.pct : undefined,
@@ -672,7 +695,7 @@ export function deriveNodeLifecycle(
     return {
       phase: 'stopped',
       label: 'Stopped',
-      detail: nr?.detail || 'Fullnode stopped — Restart to start',
+      detail: nr?.detail || 'Fullnode stopped — Start to start',
       color: 'gray',
       busy: false,
       height: height == null ? null : Number(height),
@@ -681,7 +704,7 @@ export function deriveNodeLifecycle(
   if (nrPhase === 'restarting' || nrPhase === 'starting') {
     return {
       phase: nrPhase === 'starting' ? 'starting' : 'restarting',
-      label: nrPhase === 'starting' ? 'Starting after restart' : 'Restarting node',
+      label: nrPhase === 'starting' ? 'Starting node' : 'Restarting node',
       detail: nr?.detail || 'Public RPC sleeping (503) during restart',
       color: 'yellow',
       busy: true,

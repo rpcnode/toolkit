@@ -16,7 +16,7 @@ import (
 )
 
 // ClientUpdateController — chain client (java-tron / geth / Agave / …) updates.
-// Apply: sleep RPC → soft-stop → replace artifact. Does not start — Restart to start.
+// Apply: node must already be Stopped. Replace artifact (no stop/start). Start afterwards.
 type ClientUpdateController struct {
 	cfg   Config
 	ctrl  *ControlState
@@ -84,7 +84,8 @@ func (c *ClientUpdateController) channelBase() string {
 	if u := strings.TrimSpace(os.Getenv("RPCNODE_CLIENT_CHANNEL_URL")); u != "" {
 		return strings.TrimRight(u, "/")
 	}
-	return fmt.Sprintf("%s/clients/%s/%s", clientInstallBaseURL(), net, env)
+	root := clientCatalogRoots()[0]
+	return fmt.Sprintf("%s/clients/%s/%s", root, net, env)
 }
 
 func (c *ClientUpdateController) load() map[string]any {
@@ -325,7 +326,8 @@ func (c *ClientUpdateController) Apply() (map[string]any, error) {
 	c.busy = true
 	st := c.load()
 	st["phase"] = "updating"
-	st["detail"] = "starting client update"
+	st["step"] = "check"
+	st["detail"] = "Checking catalog"
 	st["pct"] = 5
 	st["last_error"] = ""
 	c.save(st)
@@ -351,85 +353,101 @@ func (c *ClientUpdateController) runApply() {
 		}
 	}()
 
-	set := func(phase, detail string, pct float64, errMsg string) {
-		level := "INFO"
-		if phase == "error" || strings.TrimSpace(errMsg) != "" {
-			level = "ERROR"
+	var lastLogKey string
+	set := func(phase, step, detail string, pct float64, errMsg string) {
+		key := phase + "|" + step + "|" + errMsg
+		if key != lastLogKey {
+			lastLogKey = key
+			level := "INFO"
+			if phase == "error" || strings.TrimSpace(errMsg) != "" {
+				level = "ERROR"
+			}
+			msg := detail
+			if strings.TrimSpace(errMsg) != "" {
+				msg = detail + " — " + errMsg
+			}
+			hostLogf(level, "system-agent", "client_update",
+				"%s/%s phase=%s step=%s pct=%.0f %s", c.cfg.Network, c.cfg.Env, phase, step, pct, msg)
 		}
-		msg := detail
-		if strings.TrimSpace(errMsg) != "" {
-			msg = detail + " — " + errMsg
-		}
-		hostLogf(level, "system-agent", "client_update",
-			"%s/%s phase=%s pct=%.0f %s", c.cfg.Network, c.cfg.Env, phase, pct, msg)
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		st := c.load()
 		st["phase"] = phase
+		st["step"] = step
 		st["detail"] = detail
 		st["pct"] = pct
 		if errMsg != "" {
 			st["last_error"] = errMsg
+		} else if phase != "error" {
+			st["last_error"] = ""
 		}
 		c.save(st)
 	}
 
-	hostLogf("INFO", "system-agent", "client_update",
-		"%s/%s fetching catalog", c.cfg.Network, c.cfg.Env)
+	set("updating", "check", "Checking catalog", 8, "")
 	latest, man, _, err := c.fetchChannel()
 	if err != nil {
-		set("error", "channel fetch failed", 0, err.Error())
+		set("error", "error", "Catalog check failed", 0, err.Error())
 		return
 	}
 	kind := guessArtifactKind(man.ArtifactKind, man.urlForHost())
 	if strings.TrimSpace(man.urlForHost()) == "" || kind == "apt" || kind == "docker_extract" {
-		set("error", "no downloadable client artifact for "+c.cfg.Network+"/"+c.cfg.Env+" (catalog is "+kind+" / empty url)", 0, "no artifact_url")
+		set("error", "error", "No downloadable client artifact for "+c.cfg.Network+"/"+c.cfg.Env, 0, "no artifact")
 		return
 	}
 	latest = normalizeClientVersion(latest)
-	hostLogf("INFO", "system-agent", "client_update",
-		"%s/%s catalog version=%s kind=%s", c.cfg.Network, c.cfg.Env, latest, kind)
 
 	units := cfgNodeUnits(c.cfg)
 	label := strings.Join(units, ", ")
 
 	if live := runningNodeUnits(c.cfg); len(live) > 0 {
-		set("error", "stop the node first (Stop), then update", 0, strings.Join(live, ", "))
+		set("error", "error", "Stop the node first, then update", 0, strings.Join(live, ", "))
 		return
 	}
 
 	if c.ctrl != nil {
-		_ = c.ctrl.SetMaintenanceEx(c.cfg, true, "client update "+latest+" — RPC paused", "client_update")
+		_ = c.ctrl.SetMaintenanceEx(c.cfg, true, "client update "+latest, "client_update")
 	}
-	set("updating", "node already stopped — installing "+latest, 40, "")
-
-	if err := c.installArtifact(man); err != nil {
-		set("error", "install failed: "+err.Error(), 45, err.Error())
+	set("updating", "download", "Downloading client", 20, "")
+	onProg := func(got, total int64) {
+		pct := 35.0
+		if total > 0 {
+			pct = 20 + 65*float64(got)/float64(total)
+			if pct > 85 {
+				pct = 85
+			}
+		}
+		set("updating", "download", "Downloading client", pct, "")
+	}
+	if err := c.installArtifact(man, onProg); err != nil {
+		set("error", "error", "Install failed", 45, err.Error())
 		if c.nodes != nil {
 			c.nodes.markStopped("stopped after client update install error")
 		}
 		return
 	}
+	set("updating", "install", "Installing client", 90, "")
 	if man.NeedsConfPatch {
-		set("updating", "patching node conf for new client", 60, "")
 		if err := c.patchTronConfIfNeeded(); err != nil {
 			log.Printf("client_update conf patch: %v", err)
 		}
 	}
 
-	set("idle", "updated to "+latest+" — stopped; Restart to start", 100, "")
+	done := "Updated to " + latest + " — Start to run the new client"
+	set("idle", "done", done, 100, "")
 	c.mu.Lock()
 	st := c.load()
 	st["local"] = latest
 	st["latest"] = latest
 	st["update_available"] = false
 	st["phase"] = "idle"
-	st["detail"] = "updated to " + latest + " — stopped; Restart to start"
+	st["step"] = "done"
+	st["detail"] = done
 	st["pct"] = 100
 	c.save(st)
 	c.mu.Unlock()
 	if c.nodes != nil {
-		c.nodes.markStopped("updated to " + latest + " — Restart to start")
+		c.nodes.markStopped(done)
 	}
 	hostLogf("INFO", "system-agent", "client_update",
 		"%s/%s done → %s units=%s left stopped", c.cfg.Network, c.cfg.Env, latest, label)
@@ -459,19 +477,19 @@ func waitUnitStopped(unit string, timeout time.Duration) error {
 	return fmt.Errorf("still %q after %s", strings.TrimSpace(string(out)), timeout)
 }
 
-func (c *ClientUpdateController) installArtifact(man clientManifest) error {
+func (c *ClientUpdateController) installArtifact(man clientManifest, onProg func(got, total int64)) error {
 	url := man.urlForHost()
 	kind := guessArtifactKind(man.ArtifactKind, url)
 	switch kind {
 	case "apt", "docker_extract":
 		return fmt.Errorf("client is %s-managed — no artifact to replace", kind)
 	case "jar":
-		return c.downloadVerified(url, c.clientJarPath(), 0644, man.shaForHost())
+		return c.downloadVerified(url, c.clientJarPath(), 0644, man.shaForHost(), onProg)
 	case "tarball", "zip":
-		return c.installFromArchive(man)
+		return c.installFromArchive(man, onProg)
 	default:
 		dest := c.clientBinPath()
-		if err := c.downloadVerified(url, dest, 0755, man.shaForHost()); err != nil {
+		if err := c.downloadVerified(url, dest, 0755, man.shaForHost(), onProg); err != nil {
 			return err
 		}
 		c.refreshClientLinks(dest)

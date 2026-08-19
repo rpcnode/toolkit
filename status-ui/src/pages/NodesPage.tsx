@@ -23,6 +23,7 @@ import {
   IconArrowRight,
   IconAlertTriangle,
   IconTrash,
+  IconPlayerPlay,
   IconPlayerStop,
   IconRefresh,
   IconFileText,
@@ -31,7 +32,14 @@ import {
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, type Workload, type RegistryNode, type RPCProxyStats, type NodeNetStats } from '../api'
+import {
+  api,
+  type Workload,
+  type RegistryNode,
+  type RPCProxyStats,
+  type NodeNetStats,
+  type ClientUpdateInfo,
+} from '../api'
 import { fmtMbps } from '../lib/format'
 import { maskHostname } from '../lib/maskHost'
 import type { StatusPayload } from '../types'
@@ -58,10 +66,13 @@ import {
   splitStepHeadline,
   isForeignTronDiskError,
   clientUpdateAllowed,
+  clientUpdateClickable,
   nodeRestartAllowed,
+  nodeStartAllowed,
   nodeStopAllowed,
   type NodeLifecycle,
 } from '../lib/nodeLifecycle'
+import { ClientUpdateModal } from '../components/ClientUpdateModal'
 import { formatClientVersion } from '../lib/format'
 import { isNoSnapshotNetwork } from '../lib/network'
 import { NETWORK_OPTIONS, networkLabel } from '../lib/networksCatalog'
@@ -1185,10 +1196,14 @@ function NodeCardView({
   const clientColor = clientOutdated ? 'orange' : clientCurrent ? 'teal' : 'dimmed'
   const [clientBusy, setClientBusy] = useState(false)
   const [clientOpen, setClientOpen] = useState(false)
+  const [clientStarted, setClientStarted] = useState(false)
+  const [clientInfo, setClientInfo] = useState<ClientUpdateInfo | null>(null)
   const [restartBusy, setRestartBusy] = useState(false)
   const [restartOpen, setRestartOpen] = useState(false)
   const [stopBusy, setStopBusy] = useState(false)
   const [stopOpen, setStopOpen] = useState(false)
+  const [startBusy, setStartBusy] = useState(false)
+  const [startOpen, setStartOpen] = useState(false)
   const [logsOpen, setLogsOpen] = useState(false)
   const [logsStatus, setLogsStatus] = useState<StatusPayload | null>(null)
   const [logsLoading, setLogsLoading] = useState(false)
@@ -1212,18 +1227,34 @@ function NodeCardView({
     }
   }
 
+  useEffect(() => {
+    if (!clientOpen) return
+    let stop = false
+    const tick = async () => {
+      try {
+        const res = await api.clientInfo({ node: id })
+        if (!stop) setClientInfo(res.client_update || null)
+      } catch {
+        /* keep last */
+      }
+    }
+    void tick()
+    const t = window.setInterval(() => void tick(), 1500)
+    return () => {
+      stop = true
+      window.clearInterval(t)
+    }
+  }, [clientOpen, id])
+
   async function confirmClientUpdate() {
     setClientBusy(true)
+    setClientStarted(true)
     try {
       await api.clientCheck({ node: id })
       const res = await api.clientUpdate({ node: id })
       if (!res.ok) throw new Error(res.error || 'client update failed')
-      notifications.show({
-        color: 'teal',
-        message: res.client_update?.detail || 'Client update started (RPC sleep)',
-      })
-      setClientOpen(false)
     } catch (err) {
+      setClientStarted(false)
       notifications.show({ color: 'red', message: String((err as Error).message || err) })
     } finally {
       setClientBusy(false)
@@ -1261,6 +1292,23 @@ function NodeCardView({
       notifications.show({ color: 'red', message: String((err as Error).message || err) })
     } finally {
       setRestartBusy(false)
+    }
+  }
+
+  async function confirmNodeStart() {
+    setStartBusy(true)
+    try {
+      const res = await api.nodeStart({ node: id })
+      if (!res.ok) throw new Error(res.error || 'start failed')
+      notifications.show({
+        color: 'teal',
+        message: res.node_restart?.detail || 'Node start accepted',
+      })
+      setStartOpen(false)
+    } catch (err) {
+      notifications.show({ color: 'red', message: String((err as Error).message || err) })
+    } finally {
+      setStartBusy(false)
     }
   }
 
@@ -1325,26 +1373,43 @@ function NodeCardView({
           >
             Restart
           </Button>
-          <Button
-            size="compact-xs"
-            variant="subtle"
-            color="gray"
-            leftSection={<IconPlayerStop size={12} />}
-            loading={stopBusy}
-            disabled={
-              isRemoving ||
-              !nodeStopAllowed(
-                { status: model.status, agent_port: model.agentPort },
-                phase,
-              )
-            }
-            onClick={(e) => {
-              e.stopPropagation()
-              setStopOpen(true)
-            }}
-          >
-            Stop
-          </Button>
+          {nodeStartAllowed({ status: model.status, agent_port: model.agentPort }, phase) ? (
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              color="teal"
+              leftSection={<IconPlayerPlay size={12} />}
+              loading={startBusy}
+              disabled={isRemoving || startBusy}
+              onClick={(e) => {
+                e.stopPropagation()
+                setStartOpen(true)
+              }}
+            >
+              Start
+            </Button>
+          ) : (
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              color="gray"
+              leftSection={<IconPlayerStop size={12} />}
+              loading={stopBusy}
+              disabled={
+                isRemoving ||
+                !nodeStopAllowed(
+                  { status: model.status, agent_port: model.agentPort },
+                  phase,
+                )
+              }
+              onClick={(e) => {
+                e.stopPropagation()
+                setStopOpen(true)
+              }}
+            >
+              Stop
+            </Button>
+          )}
           <Button
             size="compact-xs"
             variant="subtle"
@@ -1454,13 +1519,14 @@ function NodeCardView({
                 lineClamp={1}
                 title={clientLabel}
                 style={
-                  (clientKnown || phase === 'stopped') && clientUpdateAllowed(phase)
+                  clientKnown && clientUpdateClickable(phase)
                     ? { cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3 }
                     : undefined
                 }
                 onClick={(e) => {
-                  if ((!clientKnown && phase !== 'stopped') || !clientUpdateAllowed(phase)) return
+                  if (!clientKnown || !clientUpdateClickable(phase)) return
                   e.stopPropagation()
+                  setClientStarted(false)
                   setClientOpen(true)
                 }}
               >
@@ -1473,11 +1539,12 @@ function NodeCardView({
                 variant="light"
                 size="sm"
                 style={{
-                  cursor: clientUpdateAllowed(phase) ? 'pointer' : 'default',
+                  cursor: clientUpdateClickable(phase) ? 'pointer' : 'default',
                 }}
                 onClick={(e) => {
-                  if (!clientUpdateAllowed(phase)) return
+                  if (!clientUpdateClickable(phase)) return
                   e.stopPropagation()
+                  setClientStarted(false)
                   setClientOpen(true)
                 }}
               >
@@ -1489,10 +1556,11 @@ function NodeCardView({
                 color="orange"
                 variant="light"
                 size="sm"
-                style={{ cursor: clientUpdateAllowed(phase) ? 'pointer' : 'default' }}
+                style={{ cursor: clientUpdateClickable(phase) ? 'pointer' : 'default' }}
                 onClick={(e) => {
-                  if (!clientUpdateAllowed(phase)) return
+                  if (!clientUpdateClickable(phase)) return
                   e.stopPropagation()
+                  setClientStarted(false)
                   setClientOpen(true)
                 }}
               >
@@ -1502,7 +1570,7 @@ function NodeCardView({
           </Group>
           {phase === 'updating' ? (
             <Text size="xs" c="yellow.4" mt={4}>
-              Updating… public RPC sleeping (503)
+              Updating client…
             </Text>
           ) : null}
           {phase === 'restarting' ? (
@@ -1515,9 +1583,14 @@ function NodeCardView({
               Stopping… public RPC sleeping (503)
             </Text>
           ) : null}
+          {phase === 'starting' ? (
+            <Text size="xs" c="yellow.4" mt={4}>
+              Starting… public RPC sleeping (503)
+            </Text>
+          ) : null}
           {phase === 'stopped' ? (
             <Text size="xs" c="dimmed" mt={4}>
-              Stopped — Restart to start
+              Stopped — Start to start
             </Text>
           ) : null}
         </div>
@@ -1653,7 +1726,7 @@ function NodeCardView({
           <Text span fw={700}>
             {network}/{env}
           </Text>
-          . Same graceful stop as Restart. Public Go RPC sleeps (503) until you Restart.
+          . Same graceful stop as Restart. Public Go RPC sleeps (503) until you Start.
         </Text>
         <Alert color="yellow" variant="light" icon={<IconAlertTriangle size={16} />}>
           The unit stays down. Chain data is not wiped.
@@ -1675,55 +1748,57 @@ function NodeCardView({
     </Modal>
 
     <Modal
-      opened={clientOpen}
-      onClose={() => (!clientBusy ? setClientOpen(false) : undefined)}
-      title={clientOutdated ? 'Update client?' : 'Re-apply latest client?'}
+      opened={startOpen}
+      onClose={() => (!startBusy ? setStartOpen(false) : undefined)}
+      title="Start fullnode?"
       centered
       onClick={(e) => e.stopPropagation()}
     >
       <Stack gap="md">
         <Text size="sm">
-          {clientOutdated ? 'Update' : 'Re-download and re-install'}{' '}
+          Start{' '}
           <Text span fw={700}>
             {network}/{env}
-          </Text>{' '}
-          client{' '}
-          <Text span className="mono" fw={600}>
-            {clientLabel}
           </Text>
-          {clientLatestLabel ? (
-            <>
-              {' '}
-              →{' '}
-              <Text span className="mono" fw={600} c="teal">
-                {clientLatestLabel}
-              </Text>
-            </>
-          ) : null}
-          .
+          . Public Go RPC wakes after the node unit is up.
         </Text>
-        {!clientOutdated ? (
-          <Text size="sm" c="dimmed">
-            Already on latest — re-install only. Node stays stopped until Restart.
-          </Text>
-        ) : null}
-        <Alert color="orange" variant="light" icon={<IconAlertTriangle size={16} />}>
-          Node is stopped. Replace the client only — then Restart to start.
+        <Alert color="yellow" variant="light" icon={<IconAlertTriangle size={16} />}>
+          Chain data is not wiped.
         </Alert>
         <Group justify="flex-end">
-          <Button variant="default" disabled={clientBusy} onClick={() => setClientOpen(false)}>
+          <Button variant="default" disabled={startBusy} onClick={() => setStartOpen(false)}>
             Cancel
           </Button>
           <Button
-            color="orange"
-            loading={clientBusy}
-            onClick={() => void confirmClientUpdate()}
+            color="teal"
+            loading={startBusy}
+            leftSection={<IconPlayerPlay size={14} />}
+            onClick={() => void confirmNodeStart()}
           >
-            {clientOutdated ? 'Update client' : 'Re-apply latest'}
+            Start fullnode
           </Button>
         </Group>
       </Stack>
     </Modal>
+
+    <ClientUpdateModal
+      opened={clientOpen}
+      onClose={() => setClientOpen(false)}
+      network={network}
+      env={env}
+      current={clientVersion}
+      latest={clientLatest}
+      updateAvailable={clientOutdated}
+      allowed={clientUpdateAllowed(phase)}
+      info={clientInfo}
+      started={clientStarted}
+      requestBusy={clientBusy}
+      onStop={() => {
+        setClientOpen(false)
+        setStopOpen(true)
+      }}
+      onStart={() => void confirmClientUpdate()}
+    />
     </div>
   )
 }

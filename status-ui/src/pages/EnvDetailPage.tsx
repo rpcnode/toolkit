@@ -18,6 +18,7 @@ import {
   IconArrowLeft,
   IconCopy,
   IconFileText,
+  IconPlayerPlay,
   IconPlayerStop,
   IconRefresh,
   IconServer,
@@ -59,13 +60,16 @@ import {
   removeSubmitLabel,
   type RemoveNodeMode,
 } from '../components/RemoveNodeModePicker'
+import { ClientUpdateModal } from '../components/ClientUpdateModal'
 import { formatClientVersion } from '../lib/format'
 import { buildHeaderChips } from '../lib/labels'
 import { NodeLifecycleDates } from '../components/NodeLifecycleDates'
 import {
   deriveNodeLifecycle,
   clientUpdateAllowed,
+  clientUpdateClickable,
   nodeRestartAllowed,
+  nodeStartAllowed,
   nodeStopAllowed,
   resolveCurrentStep,
 } from '../lib/nodeLifecycle'
@@ -193,9 +197,12 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
   const [restartBusy, setRestartBusy] = useState(false)
   const [stopOpen, setStopOpen] = useState(false)
   const [stopBusy, setStopBusy] = useState(false)
+  const [startOpen, setStartOpen] = useState(false)
+  const [startBusy, setStartBusy] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
   const [clientOpen, setClientOpen] = useState(false)
   const [clientBusy, setClientBusy] = useState(false)
+  const [clientStarted, setClientStarted] = useState(false)
   const [logsOpen, setLogsOpen] = useState(false)
   // Never default network=tron — that briefly forwarded TRON disk/snapshot_error
   // onto BSC/bitcoin leaf agents before workload loaded.
@@ -268,20 +275,36 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
     }
   }
 
+  async function confirmNodeStart() {
+    if (!workloadId) return
+    setStartBusy(true)
+    try {
+      const res = await api.nodeStart({ node: workloadId })
+      if (!res.ok) throw new Error(res.error || 'start failed')
+      notifications.show({
+        color: 'teal',
+        message: res.node_restart?.detail || 'Node start accepted',
+      })
+      setStartOpen(false)
+      void tick()
+    } catch (err) {
+      notifications.show({ color: 'red', message: String((err as Error).message || err) })
+    } finally {
+      setStartBusy(false)
+    }
+  }
+
   async function confirmClientUpdate() {
     if (!workloadId) return
     setClientBusy(true)
+    setClientStarted(true)
     try {
       await api.clientCheck({ node: workloadId })
       const res = await api.clientUpdate({ node: workloadId })
       if (!res.ok) throw new Error(res.error || 'client update failed')
-      notifications.show({
-        color: 'teal',
-        message: res.client_update?.detail || 'Client update started (RPC sleep)',
-      })
-      setClientOpen(false)
       void tick()
     } catch (err) {
+      setClientStarted(false)
       notifications.show({ color: 'red', message: String((err as Error).message || err) })
     } finally {
       setClientBusy(false)
@@ -520,9 +543,14 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
               (!!workload?.client_update_available ||
                 !!status?.client_update?.update_available)
             const color = !ver ? 'gray.3' : outdated ? 'orange.4' : 'teal.4'
-            const canUpdate =
-              clientUpdateAllowed(lifecycle.phase) && (!!ver || !!latest)
-            const openUpdate = canUpdate ? () => setClientOpen(true) : undefined
+            const canClick =
+              clientUpdateClickable(lifecycle.phase) && (!!ver || !!latest)
+            const openUpdate = canClick
+              ? () => {
+                  setClientStarted(false)
+                  setClientOpen(true)
+                }
+              : undefined
             return (
               <>
                 <Text
@@ -531,16 +559,20 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
                   c={color}
                   className="mono"
                   style={
-                    canUpdate
+                    canClick
                       ? { cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2 }
                       : undefined
                   }
                   title={
-                    outdated
-                      ? `Update available → ${latest || 'newer'} (click to confirm)`
-                      : ver
-                        ? 'Re-apply latest client (click to confirm)'
-                        : 'Client version unknown'
+                    !canClick
+                      ? 'Wait until stop / restart / update finishes'
+                      : !clientUpdateAllowed(lifecycle.phase)
+                        ? 'Stop the node first, then update'
+                        : outdated
+                          ? `Update available → ${latest || 'newer'} (click to confirm)`
+                          : ver
+                            ? 'Re-apply latest client (click to confirm)'
+                            : 'Client version unknown'
                   }
                   onClick={openUpdate}
                 >
@@ -556,11 +588,15 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
                       fw={600}
                       c="teal.4"
                       style={
-                        canUpdate
+                        canClick
                           ? { cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2 }
                           : undefined
                       }
-                      title="Re-apply latest client (click to confirm)"
+                      title={
+                        !clientUpdateAllowed(lifecycle.phase)
+                          ? 'Stop the node first, then update'
+                          : 'Re-apply latest client (click to confirm)'
+                      }
                       onClick={openUpdate}
                     >
                       latest
@@ -633,7 +669,7 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
               loading={restartBusy}
               disabled={
                 !nodeRestartAllowed(workload, lifecycle.phase) ||
-                ['restarting', 'stopping'].includes(
+                ['restarting', 'stopping', 'starting'].includes(
                   (status?.node_restart?.phase || '').toLowerCase(),
                 )
               }
@@ -642,22 +678,35 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
               Restart
             </Button>
           )}
-          {workloadId && (
-            <Button
-              size="xs"
-              variant="light"
-              color="gray"
-              leftSection={<IconPlayerStop size={14} />}
-              loading={stopBusy}
-              disabled={
-                !nodeStopAllowed(workload, lifecycle.phase, status?.node_restart?.phase) ||
-                stopBusy
-              }
-              onClick={() => setStopOpen(true)}
-            >
-              Stop
-            </Button>
-          )}
+          {workloadId &&
+            (nodeStartAllowed(workload, lifecycle.phase, status?.node_restart?.phase) ? (
+              <Button
+                size="xs"
+                variant="light"
+                color="teal"
+                leftSection={<IconPlayerPlay size={14} />}
+                loading={startBusy}
+                disabled={startBusy}
+                onClick={() => setStartOpen(true)}
+              >
+                Start
+              </Button>
+            ) : (
+              <Button
+                size="xs"
+                variant="light"
+                color="gray"
+                leftSection={<IconPlayerStop size={14} />}
+                loading={stopBusy}
+                disabled={
+                  !nodeStopAllowed(workload, lifecycle.phase, status?.node_restart?.phase) ||
+                  stopBusy
+                }
+                onClick={() => setStopOpen(true)}
+              >
+                Stop
+              </Button>
+            ))}
           {workloadId && (
             <Button
               size="xs"
@@ -949,10 +998,10 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
               {network}/{env}
             </Text>
             . Same graceful stop as Restart (CLI / ExecStop / SIGTERM). Public Go RPC
-            sleeps (503) until you Restart.
+            sleeps (503) until you Start.
           </Text>
           <Alert color="yellow" variant="light" icon={<IconAlertTriangle size={16} />}>
-            The unit stays down. Chain data is not wiped. Use Restart to start again.
+            The unit stays down. Chain data is not wiped. Use Start to bring it up.
           </Alert>
           <Group justify="flex-end">
             <Button variant="default" disabled={stopBusy} onClick={() => setStopOpen(false)}>
@@ -971,61 +1020,58 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
       </Modal>
 
       <Modal
-        opened={clientOpen}
-        onClose={() => (!clientBusy ? setClientOpen(false) : undefined)}
-        title={
-          workload?.client_update_available || status?.client_update?.update_available
-            ? 'Update client?'
-            : 'Re-apply latest client?'
-        }
+        opened={startOpen}
+        onClose={() => (!startBusy ? setStartOpen(false) : undefined)}
+        title="Start fullnode?"
         centered
       >
         <Stack gap="md">
           <Text size="sm">
-            {workload?.client_update_available || status?.client_update?.update_available
-              ? 'Update'
-              : 'Re-download and re-install'}{' '}
+            Start{' '}
             <Text span fw={700}>
               {network}/{env}
-            </Text>{' '}
-            client{' '}
-            <Text span className="mono" fw={600}>
-              {formatClientVersion(status?.client_version || workload?.client_version || '') ||
-                '—'}
             </Text>
-            {(workload?.client_latest || status?.client_update?.latest) ? (
-              <>
-                {' '}
-                →{' '}
-                <Text span className="mono" fw={600} c="teal">
-                  {formatClientVersion(
-                    workload?.client_latest || status?.client_update?.latest || '',
-                  )}
-                </Text>
-              </>
-            ) : null}
-            .
+            . Public Go RPC wakes after the node unit is up.
           </Text>
-          {!(workload?.client_update_available || status?.client_update?.update_available) ? (
-            <Text size="sm" c="dimmed">
-              Already on latest — re-install only. Node stays stopped until Restart.
-            </Text>
-          ) : null}
-          <Alert color="orange" variant="light" icon={<IconAlertTriangle size={16} />}>
-            Node is stopped. Replace the client only — then Restart to start.
+          <Alert color="yellow" variant="light" icon={<IconAlertTriangle size={16} />}>
+            Chain data is not wiped. Same start as after Install.
           </Alert>
           <Group justify="flex-end">
-            <Button variant="default" disabled={clientBusy} onClick={() => setClientOpen(false)}>
+            <Button variant="default" disabled={startBusy} onClick={() => setStartOpen(false)}>
               Cancel
             </Button>
-            <Button color="orange" loading={clientBusy} onClick={() => void confirmClientUpdate()}>
-              {workload?.client_update_available || status?.client_update?.update_available
-                ? 'Update client'
-                : 'Re-apply latest'}
+            <Button
+              color="teal"
+              loading={startBusy}
+              leftSection={<IconPlayerPlay size={14} />}
+              onClick={() => void confirmNodeStart()}
+            >
+              Start fullnode
             </Button>
           </Group>
         </Stack>
       </Modal>
+
+      <ClientUpdateModal
+        opened={clientOpen}
+        onClose={() => setClientOpen(false)}
+        network={network}
+        env={env}
+        current={status?.client_version || workload?.client_version}
+        latest={workload?.client_latest || status?.client_update?.latest}
+        updateAvailable={
+          !!workload?.client_update_available || !!status?.client_update?.update_available
+        }
+        allowed={clientUpdateAllowed(lifecycle.phase)}
+        info={status?.client_update}
+        started={clientStarted}
+        requestBusy={clientBusy}
+        onStop={() => {
+          setClientOpen(false)
+          setStopOpen(true)
+        }}
+        onStart={() => void confirmClientUpdate()}
+      />
 
       <Modal
         opened={removeOpen}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 	"runtime"
 	"strings"
 	"time"
@@ -29,11 +30,53 @@ type vendoredFile struct {
 	Path   string `json:"path"`
 	Arch   string `json:"arch"`
 	Status string `json:"status"`
+	URL    string `json:"url"`
+	Kind   string `json:"kind"`
+}
+
+func clientCatalogRoots() []string {
+	base := strings.TrimRight(clientInstallBaseURL(), "/")
+	// Product pin is toolkit.rpcnode.dev/install/clients/… — try /install first.
+	var roots []string
+	if strings.HasSuffix(base, "/install") {
+		roots = []string{base, strings.TrimSuffix(base, "/install")}
+	} else {
+		roots = []string{base + "/install", base}
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(roots))
+	for _, r := range roots {
+		r = strings.TrimRight(r, "/")
+		if r == "" || seen[r] {
+			continue
+		}
+		seen[r] = true
+		out = append(out, r)
+	}
+	return out
 }
 
 func fetchVendoredClientRelease(network, env string) (ClientRelease, error) {
-	base := clientInstallBaseURL()
-	manURL := fmt.Sprintf("%s/clients/%s/%s/manifest.json", strings.TrimRight(base, "/"), network, env)
+	var last error
+	for _, root := range clientCatalogRoots() {
+		rel, err := fetchVendoredManifestURL(root, network, env)
+		if err == nil && strings.TrimSpace(rel.ArtifactURL) != "" {
+			return rel, nil
+		}
+		if err != nil {
+			last = err
+		} else {
+			last = fmt.Errorf("%s/clients/%s/%s/manifest.json: no artifact", root, network, env)
+		}
+	}
+	if last == nil {
+		last = fmt.Errorf("no manifest URL")
+	}
+	return ClientRelease{}, last
+}
+
+func fetchVendoredManifestURL(root, network, env string) (ClientRelease, error) {
+	manURL := fmt.Sprintf("%s/clients/%s/%s/manifest.json", strings.TrimRight(root, "/"), network, env)
 	client := &http.Client{Timeout: 20 * time.Second}
 	req, err := http.NewRequest(http.MethodGet, manURL, nil)
 	if err != nil {
@@ -52,7 +95,7 @@ func fetchVendoredClientRelease(network, env string) (ClientRelease, error) {
 	if err != nil {
 		return ClientRelease{}, err
 	}
-	return parseVendoredManifest(network, env, base, raw)
+	return parseVendoredManifest(network, env, root, raw)
 }
 
 func parseVendoredManifest(network, env, installBase string, raw []byte) (ClientRelease, error) {
@@ -60,15 +103,23 @@ func parseVendoredManifest(network, env, installBase string, raw []byte) (Client
 	if err := json.Unmarshal(raw, &man); err != nil {
 		return ClientRelease{}, err
 	}
-	jar := pickVendoredJar(man, hostIsARM())
+	jar := pickVendoredArtifact(installBase, man, hostIsARM())
 	if jar == "" {
-		return ClientRelease{}, fmt.Errorf("vendored manifest missing artifact_url")
+		return ClientRelease{}, fmt.Errorf("vendored manifest missing artifact on %s/clients", strings.TrimRight(installBase, "/"))
 	}
 	conf := strings.TrimSpace(man.ConfURL)
 	if conf == "" {
 		conf = vendoredConfURL(installBase, network, env, man.Files)
 	}
 	kind := strings.TrimSpace(man.ArtifactKind)
+	if kind == "" {
+		for _, f := range man.Files {
+			if strings.EqualFold(f.Role, "artifact") && strings.TrimSpace(f.Kind) != "" {
+				kind = strings.TrimSpace(f.Kind)
+				break
+			}
+		}
+	}
 	if kind == "" {
 		kind = "jar"
 	}
@@ -87,11 +138,23 @@ func parseVendoredManifest(network, env, installBase string, raw []byte) (Client
 	}, nil
 }
 
+func vendoredCDNFileURL(root, relPath string) string {
+	root = strings.TrimRight(root, "/")
+	relPath = strings.TrimPrefix(strings.TrimSpace(relPath), "/")
+	if root == "" || relPath == "" {
+		return ""
+	}
+	return root + "/clients/" + path.Clean(relPath)
+}
+
 func vendoredConfURL(installBase, network, env string, files []vendoredFile) string {
 	base := strings.TrimRight(installBase, "/")
 	for _, f := range files {
 		if f.Role != "config" || strings.EqualFold(f.Status, "apt") {
 			continue
+		}
+		if p := strings.TrimSpace(f.Path); p != "" {
+			return vendoredCDNFileURL(base, p)
 		}
 		name := strings.TrimSpace(f.Name)
 		if name == "" {
@@ -102,12 +165,49 @@ func vendoredConfURL(installBase, network, env string, files []vendoredFile) str
 	return ""
 }
 
-func pickVendoredJar(man vendoredManifest, arm bool) string {
-	jar := strings.TrimSpace(man.ArtifactURL)
-	if arm && strings.TrimSpace(man.ArtifactURLAarch64) != "" {
-		return strings.TrimSpace(man.ArtifactURLAarch64)
+// pickVendoredArtifact — file on this CDN (`files[].path`), not GitHub / watcher IP.
+func pickVendoredArtifact(root string, man vendoredManifest, arm bool) string {
+	var chosen *vendoredFile
+	for i := range man.Files {
+		f := &man.Files[i]
+		if !strings.EqualFold(f.Role, "artifact") || strings.EqualFold(f.Status, "apt") {
+			continue
+		}
+		arch := strings.ToLower(strings.TrimSpace(f.Arch))
+		if arm && (arch == "aarch64" || arch == "arm64") {
+			chosen = f
+			break
+		}
+		if !arm && (arch == "x86_64" || arch == "amd64" || arch == "") {
+			if chosen == nil {
+				chosen = f
+			}
+		}
+		if chosen == nil {
+			chosen = f
+		}
 	}
-	return jar
+	if chosen != nil {
+		if u := vendoredCDNFileURL(root, chosen.Path); u != "" {
+			return u
+		}
+	}
+	if arm {
+		if u := strings.TrimSpace(man.ArtifactURLAarch64); u != "" && strings.Contains(u, "/clients/") {
+			return u
+		}
+	}
+	if u := strings.TrimSpace(man.ArtifactURL); u != "" && strings.Contains(u, "/clients/") {
+		return u
+	}
+	if chosen != nil && strings.Contains(chosen.URL, "/clients/") {
+		return strings.TrimSpace(chosen.URL)
+	}
+	return ""
+}
+
+func pickVendoredJar(man vendoredManifest, arm bool) string {
+	return pickVendoredArtifact("", man, arm)
 }
 
 func hostIsARM() bool {

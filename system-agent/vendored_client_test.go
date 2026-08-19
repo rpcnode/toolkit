@@ -9,8 +9,8 @@ func TestParseVendoredManifest(t *testing.T) {
 	raw := []byte(`{
 		"version": "4.8.2.1-PQ1-build1",
 		"tag": "GreatVoyage-Nile-v4.8.2.1-PQ1-build1",
-		"artifact_url": "https://cdn.example/clients/tron/nile/dist/x86_64/FullNode.jar",
-		"artifact_url_aarch64": "https://cdn.example/clients/tron/nile/dist/aarch64/FullNode.jar",
+		"artifact_url": "https://cdn.example/install/clients/tron/nile/dist/x86_64/FullNode.jar",
+		"artifact_url_aarch64": "https://cdn.example/install/clients/tron/nile/dist/aarch64/FullNode.jar",
 		"artifact_kind": "jar",
 		"needs_conf_patch": true,
 		"notes": "vendored nile",
@@ -33,8 +33,8 @@ func TestParseVendoredManifest(t *testing.T) {
 	if rel.ConfURL != "https://cdn.example/install/clients/tron/nile/conf/config-nile.conf" {
 		t.Fatalf("conf=%q", rel.ConfURL)
 	}
-	wantX86 := "https://cdn.example/clients/tron/nile/dist/x86_64/FullNode.jar"
-	wantARM := "https://cdn.example/clients/tron/nile/dist/aarch64/FullNode.jar"
+	wantX86 := "https://cdn.example/install/clients/tron/nile/dist/x86_64/FullNode.jar"
+	wantARM := "https://cdn.example/install/clients/tron/nile/dist/aarch64/FullNode.jar"
 	if hostIsARM() {
 		if rel.ArtifactURL != wantARM {
 			t.Fatalf("arm jar=%q", rel.ArtifactURL)
@@ -44,9 +44,31 @@ func TestParseVendoredManifest(t *testing.T) {
 	}
 }
 
+func TestParseVendoredManifestFromInstallPath(t *testing.T) {
+	raw := []byte(`{
+		"version": "1.8.0-alpha",
+		"tag": "v1.8.0-alpha",
+		"files": [
+			{"role": "artifact", "arch": "x86_64", "path": "bsc/mainnet/dist/x86_64/geth_linux", "url": "http://130.17.22.66:8094/files/_updates/x"},
+			{"role": "artifact", "arch": "aarch64", "path": "bsc/mainnet/dist/aarch64/geth-linux-arm64", "url": "http://130.17.22.66:8094/files/_updates/y"}
+		]
+	}`)
+	rel, err := parseVendoredManifest("bsc", "mainnet", "https://toolkit.rpcnode.dev/install", raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "https://toolkit.rpcnode.dev/install/clients/bsc/mainnet/dist/x86_64/geth_linux"
+	if hostIsARM() {
+		want = "https://toolkit.rpcnode.dev/install/clients/bsc/mainnet/dist/aarch64/geth-linux-arm64"
+	}
+	if rel.ArtifactURL != want {
+		t.Fatalf("artifact=%q want %q", rel.ArtifactURL, want)
+	}
+}
+
 func TestParseVendoredManifestExplicitConfURL(t *testing.T) {
 	raw := []byte(`{
-		"artifact_url": "https://cdn.example/jar.jar",
+		"artifact_url": "https://cdn.example/install/clients/tron/mainnet/dist/FullNode.jar",
 		"conf_url": "https://cdn.example/clients/tron/mainnet/conf/main_net_config.conf"
 	}`)
 	rel, err := parseVendoredManifest("tron", "mainnet", "https://cdn.example/install", raw)
@@ -58,19 +80,12 @@ func TestParseVendoredManifestExplicitConfURL(t *testing.T) {
 	}
 }
 
-func TestPickVendoredJar(t *testing.T) {
-	man := vendoredManifest{
-		ArtifactURL:        "https://x86.example/FullNode.jar",
-		ArtifactURLAarch64: "https://arm.example/FullNode.jar",
+func TestClientCatalogRoots(t *testing.T) {
+	roots := clientCatalogRoots()
+	if len(roots) < 1 {
+		t.Fatal("empty roots")
 	}
-	if got := pickVendoredJar(man, false); got != man.ArtifactURL {
-		t.Fatalf("x86=%q", got)
-	}
-	if got := pickVendoredJar(man, true); got != man.ArtifactURLAarch64 {
-		t.Fatalf("arm=%q", got)
-	}
-	man.ArtifactURLAarch64 = ""
-	if got := pickVendoredJar(man, true); got != man.ArtifactURL {
-		t.Fatalf("arm fallback=%q", got)
+	if !strings.HasSuffix(roots[0], "/install") {
+		t.Fatalf("install root must be first, got %v", roots)
 	}
 }

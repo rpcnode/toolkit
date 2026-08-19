@@ -3,26 +3,6 @@
   "feed": "https://toolkit.rpcnode.dev/install/VERSIONS.json",
   "releases": [
     {
-      "version": "0.4.193",
-      "date": "2026-08-19",
-      "title": "Client update after Stop; stop/start audit",
-      "panel": "0.1.35",
-      "notes": [
-        "Apply no longer stops the node — Stop first, then update, then Restart.",
-        "Stop and Restart write each step to /var/log/rpcnode.log (cli stop, systemctl stop/start)."
-      ]
-    },
-    {
-      "version": "0.4.192",
-      "date": "2026-08-19",
-      "title": "Client update stops; start is manual",
-      "panel": "0.1.34",
-      "notes": [
-        "Apply is allowed while the node is stopped.",
-        "Update soft-stops, replaces the client, and stays down. Restart starts the new binary."
-      ]
-    },
-    {
       "version": "0.4.191",
       "date": "2026-08-19",
       "title": "Client update steps in host audit log",

@@ -55,12 +55,14 @@ func ResolveClientRelease(network, env string) (ClientRelease, error) {
 	}
 	if rel, err := fetchVendoredClientRelease(net, env); err == nil && strings.TrimSpace(rel.ArtifactURL) != "" {
 		return rel, nil
+	} else if err != nil && net != "tron" {
+		return ClientRelease{}, fmt.Errorf("no vendored catalog for %s/%s: %w", net, env, err)
 	}
 	switch net {
 	case "tron":
 		return resolveTronClientRelease(env)
 	default:
-		return ClientRelease{}, fmt.Errorf("no vendored catalog for %s/%s — publish clients/%s/%s/manifest.json", net, env, net, env)
+		return ClientRelease{}, fmt.Errorf("no vendored catalog for %s/%s — missing %s/clients/%s/%s/manifest.json", net, env, strings.TrimRight(clientInstallBaseURL(), "/")+"/install", net, env)
 	}
 }
 

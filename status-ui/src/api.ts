@@ -313,6 +313,7 @@ export type ClientUpdateInfo = {
   latest?: string
   update_available?: boolean
   phase?: string
+  step?: string
   detail?: string
   pct?: number
   last_error?: string
@@ -904,6 +905,13 @@ export const api = {
       node_restart?: { phase?: string; detail?: string; pct?: number; unit?: string; last_error?: string }
       error?: string
     }>(withAgentTarget('/api/v1/node/stop', asAgentTarget(target))),
+  nodeStart: (target?: string | AgentTarget) =>
+    postJSON<{
+      ok?: boolean
+      accepted?: boolean
+      node_restart?: { phase?: string; detail?: string; pct?: number; unit?: string; last_error?: string }
+      error?: string
+    }>(withAgentTarget('/api/v1/node/start', asAgentTarget(target))),
 
   nodeConfig: (target?: string | AgentTarget) =>
     getJSON<NodeConfigResponse>(withAgentTarget('/api/v1/node/config', asAgentTarget(target))),

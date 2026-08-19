@@ -112,16 +112,16 @@ func (c *ClientUpdateController) clientBinPath() string {
 	return filepath.Join(opt, "bin", strings.ToLower(strings.TrimSpace(c.cfg.Network)))
 }
 
-func (c *ClientUpdateController) downloadVerified(url, dest string, mode os.FileMode, wantSHA string) error {
+func (c *ClientUpdateController) downloadVerified(url, dest string, mode os.FileMode, wantSHA string, onProg func(got, total int64)) error {
 	if url == "" {
-		return fmt.Errorf("empty artifact_url")
+		return fmt.Errorf("empty artifact")
 	}
 	_ = ensureDir(filepath.Dir(dest))
 	tmp := dest + ".tmp"
 	client := &http.Client{Timeout: 30 * time.Minute}
 	resp, err := client.Get(url)
 	if err != nil {
-		return err
+		return fmt.Errorf("download failed")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
@@ -132,10 +132,14 @@ func (c *ClientUpdateController) downloadVerified(url, dest string, mode os.File
 		return err
 	}
 	h := sha256.New()
-	if _, err := io.Copy(io.MultiWriter(f, h), resp.Body); err != nil {
+	w := io.Writer(io.MultiWriter(f, h))
+	if onProg != nil {
+		w = io.MultiWriter(f, h, &downloadProgress{total: resp.ContentLength, fn: onProg})
+	}
+	if _, err := io.Copy(w, resp.Body); err != nil {
 		_ = f.Close()
 		_ = os.Remove(tmp)
-		return err
+		return fmt.Errorf("download failed")
 	}
 	_ = f.Close()
 	sum := hex.EncodeToString(h.Sum(nil))
@@ -150,7 +154,26 @@ func (c *ClientUpdateController) downloadVerified(url, dest string, mode os.File
 		return err
 	}
 	_ = os.Chmod(dest, mode)
+	if onProg != nil && resp.ContentLength > 0 {
+		onProg(resp.ContentLength, resp.ContentLength)
+	}
 	return nil
+}
+
+type downloadProgress struct {
+	total int64
+	got   int64
+	last  time.Time
+	fn    func(got, total int64)
+}
+
+func (p *downloadProgress) Write(b []byte) (int, error) {
+	p.got += int64(len(b))
+	if p.fn != nil && (p.last.IsZero() || time.Since(p.last) > 250*time.Millisecond) {
+		p.last = time.Now()
+		p.fn(p.got, p.total)
+	}
+	return len(b), nil
 }
 
 func (c *ClientUpdateController) refreshClientLinks(dest string) {
@@ -209,10 +232,10 @@ func isSymlink(path string) bool {
 	return err == nil && st.Mode()&os.ModeSymlink != 0
 }
 
-func (c *ClientUpdateController) installFromArchive(man clientManifest) error {
+func (c *ClientUpdateController) installFromArchive(man clientManifest, onProg func(got, total int64)) error {
 	url := man.urlForHost()
 	if url == "" {
-		return fmt.Errorf("empty artifact_url")
+		return fmt.Errorf("empty artifact")
 	}
 	tmp, err := os.MkdirTemp("", "rpcnode-client-*")
 	if err != nil {
@@ -221,7 +244,7 @@ func (c *ClientUpdateController) installFromArchive(man clientManifest) error {
 	defer os.RemoveAll(tmp)
 
 	archive := filepath.Join(tmp, "artifact")
-	if err := c.downloadVerified(url, archive, 0644, man.shaForHost()); err != nil {
+	if err := c.downloadVerified(url, archive, 0644, man.shaForHost(), onProg); err != nil {
 		return err
 	}
 	unpack := filepath.Join(tmp, "unpack")

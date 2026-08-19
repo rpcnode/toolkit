@@ -266,6 +266,7 @@ export type StatusPayload = {
     latest?: string
     update_available?: boolean
     phase?: string
+    step?: string
     detail?: string
     pct?: number
     last_error?: string
