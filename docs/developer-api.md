@@ -86,7 +86,7 @@ Optional: `AGENT_API_TOKEN_REQUIRED=1` — require agent key for `/api/*`.
 | `GET` | `/api/v1` | Catalog + auth hints + event type list |
 | `GET` | `/api/v1/node` | Health, sync/RPC, versions, instance, services, disk, snapshot summary |
 | `GET` | `/api/v1/status` | Alias of `/api/v1/node` |
-| `GET` | `/api/v1/metrics` | Current CPU/mem/load/disk IOPS/%util/RPS + short history (same shape as `/api/metrics.json`) |
+| `GET` | `/api/v1/metrics` | Current CPU/mem/load/disk IOPS/%util (per disk + host)/RPS + short history (same shape as `/api/metrics.json`) |
 | `GET` | `/api/v1/host/disks` | Host block devices + mounts (`lsblk`/`findmnt`); `insights` (md / LVM / raw NVMe); `?network=` adds recommended JBOD (raw NVMe over md) |
 | `GET` | `/api/v1/updates` | Toolkit agent + chain client update availability (`needs_attention`) |
 | `POST` | `/api/v1/node/restart` | Soft-restart fullnode (RPC sleep → `systemctl stop`→`start` / ExecStop → wake) |

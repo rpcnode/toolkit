@@ -654,6 +654,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	diskRead := liveHist["disk_read_iops"]
 	diskWrite := liveHist["disk_write_iops"]
 	diskUtil := liveHist["disk_util"]
+	diskDevs := liveHist["disks"]
 	if histLen(diskRead) == 0 {
 		diskRead = hist["disk_read_iops"]
 	}
@@ -662,6 +663,9 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 	if histLen(diskUtil) == 0 {
 		diskUtil = hist["disk_util"]
+	}
+	if histLen(diskDevs) == 0 {
+		diskDevs = hist["disks"]
 	}
 	pickCur := func(key string) any {
 		if v, ok := curHost[key]; ok && v != nil {
@@ -720,6 +724,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 			"disk_write_mb_s": firstMetrics(liveCur["disk_write_mb_s"], curHost["disk_write_mb_s"]),
 			"disk_util_pct":   firstMetrics(liveCur["disk_util_pct"], curHost["disk_util_pct"]),
 			"disk_busy":       firstMetrics(liveCur["disk_busy"], curHost["disk_busy"]),
+			"disks":           firstHist(liveCur["disks"], curHost["disks"]),
 			// Per-node unit accounting (system-agent); nil when unset.
 			"node_net_rx_mbps":  pickNodeNetField(curHost, st, "node_net_rx_mbps"),
 			"node_net_tx_mbps":  pickNodeNetField(curHost, st, "node_net_tx_mbps"),
@@ -755,6 +760,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 			"disk_read_iops":       diskRead,
 			"disk_write_iops":      diskWrite,
 			"disk_util":            diskUtil,
+			"disks":                diskDevs,
 			"node_disk_read_iops":  firstHist(hist["node_disk_read_iops"], nodeNetHist(st, "node_disk_read_iops")),
 			"node_disk_write_iops": firstHist(hist["node_disk_write_iops"], nodeNetHist(st, "node_disk_write_iops")),
 		},

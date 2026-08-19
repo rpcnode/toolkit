@@ -408,6 +408,22 @@ export type StatusPayload = {
   paths?: Record<string, string>
 }
 
+export type HostDiskIO = {
+  name: string
+  read_iops?: number
+  write_iops?: number
+  read_mb_s?: number
+  write_mb_s?: number
+  util_pct?: number
+}
+
+export type HostDiskIOHistory = {
+  name: string
+  read_iops?: MetricPoint[]
+  write_iops?: MetricPoint[]
+  util?: MetricPoint[]
+}
+
 export type MetricsPayload = {
   ok?: boolean
   demo?: boolean
@@ -451,6 +467,8 @@ export type MetricsPayload = {
     /** Hottest disk %util (iostat). */
     disk_util_pct?: number
     disk_busy?: string
+    /** Per physical disk (whole devices). */
+    disks?: HostDiskIO[]
     /** Per-node unit cgroup io.stat. */
     node_disk_read_iops?: number
     node_disk_write_iops?: number
@@ -485,6 +503,7 @@ export type MetricsPayload = {
     disk_read_iops?: MetricPoint[]
     disk_write_iops?: MetricPoint[]
     disk_util?: MetricPoint[]
+    disks?: HostDiskIOHistory[]
     node_disk_read_iops?: MetricPoint[]
     node_disk_write_iops?: MetricPoint[]
   }

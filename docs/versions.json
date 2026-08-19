@@ -3,6 +3,23 @@
   "feed": "https://toolkit.rpcnode.dev/install/VERSIONS.json",
   "releases": [
     {
+      "version": "0.4.210",
+      "date": "2026-08-19",
+      "title": "Release 0.4.210",
+      "notes": [
+        "Shipped via update-remote-agent.sh --publish."
+      ]
+    },
+    {
+      "version": "0.4.209",
+      "date": "2026-08-19",
+      "title": "Host & node: per-disk IOPS tabs",
+      "notes": [
+        "metrics.json current.disks[] + history.disks[] — each whole physical disk has its own read/write IOPS, MB/s and %util.",
+        "Host & node shows a tab per disk (All = sum IOPS / hottest %util). Solana ledger vs accounts no longer collapse into one number."
+      ]
+    },
+    {
       "version": "0.4.208",
       "date": "2026-08-19",
       "title": "Release 0.4.208",

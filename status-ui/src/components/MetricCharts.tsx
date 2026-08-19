@@ -1,8 +1,8 @@
-import type { ReactNode } from 'react'
-import { Badge, Card, Grid, Group, SimpleGrid, Stack, Text, Title, Tooltip } from '@mantine/core'
+import { useMemo, useState, type ReactNode } from 'react'
+import { Badge, Card, Grid, Group, Progress, SimpleGrid, Stack, Tabs, Text, Title, Tooltip } from '@mantine/core'
 import { AreaChart } from '@mantine/charts'
 import { IconHelp } from '@tabler/icons-react'
-import type { MetricsPayload, StatusPayload } from '../types'
+import type { HostDiskIO, HostDiskIOHistory, MetricsPayload, StatusPayload } from '../types'
 import { chartPairSeries, chartNetSeries, chartSeries, fmtBytesGiB, fmtDiskMBs, fmtIOPS, fmtMbps, num } from '../lib/format'
 
 type RpcSnap = {
@@ -217,9 +217,9 @@ export function MetricCharts({
             hint={`Host write IOPS (completed writes / s). ${fmtDiskMBs(cur?.disk_write_mb_s)}`}
           />
           <Stat
-            label="Disk util"
+            label="Disk load"
             value={cur?.disk_util_pct == null || Number.isNaN(cur.disk_util_pct) ? '—' : `${num(cur.disk_util_pct, 1)}%`}
-            hint={`Hottest disk busy percent (iostat %util)${cur?.disk_busy ? ` — ${cur.disk_busy}` : ''}. 90%+ means the disk is the bottleneck.`}
+            hint={`Disk busy percent (iostat %util) — how loaded the hottest disk is${cur?.disk_busy ? ` (${cur.disk_busy})` : ''}. 70% warn, 90%+ saturated.`}
             level={diskUtilLevel(cur?.disk_util_pct)}
           />
           {hasNodeDisk ? (
@@ -271,32 +271,21 @@ export function MetricCharts({
         </Grid.Col>
       </Grid>
 
-      <Grid mb="md">
-        <Grid.Col span={{ base: 12, md: 6 }}>
-          <PairChartCard
-            title="Host disk IOPS"
-            hint="Completed reads/writes per second on whole physical disks (/proc/diskstats). Same signal as iostat r/s + w/s."
-            data={diskIO}
-            aKey="read"
-            bKey="write"
-            aColor="teal.5"
-            bColor="orange.5"
-            aLabel={`Read ${fmtIOPS(cur?.disk_read_iops)} · ${fmtDiskMBs(cur?.disk_read_mb_s)}`}
-            bLabel={`Write ${fmtIOPS(cur?.disk_write_iops)} · ${fmtDiskMBs(cur?.disk_write_mb_s)}`}
-            emptyHint={hasDisk ? 'Collecting disk samples…' : 'Disk I/O not ready yet (Update agent)'}
-          />
-        </Grid.Col>
-        <Grid.Col span={{ base: 12, md: 6 }}>
-          <ChartCard
-            title={`Disk util %${cur?.disk_busy ? ` · ${cur.disk_busy}` : ''}`}
-            hint="Hottest disk busy percent (iostat %util). 70% warn, 90%+ the disk is saturated."
-            data={diskUtil}
-            dataKey="util"
-            color="pink.5"
-            emptyHint={hasDisk ? 'Collecting…' : 'Disk util not ready yet'}
-          />
-        </Grid.Col>
-      </Grid>
+      <DisksPanel
+        disks={cur?.disks}
+        history={hist?.disks}
+        host={{
+          readIops: cur?.disk_read_iops,
+          writeIops: cur?.disk_write_iops,
+          readMBs: cur?.disk_read_mb_s,
+          writeMBs: cur?.disk_write_mb_s,
+          utilPct: cur?.disk_util_pct,
+          busy: cur?.disk_busy,
+        }}
+        hostIO={diskIO}
+        hostUtil={diskUtil}
+        hasDisk={hasDisk}
+      />
 
       {hasNodeDisk || nodeDiskIO.length ? (
         <Card padding="sm" className="metric-chart-panel" mb="md">
@@ -482,6 +471,192 @@ export function MetricCharts({
   )
 }
 
+function DisksPanel({
+  disks,
+  history,
+  host,
+  hostIO,
+  hostUtil,
+  hasDisk,
+}: {
+  disks?: HostDiskIO[]
+  history?: HostDiskIOHistory[]
+  host: {
+    readIops?: number
+    writeIops?: number
+    readMBs?: number
+    writeMBs?: number
+    utilPct?: number
+    busy?: string
+  }
+  hostIO: Array<Record<string, string | number>>
+  hostUtil: Array<Record<string, string | number>>
+  hasDisk: boolean
+}) {
+  const items = disks?.filter((d) => d.name) || []
+  const hottest = host.busy && items.some((d) => d.name === host.busy) ? host.busy : ''
+  const defaultTab = hottest || (items.length === 1 ? items[0].name : 'all')
+  const [tab, setTab] = useState<string | null>(null)
+  const active = tab && (tab === 'all' || items.some((d) => d.name === tab)) ? tab : defaultTab
+  const selected = active !== 'all' ? items.find((d) => d.name === active) : undefined
+  const selectedHist = useMemo(
+    () => (active !== 'all' ? history?.find((h) => h.name === active) : undefined),
+    [active, history],
+  )
+  const io = selected
+    ? chartPairSeries(selectedHist?.read_iops, selectedHist?.write_iops, 'read', 'write')
+    : hostIO
+  const util = selected ? chartSeries(selectedHist?.util, 'util') : hostUtil
+  const readIops = selected?.read_iops ?? host.readIops
+  const writeIops = selected?.write_iops ?? host.writeIops
+  const readMBs = selected?.read_mb_s ?? host.readMBs
+  const writeMBs = selected?.write_mb_s ?? host.writeMBs
+  const utilPct = selected?.util_pct ?? host.utilPct
+  const label = selected?.name || (host.busy ? `hottest · ${host.busy}` : 'all disks')
+
+  return (
+    <Card padding="sm" className="metric-chart-panel" mb="md">
+      {items.length > 1 ? (
+        <Tabs value={active} onChange={setTab} mb="sm">
+          <Tabs.List>
+            <Tabs.Tab value="all">
+              All
+              {host.utilPct != null && !Number.isNaN(host.utilPct) ? (
+                <Text span size="xs" c="dimmed" ml={6}>
+                  {num(host.utilPct, 1)}%
+                </Text>
+              ) : null}
+            </Tabs.Tab>
+            {items.map((d) => (
+              <Tabs.Tab key={d.name} value={d.name}>
+                {d.name}
+                <Text
+                  span
+                  size="xs"
+                  ml={6}
+                  c={levelColor(diskUtilLevel(d.util_pct)) ?? 'dimmed'}
+                >
+                  {d.util_pct == null || Number.isNaN(d.util_pct) ? '—' : `${num(d.util_pct, 1)}%`}
+                </Text>
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
+        </Tabs>
+      ) : null}
+
+      <DiskLoadBar
+        pct={utilPct}
+        busy={label}
+        readIops={readIops}
+        writeIops={writeIops}
+        readMBs={readMBs}
+        writeMBs={writeMBs}
+        nested
+      />
+
+      <Grid>
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <PairChartCard
+            title={selected ? `${selected.name} IOPS` : 'Host disk IOPS'}
+            hint={
+              selected
+                ? `Reads/writes per second on ${selected.name} (/proc/diskstats).`
+                : 'Sum of completed reads/writes per second on all whole physical disks.'
+            }
+            data={io}
+            aKey="read"
+            bKey="write"
+            aColor="teal.5"
+            bColor="orange.5"
+            aLabel={`Read ${fmtIOPS(readIops)} · ${fmtDiskMBs(readMBs)}`}
+            bLabel={`Write ${fmtIOPS(writeIops)} · ${fmtDiskMBs(writeMBs)}`}
+            emptyHint={hasDisk ? 'Collecting disk samples…' : 'Disk I/O not ready yet (Update agent)'}
+            bare
+          />
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <ChartCard
+            title={selected ? `${selected.name} load %` : 'Disk load %'}
+            hint="iostat %util for this disk. All = hottest disk. 70% warn, 90%+ saturated."
+            data={util}
+            dataKey="util"
+            color="pink.5"
+            emptyHint={hasDisk ? 'Collecting…' : 'Disk util not ready yet'}
+            bare
+          />
+        </Grid.Col>
+      </Grid>
+    </Card>
+  )
+}
+
+function diskLoadColor(pct?: number): string {
+  const level = diskUtilLevel(pct)
+  if (level === 'critical') return 'red'
+  if (level === 'warn') return 'yellow'
+  return 'teal'
+}
+
+function DiskLoadBar({
+  pct,
+  busy,
+  readIops,
+  writeIops,
+  readMBs,
+  writeMBs,
+  nested,
+}: {
+  pct?: number
+  busy?: string
+  readIops?: number
+  writeIops?: number
+  readMBs?: number
+  writeMBs?: number
+  nested?: boolean
+}) {
+  const known = pct != null && !Number.isNaN(pct)
+  const bar = known ? Math.max(0, Math.min(100, pct)) : 0
+  const inner = (
+    <>
+      <Group justify="space-between" wrap="wrap" gap="sm" mb={6}>
+        <Group gap={6} wrap="nowrap" align="center">
+          <Text size="xs" c="dimmed" fw={600} tt="uppercase">
+            Disk load
+          </Text>
+          <MetricHelp label="How busy this disk is right now (iostat %util). Same as Host CPU % — 100% means the disk queue is full. All = hottest disk." />
+        </Group>
+        <Group gap="md" wrap="wrap">
+          <Text fw={700} size="xl" className="mono" c={known ? levelColor(diskUtilLevel(pct)) : 'dimmed'} style={{ fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }}>
+            {known ? `${num(pct, 1)}%` : '—'}
+          </Text>
+          {busy ? (
+            <Badge size="sm" variant="light" color="gray">
+              {busy}
+            </Badge>
+          ) : null}
+          <Text size="xs" c="dimmed" className="mono">
+            R {fmtIOPS(readIops)} · W {fmtIOPS(writeIops)} · {fmtDiskMBs(readMBs)} / {fmtDiskMBs(writeMBs)}
+          </Text>
+        </Group>
+      </Group>
+      <Progress
+        value={bar}
+        color={diskLoadColor(pct)}
+        size="lg"
+        radius="xl"
+        animated={known && bar >= 70}
+        striped={known && bar >= 70}
+      />
+    </>
+  )
+  if (nested) return <div style={{ marginBottom: 12 }}>{inner}</div>
+  return (
+    <Card padding="sm" className="metric-chart-panel" mb="md">
+      {inner}
+    </Card>
+  )
+}
+
 function MetricHelp({ label }: { label: string }) {
   return (
     <Tooltip label={label} multiline maw={280} withArrow position="top" openDelay={200}>
@@ -572,6 +747,7 @@ function ChartCard({
   dataKey,
   color,
   emptyHint,
+  bare,
 }: {
   title: string
   hint?: string
@@ -579,9 +755,10 @@ function ChartCard({
   dataKey: string
   color: string
   emptyHint?: string
+  bare?: boolean
 }) {
-  return (
-    <Card padding="sm" className="metric-chart-panel" h="100%">
+  const inner = (
+    <>
       <Group gap={4} wrap="nowrap" align="center" mb={6}>
         <Text size="xs" c="dimmed" fw={600}>
           {title}
@@ -606,6 +783,12 @@ function ChartCard({
           {emptyHint || 'Collecting samples…'}
         </Text>
       )}
+    </>
+  )
+  if (bare) return inner
+  return (
+    <Card padding="sm" className="metric-chart-panel" h="100%">
+      {inner}
     </Card>
   )
 }

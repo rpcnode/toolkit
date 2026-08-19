@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -16,6 +17,15 @@ type diskDevSnap struct {
 	IOMs   uint64
 }
 
+type diskDevRate struct {
+	Name      string  `json:"name"`
+	ReadIOPS  float64 `json:"read_iops"`
+	WriteIOPS float64 `json:"write_iops"`
+	ReadMBs   float64 `json:"read_mb_s"`
+	WriteMBs  float64 `json:"write_mb_s"`
+	UtilPct   float64 `json:"util_pct"`
+}
+
 type diskRates struct {
 	ReadIOPS  float64
 	WriteIOPS float64
@@ -23,6 +33,7 @@ type diskRates struct {
 	WriteMBs  float64
 	UtilPct   float64
 	BusyName  string
+	Devices   []diskDevRate
 }
 
 func readDiskstats() ([]diskDevSnap, bool) {
@@ -121,7 +132,11 @@ func digitsOnly(s string) bool {
 
 func diskRatesFromDelta(prev, cur []diskDevSnap, dt float64) diskRates {
 	var out diskRates
-	if dt < 0.2 || len(cur) == 0 {
+	if len(cur) == 0 {
+		return out
+	}
+	if dt < 0.2 {
+		out.Devices = diskDevicesPlaceholder(cur)
 		return out
 	}
 	prevBy := make(map[string]diskDevSnap, len(prev))
@@ -131,27 +146,33 @@ func diskRatesFromDelta(prev, cur []diskDevSnap, dt float64) diskRates {
 	var dReads, dWrites, dRSect, dWSect float64
 	maxUtil := -1.0
 	busy := ""
+	devs := make([]diskDevRate, 0, len(cur))
 	for _, c := range cur {
 		p, ok := prevBy[c.Name]
 		if !ok {
+			devs = append(devs, diskDevRate{Name: c.Name})
 			continue
 		}
+		var rI, wI, rS, wS, dIOMs float64
 		if c.Reads >= p.Reads {
-			dReads += float64(c.Reads - p.Reads)
+			rI = float64(c.Reads - p.Reads)
 		}
 		if c.Writes >= p.Writes {
-			dWrites += float64(c.Writes - p.Writes)
+			wI = float64(c.Writes - p.Writes)
 		}
 		if c.RSect >= p.RSect {
-			dRSect += float64(c.RSect - p.RSect)
+			rS = float64(c.RSect - p.RSect)
 		}
 		if c.WSect >= p.WSect {
-			dWSect += float64(c.WSect - p.WSect)
+			wS = float64(c.WSect - p.WSect)
 		}
-		var dIOMs float64
 		if c.IOMs >= p.IOMs {
 			dIOMs = float64(c.IOMs - p.IOMs)
 		}
+		dReads += rI
+		dWrites += wI
+		dRSect += rS
+		dWSect += wS
 		util := dIOMs / (dt * 1000) * 100
 		if util < 0 {
 			util = 0
@@ -163,7 +184,16 @@ func diskRatesFromDelta(prev, cur []diskDevSnap, dt float64) diskRates {
 			maxUtil = util
 			busy = c.Name
 		}
+		devs = append(devs, diskDevRate{
+			Name: c.Name,
+			ReadIOPS: rI / dt, WriteIOPS: wI / dt,
+			ReadMBs: rS * 512 / dt / 1_000_000,
+			WriteMBs: wS * 512 / dt / 1_000_000,
+			UtilPct: util,
+		})
 	}
+	sortDiskRates(devs)
+	out.Devices = devs
 	out.ReadIOPS = dReads / dt
 	out.WriteIOPS = dWrites / dt
 	// diskstats sectors are always 512 bytes.
@@ -174,6 +204,59 @@ func diskRatesFromDelta(prev, cur []diskDevSnap, dt float64) diskRates {
 		out.BusyName = busy
 	}
 	return out
+}
+
+func diskDevicesPlaceholder(devs []diskDevSnap) []diskDevRate {
+	out := make([]diskDevRate, 0, len(devs))
+	for _, d := range devs {
+		out = append(out, diskDevRate{Name: d.Name})
+	}
+	sortDiskRates(out)
+	return out
+}
+
+func sortDiskRates(devs []diskDevRate) {
+	sort.Slice(devs, func(i, j int) bool { return devs[i].Name < devs[j].Name })
+}
+
+func diskRatesJSON(devs []diskDevRate) []map[string]any {
+	out := make([]map[string]any, 0, len(devs))
+	for _, d := range devs {
+		out = append(out, map[string]any{
+			"name":       d.Name,
+			"read_iops":  round1(d.ReadIOPS),
+			"write_iops": round1(d.WriteIOPS),
+			"read_mb_s":  round2(d.ReadMBs),
+			"write_mb_s": round2(d.WriteMBs),
+			"util_pct":   round2(d.UtilPct),
+		})
+	}
+	return out
+}
+
+func findDiskRate(devs []diskDevRate, name string) diskDevRate {
+	for _, d := range devs {
+		if d.Name == name {
+			return d
+		}
+	}
+	return diskDevRate{Name: name}
+}
+
+func diskNameOrder(samples [][]diskDevRate) []string {
+	seen := map[string]bool{}
+	var names []string
+	for _, devs := range samples {
+		for _, d := range devs {
+			if d.Name == "" || seen[d.Name] {
+				continue
+			}
+			seen[d.Name] = true
+			names = append(names, d.Name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 func parseCgroupIOStat(s string) (rbytes, wbytes, rios, wios uint64) {

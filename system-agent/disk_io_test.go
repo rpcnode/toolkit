@@ -69,6 +69,15 @@ func TestDiskRatesFromDelta(t *testing.T) {
 	if got.BusyName != "nvme0n1" {
 		t.Fatalf("busy %s", got.BusyName)
 	}
+	if len(got.Devices) != 2 {
+		t.Fatalf("devices %d", len(got.Devices))
+	}
+	if got.Devices[0].Name != "nvme0n1" || got.Devices[0].ReadIOPS != 100 {
+		t.Fatalf("dev0 %+v", got.Devices[0])
+	}
+	if got.Devices[1].Name != "nvme2n1" || got.Devices[1].ReadIOPS != 0 {
+		t.Fatalf("dev1 %+v", got.Devices[1])
+	}
 }
 
 func TestParseCgroupIOStat(t *testing.T) {

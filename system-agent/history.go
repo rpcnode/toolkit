@@ -40,6 +40,7 @@ type HostSample struct {
 	DiskWriteMBs  float64 `json:"disk_write_mb_s"`
 	DiskUtilPct   float64 `json:"disk_util_pct"`
 	DiskBusy      string  `json:"disk_busy,omitempty"`
+	Disks         []diskDevRate `json:"disks,omitempty"`
 }
 
 type MetricsHistory struct {
@@ -131,6 +132,7 @@ func (h *MetricsHistory) Snapshot() map[string]any {
 			"disk_write_mb_s":  round2(cur.DiskWriteMBs),
 			"disk_util_pct":    round2(cur.DiskUtilPct),
 			"disk_busy":        cur.DiskBusy,
+			"disks":            diskRatesJSON(cur.Disks),
 			"os":               osName,
 			"arch":             arch,
 		},
@@ -143,6 +145,7 @@ func (h *MetricsHistory) Snapshot() map[string]any {
 			"disk_read_iops":  diskR,
 			"disk_write_iops": diskW,
 			"disk_util":       diskUtil,
+			"disks":           buildDiskHistory(ordered),
 		},
 		"samples": ordered,
 	}
@@ -189,7 +192,35 @@ func (h *MetricsHistory) Collect() HostSample {
 		DiskReadIOPS: disk.ReadIOPS, DiskWriteIOPS: disk.WriteIOPS,
 		DiskReadMBs: disk.ReadMBs, DiskWriteMBs: disk.WriteMBs,
 		DiskUtilPct: disk.UtilPct, DiskBusy: disk.BusyName,
+		Disks: disk.Devices,
 	}
+}
+
+func buildDiskHistory(ordered []HostSample) []map[string]any {
+	lists := make([][]diskDevRate, 0, len(ordered))
+	for _, s := range ordered {
+		lists = append(lists, s.Disks)
+	}
+	names := diskNameOrder(lists)
+	out := make([]map[string]any, 0, len(names))
+	for _, name := range names {
+		r := make([]MetricPoint, 0, len(ordered))
+		w := make([]MetricPoint, 0, len(ordered))
+		u := make([]MetricPoint, 0, len(ordered))
+		for _, s := range ordered {
+			d := findDiskRate(s.Disks, name)
+			r = append(r, MetricPoint{T: s.T, V: round1(d.ReadIOPS)})
+			w = append(w, MetricPoint{T: s.T, V: round1(d.WriteIOPS)})
+			u = append(u, MetricPoint{T: s.T, V: round2(d.UtilPct)})
+		}
+		out = append(out, map[string]any{
+			"name":       name,
+			"read_iops":  r,
+			"write_iops": w,
+			"util":       u,
+		})
+	}
+	return out
 }
 
 func (h *MetricsHistory) readDiskRates() diskRates {
@@ -204,7 +235,7 @@ func (h *MetricsHistory) readDiskRates() diskRates {
 		h.prevDisk = devs
 		h.prevDiskAt = now
 		h.havePrevDisk = true
-		return diskRates{}
+		return diskRates{Devices: diskDevicesPlaceholder(devs)}
 	}
 	dt := now.Sub(h.prevDiskAt).Seconds()
 	rates := diskRatesFromDelta(h.prevDisk, devs, dt)
