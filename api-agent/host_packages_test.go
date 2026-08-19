@@ -18,6 +18,13 @@ func TestHostPackagesForNetwork_TronNeedsJava8(t *testing.T) {
 	}
 }
 
+func TestHostPackagesForNetwork_SolanaNeedsBzip2(t *testing.T) {
+	pkgs := hostPackagesForNetwork("solana")
+	if !strings.Contains(strings.Join(pkgs, " "), "bzip2") {
+		t.Fatalf("solana Agave tarball is .bz2, got %v", pkgs)
+	}
+}
+
 func TestHostPackagesForNetwork_UnknownStillGetsCommon(t *testing.T) {
 	pkgs := hostPackagesForNetwork("bitcoin")
 	if len(pkgs) < 3 {

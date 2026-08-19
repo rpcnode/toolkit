@@ -49,7 +49,7 @@ func provisionSolanaNodeEnv(req nodeProvisionRequest, prof networkPortProfile) (
 	}
 	steps = append(steps, fmt.Sprintf("disk_layout ledger=%s accounts=%s snapshots=%s", ledger, accounts, snapshots))
 
-	bin, err := ensureSolanaBinaryInstalled(opt, cluster.Localnet)
+	bin, err := ensureSolanaBinaryInstalled(opt, env, cluster.Localnet)
 	if err != nil {
 		return nil, err
 	}
@@ -590,8 +590,96 @@ func ensureSolanaBinaryCaps(bin string) error {
 	return nil
 }
 
-// ensureSolanaBinaryInstalled finds Agave / test-validator. Does not compile from source.
-func ensureSolanaBinaryInstalled(optPath string, localnet bool) (string, error) {
+const defaultAgaveVersion = "4.2.1"
+
+func agaveReleaseVersion() string {
+	v := strings.TrimSpace(envOr("SOLANA_AGAVE_VERSION", defaultAgaveVersion))
+	v = strings.TrimPrefix(v, "v")
+	if v == "" {
+		return defaultAgaveVersion
+	}
+	return v
+}
+
+func agaveReleaseTarballName(goarch string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(goarch)) {
+	case "amd64", "x86_64", "":
+		return "solana-release-x86_64-unknown-linux-gnu.tar.bz2", nil
+	case "arm64", "aarch64":
+		return "", fmt.Errorf("Anza has no linux aarch64 solana-release tarball — use an x86_64 host")
+	default:
+		return "", fmt.Errorf("unsupported GOARCH %s for Agave tarball", goarch)
+	}
+}
+
+func agaveReleaseFallbackURL(version, goarch string) (string, error) {
+	name, err := agaveReleaseTarballName(goarch)
+	if err != nil {
+		return "", err
+	}
+	tag := "v" + strings.TrimPrefix(version, "v")
+	return fmt.Sprintf("https://github.com/anza-xyz/agave/releases/download/%s/%s", tag, name), nil
+}
+
+// installAgaveReleaseBinaries — official Anza solana-release tarball (agave-validator + keygen).
+// No cargo build. CDN catalog first, GitHub fallback.
+func installAgaveReleaseBinaries(optPath, env string) error {
+	ver := agaveReleaseVersion()
+	name, err := agaveReleaseTarballName(runtimeGOARCH())
+	if err != nil {
+		return err
+	}
+	fallback, err := agaveReleaseFallbackURL(ver, runtimeGOARCH())
+	if err != nil {
+		return err
+	}
+	if env == "" {
+		env = "mainnet"
+	}
+	url := preferVendoredArtifact("solana", env, fallback)
+	tmp := filepath.Join(os.TempDir(), name)
+	destBin := filepath.Join(optPath, "bin")
+	if err := os.MkdirAll(destBin, 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", destBin, err)
+	}
+	extractDir := filepath.Join(os.TempDir(), "rpcnode-agave-"+ver)
+	_ = os.RemoveAll(extractDir)
+	cmd := exec.Command("bash", "-lc", fmt.Sprintf(
+		`set -euo pipefail
+if ! command -v curl >/dev/null; then echo "curl required to fetch Agave" >&2; exit 1; fi
+curl -fsSL --connect-timeout 30 --max-time 900 -o %q %q
+mkdir -p %q
+tar -xjf %q -C %q
+SRC=""
+for d in %q %q/solana-release %q/solana-release/bin %q/bin; do
+  if [ -x "$d/agave-validator" ] || [ -x "$d/solana-test-validator" ]; then SRC="$d"; break; fi
+  if [ -x "$d/bin/agave-validator" ]; then SRC="$d/bin"; break; fi
+done
+if [ -z "$SRC" ]; then
+  echo "agave-validator not found in tarball" >&2
+  find %q -maxdepth 4 -type f | head -40 >&2
+  exit 1
+fi
+for b in agave-validator solana-keygen solana-test-validator solana; do
+  if [ -x "$SRC/$b" ]; then install -m 755 "$SRC/$b" %q/$b; fi
+done
+if [ ! -x %q/agave-validator ] && [ ! -x %q/solana-test-validator ]; then
+  echo "Agave binaries missing after extract" >&2
+  exit 1
+fi
+rm -rf %q %q
+`, tmp, url, extractDir, tmp, extractDir,
+		extractDir, extractDir, extractDir, extractDir, extractDir,
+		destBin, destBin, destBin, extractDir, tmp))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("install Agave %s: %v (%s)", ver, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// ensureSolanaBinaryInstalled finds Agave / test-validator or downloads the official tarball.
+func ensureSolanaBinaryInstalled(optPath, env string, localnet bool) (string, error) {
 	bin := resolveSolanaBinary(optPath, localnet)
 	if fileExists(bin) {
 		_ = os.MkdirAll(filepath.Join(optPath, "bin"), 0o755)
@@ -605,12 +693,19 @@ func ensureSolanaBinaryInstalled(optPath string, localnet bool) (string, error) 
 
 		return bin, nil
 	}
+	if err := installAgaveReleaseBinaries(optPath, env); err != nil {
+		return "", err
+	}
+	bin = resolveSolanaBinary(optPath, localnet)
+	if fileExists(bin) {
+		return bin, nil
+	}
 	name := "agave-validator"
 	if localnet {
 		name = "solana-test-validator"
 	}
 
-	return "", fmt.Errorf("%s not found (looked under %s, nodeop Agave install, PATH) — build/install Agave first (see deploy/nodes/solana/mainnet.md)", name, optPath)
+	return "", fmt.Errorf("%s missing after Agave tarball install under %s", name, optPath)
 }
 
 func ensureSolanaSysctl() error {
@@ -635,7 +730,7 @@ fs.nr_open = 1000000
 
 func rewriteSolanaUnit(prof networkPortProfile, req nodeProvisionRequest) error {
 	cluster := lookupSolanaCluster(prof.Env)
-	bin, err := ensureSolanaBinaryInstalled(prof.OptPath, cluster.Localnet)
+	bin, err := ensureSolanaBinaryInstalled(prof.OptPath, prof.Env, cluster.Localnet)
 	if err != nil {
 		return err
 	}

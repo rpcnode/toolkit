@@ -67,6 +67,21 @@ func TestTonOOMCapSticky(t *testing.T) {
 	}
 }
 
+func TestTonApplyCrashLoop(t *testing.T) {
+	if tonApplyCrashLoop(1, "exit-code", "active", false) {
+		t.Fatal("bootstrap restart (NRestarts=1) is not a crash loop")
+	}
+	if !tonApplyCrashLoop(3, "exit-code", "activating", false) {
+		t.Fatal("three restarts is a crash loop")
+	}
+	if !tonApplyCrashLoop(0, "oom-kill", "activating", false) {
+		t.Fatal("activating+oom result is a crash loop")
+	}
+	if !tonApplyCrashLoop(0, "success", "active", true) {
+		t.Fatal("OOM killer is a crash loop")
+	}
+}
+
 func TestTonCatchupNotSyncedWithoutSeqno(t *testing.T) {
 	if tonCatchupHonest(1, 0, false) {
 		t.Fatal("oos=1 seqno=0 is not tip")

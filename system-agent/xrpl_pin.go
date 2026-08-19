@@ -98,6 +98,25 @@ func xrplAcquiringValidated(cfg Config) bool {
 	return xrplInfoAcquiringValidated(probeXRPLServerInfo(cfg))
 }
 
+// xrplSkipFirstLedgerDisruptive — seq=0: do not stop/wipe/recycle until the
+// first-ledger window expires. Pipeline interval is 2s; latch acquiring
+// needs uptime≥20 + peers. A recycle resets both → never latches.
+// Process down still skips wipe (unit-down path will start xrpld).
+func xrplSkipFirstLedgerDisruptive(waitFileStuck, acquiring bool) bool {
+	if acquiring {
+		return true
+	}
+
+	return !waitFileStuck
+}
+
+func xrplShouldSkipFirstLedgerDisruptive(cfg Config) bool {
+	return xrplSkipFirstLedgerDisruptive(
+		xrplFirstLedgerStuckFor(cfg.DataDir),
+		xrplAcquiringValidated(cfg),
+	)
+}
+
 func xrplInfoAcquiringValidated(info xrplServerInfo) bool {
 	if !info.OK || info.Seq > 0 {
 		return false

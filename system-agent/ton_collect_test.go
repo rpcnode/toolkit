@@ -33,6 +33,31 @@ func TestParseTonOutOfSync(t *testing.T) {
 	}
 }
 
+func TestParseTonGetstatsTupleSeqno(t *testing.T) {
+	sample := `
+shardclientmasterchainseqno                     78940999
+unixtime                        1787153649
+masterchainblock                        (-1,8000000000000000,78941023):295261FA6652B234B85E474090854D76BBD833A3143AF61AE03D1B6415965465:F9CE4F25ED4B0C8F3C74BA5A7050FDACA41CCE88E64F27FA21FAF465B8C197E9
+masterchainblocktime                    1787059558
+`
+	oos, seq, ok := parseTonSyncSignals(sample)
+	if !ok || seq != 78941023 {
+		t.Fatalf("tuple seqno: seq=%d ok=%v", seq, ok)
+	}
+	if oos != 94091 {
+		t.Fatalf("oos=%v want 94091 (unixtime−masterchainblocktime)", oos)
+	}
+}
+
+func TestParseTonSeqnoIgnoresShardWorkchain(t *testing.T) {
+	if parseTonSeqno("masterchainblock (-1,8000000000000000,12):dead") != 12 {
+		t.Fatal("want tuple seq 12")
+	}
+	if parseTonSeqno("junk masterchain 8000000000000000 more") != 0 {
+		t.Fatal("workchain id is not an MC seqno")
+	}
+}
+
 func TestParseTonGetstatsUnixMaster(t *testing.T) {
 	sample := `
 unixtime 1700000100

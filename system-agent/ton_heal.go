@@ -156,16 +156,29 @@ MemoryMax=` + memMax + `
 	return nil
 }
 
+// tonApplyCrashLoop — dump-end `systemctl restart validator` (bootstrap) sets
+// NRestarts=1. That is not a crash. Sticky 1G cache only after OOM or a
+// real restart storm (otherwise fat hosts apply at 1G for no reason).
+func tonApplyCrashLoop(nRestarts int, result, active string, oom bool) bool {
+	if oom {
+		return true
+	}
+	if nRestarts >= 3 {
+		return true
+	}
+	res := strings.ToLower(strings.TrimSpace(result))
+	if strings.TrimSpace(active) == "activating" &&
+		(strings.Contains(res, "oom") || res == "signal" || res == "core-dump") {
+		return true
+	}
+
+	return false
+}
+
 func tonValidatorApplyCrashLoop() bool {
 	p := probeSystemdUnit("validator")
-	if p.NRestarts >= 1 {
-		return true
-	}
-	res := strings.ToLower(p.Result)
-	if p.ActiveState == "activating" && (strings.Contains(res, "oom") || res == "signal" || res == "core-dump") {
-		return true
-	}
-	return false
+
+	return tonApplyCrashLoop(p.NRestarts, p.Result, p.ActiveState, tonValidatorOOM())
 }
 
 func tonValidatorUnitPaths() []string {

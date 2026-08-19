@@ -305,7 +305,7 @@ func (s *Server) handleNodesStartWithEnv(w http.ResponseWriter, env, network str
 	if network == "solana" {
 		prof := lookupPortProfile(network, env)
 		cluster := lookupSolanaCluster(env)
-		bin, err := ensureSolanaBinaryInstalled(prof.OptPath, cluster.Localnet)
+		bin, err := ensureSolanaBinaryInstalled(prof.OptPath, env, cluster.Localnet)
 		if err != nil {
 			writeJSON(w, http.StatusConflict, map[string]any{
 				"ok": false, "error": "solana_binary_missing", "message": err.Error(),

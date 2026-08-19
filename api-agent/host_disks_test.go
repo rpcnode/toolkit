@@ -1,9 +1,59 @@
 package main
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"testing"
 )
+
+func TestFlattenFindmntWalksChildren(t *testing.T) {
+	raw := []byte(`{
+		"filesystems": [{
+			"target": "/",
+			"source": "/dev/mapper/vg0-root",
+			"fstype": "ext4",
+			"size": "497000000000",
+			"avail": "469000000000",
+			"children": [
+				{"target": "/boot", "source": "/dev/nvme0n1p2", "fstype": "ext4"},
+				{"target": "/data/nvme2", "source": "/dev/nvme2n1p1", "fstype": "ext4", "size": "3840000000000", "avail": "3840000000000"},
+				{"target": "/data/nvme3", "source": "/dev/nvme3n1p1", "fstype": "ext4", "size": "3840000000000", "avail": "3840000000000"}
+			]
+		}]
+	}`)
+	var doc findmntDoc
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	flat := flattenFindmnt(doc.Filesystems)
+	seen := map[string]bool{}
+	for _, n := range flat {
+		seen[n.Target] = true
+	}
+	for _, want := range []string{"/", "/data/nvme2", "/data/nvme3"} {
+		if !seen[want] {
+			t.Fatalf("missing %s in %+v", want, seen)
+		}
+	}
+}
+
+func TestBuildHostMountsLsblkFallback(t *testing.T) {
+	flat := []HostDisk{
+		{Name: "nvme2n1p1", Path: "/dev/nvme2n1p1", Type: "part", Parent: "nvme2n1", Mountpoint: "/data/nvme2", Fstype: "ext4", SizeBytes: 3.5e12, Tran: "nvme", Preferred: true},
+		{Name: "nvme3n1p1", Path: "/dev/nvme3n1p1", Type: "part", Parent: "nvme3n1", Mountpoint: "/data/nvme3", Fstype: "ext4", SizeBytes: 3.5e12, Tran: "nvme", Preferred: true},
+	}
+	got := buildHostMounts(nil, flat)
+	if len(got) != 2 {
+		t.Fatalf("mounts=%d %+v", len(got), got)
+	}
+	targets := map[string]bool{}
+	for _, m := range got {
+		targets[m.Target] = true
+	}
+	if !targets["/data/nvme2"] || !targets["/data/nvme3"] {
+		t.Fatalf("want /data/nvme2 + /data/nvme3, got %+v", got)
+	}
+}
 
 func TestRecommendSolanaDiskLayout_Single(t *testing.T) {
 	mounts := []HostMount{

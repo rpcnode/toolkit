@@ -299,6 +299,7 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 		}
 		hasLedger := xrplStatusHasLedger(st) || xrplDatadirHasLedger(p.cfg.DataDir)
 		acquiring := !hasLedger && xrplAcquiringValidated(p.cfg)
+		waiting := !hasLedger && xrplShouldSkipFirstLedgerDisruptive(p.cfg)
 		xrplNoteFirstLedgerWait(p.cfg.DataDir, hasLedger)
 		healedVL := false
 		if ok, err := healXRPLValidatorsFile(p.cfg.EtcDir, p.cfg.Env); err != nil {
@@ -319,7 +320,10 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 		}
 		// Same tick as a UNL rewrite: RPC is down during recycle. Do not
 		// treat seq=0 as a failed acquire and wipe NuDB.
-		skipDisruptive := acquiring || healedVL
+		// Live xrpld with empty NuDB: skip stop/recycle until first-ledger
+		// wait expires. Else interval=2s → PrepareDatadirHeal kills the
+		// process every tick (uptime never reaches 20s, acquiring never latches).
+		skipDisruptive := acquiring || waiting || healedVL
 		if !hasLedger && !skipDisruptive {
 			if pinned, err := healXRPLFirstLedgerBinary(p.cfg); err != nil {
 				log.Printf("pipeline: xrpl catalog client: %v", err)
@@ -340,7 +344,11 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 		}
 		rotated := false
 		if !hasLedger && !skipDisruptive {
-			xrplPrepareDatadirHeal(p.cfg)
+			// Stop xrpld only when we will actually rotate NuDB. 0.4.196 called
+			// PrepareDatadirHeal every 2s tick → PID flap, acquiring never latched.
+			if xrplStaleNuDBWouldReinit(p.cfg.DataDir) {
+				xrplPrepareDatadirHeal(p.cfg)
+			}
 
 			var err error
 			rotated, err = xrplReinitStaleNuDB(p.cfg.DataDir)

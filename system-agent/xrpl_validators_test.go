@@ -96,6 +96,18 @@ func TestXRPLInfoAcquiringValidated(t *testing.T) {
 	}
 }
 
+func TestXRPLSkipFirstLedgerDisruptive(t *testing.T) {
+	if !xrplSkipFirstLedgerDisruptive(false, false) {
+		t.Fatal("empty NuDB inside first-ledger window must skip stop/wipe")
+	}
+	if xrplSkipFirstLedgerDisruptive(true, false) {
+		t.Fatal("wait expired without acquiring may heal")
+	}
+	if !xrplSkipFirstLedgerDisruptive(true, true) {
+		t.Fatal("acquiring always skip even after wait file is old")
+	}
+}
+
 func TestXRPLInboundStallBlobIgnoresWaitingForValidated(t *testing.T) {
 	if xrplInboundStallBlob("LedgerMaster:ERR Need validated ledger") {
 		t.Fatal("waiting for first validated ledger is not a stall")

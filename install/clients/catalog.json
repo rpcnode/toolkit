@@ -1,1242 +1,1175 @@
 {
-  "arch_default" : "x86_64",
-  "comment" : "Official fullnode clients + configs for fetch-clients.sh. Nile MUST use nile-testnet PQ jar, not GreatVoyage. Snapshots are NOT here (lifecycle Snapshot step).",
-  "entries" : [
+  "arch_default": "x86_64",
+  "comment": "Official fullnode clients + configs for fetch-clients.sh. Nile MUST use nile-testnet PQ jar, not GreatVoyage. Snapshots are NOT here (lifecycle Snapshot step).",
+  "entries": [
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "jar",
-          "name" : "FullNode.jar",
-          "url" : "https://github.com/tronprotocol/java-tron/releases/download/GreatVoyage-v4.8.2.1/FullNode-x64.jar",
-          "url_aarch64" : "https://github.com/tronprotocol/java-tron/releases/download/GreatVoyage-v4.8.2.1/FullNode-aarch64.jar"
+          "kind": "jar",
+          "name": "FullNode.jar",
+          "url": "https://github.com/tronprotocol/java-tron/releases/download/GreatVoyage-v4.8.2.1/FullNode-x64.jar",
+          "url_aarch64": "https://github.com/tronprotocol/java-tron/releases/download/GreatVoyage-v4.8.2.1/FullNode-aarch64.jar"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "main_net_config.conf",
-          "url" : "https://raw.githubusercontent.com/tronprotocol/java-tron/GreatVoyage-v4.8.2.1/framework/src/main/resources/config.conf"
+          "name": "main_net_config.conf",
+          "url": "https://raw.githubusercontent.com/tronprotocol/java-tron/GreatVoyage-v4.8.2.1/framework/src/main/resources/config.conf"
         }
       ],
-      "env" : "mainnet",
-      "needs_conf_patch" : true,
-      "network" : "tron",
-      "notes" : "Stock GreatVoyage FullNode. Agent patches ports/RPC after copy.",
-      "source" : "tronprotocol/java-tron",
-      "tag" : "GreatVoyage-v4.8.2.1",
-      "version" : "4.8.2.1"
+      "env": "mainnet",
+      "needs_conf_patch": true,
+      "network": "tron",
+      "notes": "Stock GreatVoyage FullNode. Agent patches ports/RPC after copy.",
+      "source": "tronprotocol/java-tron",
+      "tag": "GreatVoyage-v4.8.2.1",
+      "version": "4.8.2.1"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "jar",
-          "name" : "FullNode.jar",
-          "url" : "https://github.com/tron-nile-testnet/nile-testnet/releases/download/GreatVoyage-Nile-v4.8.2.1-PQ1-build1/FullNode-Nile-x64-4.8.2.1-pq1-build1.jar",
-          "url_aarch64" : "https://github.com/tron-nile-testnet/nile-testnet/releases/download/GreatVoyage-Nile-v4.8.2.1-PQ1-build1/FullNode-Nile-aarch64-4.8.2.1-pq1-build1.jar"
+          "kind": "jar",
+          "name": "FullNode.jar",
+          "url": "https://github.com/tron-nile-testnet/nile-testnet/releases/download/GreatVoyage-Nile-v4.8.2.1-PQ1-build1/FullNode-Nile-x64-4.8.2.1-pq1-build1.jar",
+          "url_aarch64": "https://github.com/tron-nile-testnet/nile-testnet/releases/download/GreatVoyage-Nile-v4.8.2.1-PQ1-build1/FullNode-Nile-aarch64-4.8.2.1-pq1-build1.jar"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "config-nile.conf",
-          "url" : "https://raw.githubusercontent.com/tron-nile-testnet/nile-testnet/master/framework/src/main/resources/config-nile.conf"
+          "name": "config-nile.conf",
+          "url": "https://raw.githubusercontent.com/tron-nile-testnet/nile-testnet/master/framework/src/main/resources/config-nile.conf"
         }
       ],
-      "env" : "nile",
-      "needs_conf_patch" : true,
-      "network" : "tron",
-      "notes" : "NOT GreatVoyage. Official Nile seeds run 4.8.2.1.PQ1_build1 (pq_auth_sig). Stock 4.8.2.1 rejects the next block as type 15 block sign invalid. Conf is nile-testnet config-nile.conf — not tron-docker nile_net_config.conf (dead 47.252.* seeds).",
-      "source" : "tron-nile-testnet/nile-testnet",
-      "tag" : "GreatVoyage-Nile-v4.8.2.1-PQ1-build1",
-      "version" : "4.8.2.1-PQ1-build1"
+      "env": "nile",
+      "needs_conf_patch": true,
+      "network": "tron",
+      "notes": "NOT GreatVoyage. Official Nile seeds run 4.8.2.1.PQ1_build1 (pq_auth_sig). Stock 4.8.2.1 rejects the next block as type 15 block sign invalid. Conf is nile-testnet config-nile.conf — not tron-docker nile_net_config.conf (dead 47.252.* seeds).",
+      "source": "tron-nile-testnet/nile-testnet",
+      "tag": "GreatVoyage-Nile-v4.8.2.1-PQ1-build1",
+      "version": "4.8.2.1-PQ1-build1"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "jar",
-          "name" : "FullNode.jar",
-          "url" : "https://github.com/tronprotocol/java-tron/releases/download/GreatVoyage-v4.8.2.1/FullNode-x64.jar",
-          "url_aarch64" : "https://github.com/tronprotocol/java-tron/releases/download/GreatVoyage-v4.8.2.1/FullNode-aarch64.jar"
+          "kind": "jar",
+          "name": "FullNode.jar",
+          "url": "https://github.com/tronprotocol/java-tron/releases/download/GreatVoyage-v4.8.2.1/FullNode-x64.jar",
+          "url_aarch64": "https://github.com/tronprotocol/java-tron/releases/download/GreatVoyage-v4.8.2.1/FullNode-aarch64.jar"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "shasta_net_config.conf",
-          "optional" : true,
-          "url" : "https://raw.githubusercontent.com/tronprotocol/java-tron/GreatVoyage-v4.8.2.1/framework/src/main/resources/config.conf"
+          "name": "shasta_net_config.conf",
+          "optional": true,
+          "url": "https://raw.githubusercontent.com/tronprotocol/java-tron/GreatVoyage-v4.8.2.1/framework/src/main/resources/config.conf"
         }
       ],
-      "env" : "shasta",
-      "needs_conf_patch" : true,
-      "network" : "tron",
-      "notes" : "Stock GreatVoyage jar. Official Shasta does not support joining; tron-docker no longer ships shasta_net_config.conf. Conf = GreatVoyage config.conf (same as agent), then provision patches ports.",
-      "source" : "tronprotocol/java-tron",
-      "tag" : "GreatVoyage-v4.8.2.1",
-      "version" : "4.8.2.1"
+      "env": "shasta",
+      "needs_conf_patch": true,
+      "network": "tron",
+      "notes": "Stock GreatVoyage jar. Official Shasta does not support joining; tron-docker no longer ships shasta_net_config.conf. Conf = GreatVoyage config.conf (same as agent), then provision patches ports.",
+      "source": "tronprotocol/java-tron",
+      "tag": "GreatVoyage-v4.8.2.1",
+      "version": "4.8.2.1"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "bitcoin-28.1-x86_64-linux-gnu.tar.gz",
-          "url" : "https://bitcoincore.org/bin/bitcoin-core-28.1/bitcoin-28.1-x86_64-linux-gnu.tar.gz",
-          "url_aarch64" : "https://bitcoincore.org/bin/bitcoin-core-28.1/bitcoin-28.1-aarch64-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "bitcoin-28.1-x86_64-linux-gnu.tar.gz",
+          "url": "https://bitcoincore.org/bin/bitcoin-core-28.1/bitcoin-28.1-x86_64-linux-gnu.tar.gz",
+          "url_aarch64": "https://bitcoincore.org/bin/bitcoin-core-28.1/bitcoin-28.1-aarch64-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "bitcoin.conf",
-          "url" : "https://raw.githubusercontent.com/bitcoin/bitcoin/v29.4/share/examples/bitcoin.conf"
+          "name": "bitcoin.conf",
+          "url": "https://raw.githubusercontent.com/bitcoin/bitcoin/v29.4/share/examples/bitcoin.conf"
         }
       ],
-      "env" : "mainnet",
-      "github_repo" : "bitcoin/bitcoin",
-      "network" : "bitcoin",
-      "notes" : "Official share/examples/bitcoin.conf is vendored. Agent writes the live bitcoin.conf (txindex=1, prune=0, ports) on provision.",
-      "source" : "bitcoincore.org",
-      "tag" : "v29.4",
-      "version" : "29.4"
+      "env": "mainnet",
+      "github_repo": "bitcoin/bitcoin",
+      "network": "bitcoin",
+      "notes": "Official share/examples/bitcoin.conf is vendored. Agent writes the live bitcoin.conf (txindex=1, prune=0, ports) on provision.",
+      "source": "bitcoincore.org",
+      "tag": "v29.4",
+      "version": "29.4"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "bitcoin-28.1-x86_64-linux-gnu.tar.gz",
-          "url" : "https://bitcoincore.org/bin/bitcoin-core-28.1/bitcoin-28.1-x86_64-linux-gnu.tar.gz",
-          "url_aarch64" : "https://bitcoincore.org/bin/bitcoin-core-28.1/bitcoin-28.1-aarch64-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "bitcoin-28.1-x86_64-linux-gnu.tar.gz",
+          "url": "https://bitcoincore.org/bin/bitcoin-core-28.1/bitcoin-28.1-x86_64-linux-gnu.tar.gz",
+          "url_aarch64": "https://bitcoincore.org/bin/bitcoin-core-28.1/bitcoin-28.1-aarch64-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "bitcoin.conf",
-          "url" : "https://raw.githubusercontent.com/bitcoin/bitcoin/v29.4/share/examples/bitcoin.conf"
+          "name": "bitcoin.conf",
+          "url": "https://raw.githubusercontent.com/bitcoin/bitcoin/v29.4/share/examples/bitcoin.conf"
         }
       ],
-      "env" : "testnet4",
-      "github_repo" : "bitcoin/bitcoin",
-      "network" : "bitcoin",
-      "notes" : "Official share/examples/bitcoin.conf is vendored. Agent writes the live bitcoin.conf (txindex=1, prune=0, ports) on provision.",
-      "source" : "bitcoincore.org",
-      "tag" : "v29.4",
-      "version" : "29.4"
+      "env": "testnet4",
+      "github_repo": "bitcoin/bitcoin",
+      "network": "bitcoin",
+      "notes": "Official share/examples/bitcoin.conf is vendored. Agent writes the live bitcoin.conf (txindex=1, prune=0, ports) on provision.",
+      "source": "bitcoincore.org",
+      "tag": "v29.4",
+      "version": "29.4"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "bitcoin-28.1-x86_64-linux-gnu.tar.gz",
-          "url" : "https://bitcoincore.org/bin/bitcoin-core-28.1/bitcoin-28.1-x86_64-linux-gnu.tar.gz",
-          "url_aarch64" : "https://bitcoincore.org/bin/bitcoin-core-28.1/bitcoin-28.1-aarch64-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "bitcoin-28.1-x86_64-linux-gnu.tar.gz",
+          "url": "https://bitcoincore.org/bin/bitcoin-core-28.1/bitcoin-28.1-x86_64-linux-gnu.tar.gz",
+          "url_aarch64": "https://bitcoincore.org/bin/bitcoin-core-28.1/bitcoin-28.1-aarch64-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "bitcoin.conf",
-          "url" : "https://raw.githubusercontent.com/bitcoin/bitcoin/v29.4/share/examples/bitcoin.conf"
+          "name": "bitcoin.conf",
+          "url": "https://raw.githubusercontent.com/bitcoin/bitcoin/v29.4/share/examples/bitcoin.conf"
         }
       ],
-      "env" : "signet",
-      "github_repo" : "bitcoin/bitcoin",
-      "network" : "bitcoin",
-      "notes" : "Official share/examples/bitcoin.conf is vendored. Agent writes the live bitcoin.conf (txindex=1, prune=0, ports) on provision.",
-      "source" : "bitcoincore.org",
-      "tag" : "v29.4",
-      "version" : "29.4"
+      "env": "signet",
+      "github_repo": "bitcoin/bitcoin",
+      "network": "bitcoin",
+      "notes": "Official share/examples/bitcoin.conf is vendored. Agent writes the live bitcoin.conf (txindex=1, prune=0, ports) on provision.",
+      "source": "bitcoincore.org",
+      "tag": "v29.4",
+      "version": "29.4"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "bitcoin-28.1-x86_64-linux-gnu.tar.gz",
-          "url" : "https://bitcoincore.org/bin/bitcoin-core-28.1/bitcoin-28.1-x86_64-linux-gnu.tar.gz",
-          "url_aarch64" : "https://bitcoincore.org/bin/bitcoin-core-28.1/bitcoin-28.1-aarch64-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "bitcoin-28.1-x86_64-linux-gnu.tar.gz",
+          "url": "https://bitcoincore.org/bin/bitcoin-core-28.1/bitcoin-28.1-x86_64-linux-gnu.tar.gz",
+          "url_aarch64": "https://bitcoincore.org/bin/bitcoin-core-28.1/bitcoin-28.1-aarch64-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "bitcoin.conf",
-          "url" : "https://raw.githubusercontent.com/bitcoin/bitcoin/v29.4/share/examples/bitcoin.conf"
+          "name": "bitcoin.conf",
+          "url": "https://raw.githubusercontent.com/bitcoin/bitcoin/v29.4/share/examples/bitcoin.conf"
         }
       ],
-      "env" : "regtest",
-      "github_repo" : "bitcoin/bitcoin",
-      "network" : "bitcoin",
-      "notes" : "Official share/examples/bitcoin.conf is vendored. Agent writes the live bitcoin.conf (txindex=1, prune=0, ports) on provision.",
-      "source" : "bitcoincore.org",
-      "tag" : "v29.4",
-      "version" : "29.4"
+      "env": "regtest",
+      "github_repo": "bitcoin/bitcoin",
+      "network": "bitcoin",
+      "notes": "Official share/examples/bitcoin.conf is vendored. Agent writes the live bitcoin.conf (txindex=1, prune=0, ports) on provision.",
+      "source": "bitcoincore.org",
+      "tag": "v29.4",
+      "version": "29.4"
     },
     {
-      "artifacts" : [
-
-      ],
-      "configs" : [
-
-      ],
-      "env" : "mainnet",
-      "github_repo" : "anza-xyz/agave",
-      "network" : "solana",
-      "notes" : "Catch-up from gossip; no official conf file to vendor. Pin = tracked Agave (host-installed, not a CDN tarball).",
-      "skip_reason" : "Agave is host-installed (no pinned tarball in provision). See deploy/nodes/solana/mainnet.md.",
-      "source" : "anza-xyz/agave",
-      "tag" : "v4.2.1",
-      "version" : "4.2.1"
-    },
-    {
-      "artifacts" : [
-
-      ],
-      "configs" : [
-
-      ],
-      "env" : "testnet",
-      "github_repo" : "anza-xyz/agave",
-      "network" : "solana",
-      "skip_reason" : "Agave is host-installed (no pinned tarball in provision).",
-      "source" : "anza-xyz/agave",
-      "tag" : "v4.2.1",
-      "version" : "4.2.1"
-    },
-    {
-      "artifacts" : [
-
-      ],
-      "configs" : [
-
-      ],
-      "env" : "devnet",
-      "github_repo" : "anza-xyz/agave",
-      "network" : "solana",
-      "skip_reason" : "Agave is host-installed (no pinned tarball in provision).",
-      "source" : "anza-xyz/agave",
-      "tag" : "v4.2.1",
-      "version" : "4.2.1"
-    },
-    {
-      "artifacts" : [
-
-      ],
-      "configs" : [
-
-      ],
-      "env" : "localnet",
-      "github_repo" : "anza-xyz/agave",
-      "network" : "solana",
-      "skip_reason" : "solana-test-validator is host-installed.",
-      "source" : "anza-xyz/agave",
-      "tag" : "v4.2.1",
-      "version" : "4.2.1"
-    },
-    {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "apt",
-          "name" : "geth",
-          "url" : "apt://geth"
+          "kind": "tarball",
+          "name": "solana-release-x86_64-unknown-linux-gnu.tar.bz2",
+          "url": "https://github.com/anza-xyz/agave/releases/download/v4.2.1/solana-release-x86_64-unknown-linux-gnu.tar.bz2"
+        }
+      ],
+      "configs": [],
+      "env": "mainnet",
+      "github_repo": "anza-xyz/agave",
+      "network": "solana",
+      "notes": "Official Anza solana-release tarball (agave-validator). Catch-up from gossip; no official conf to vendor.",
+      "source": "anza-xyz/agave",
+      "tag": "v4.2.1",
+      "version": "4.2.1"
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "tarball",
+          "name": "solana-release-x86_64-unknown-linux-gnu.tar.bz2",
+          "url": "https://github.com/anza-xyz/agave/releases/download/v4.2.1/solana-release-x86_64-unknown-linux-gnu.tar.bz2"
+        }
+      ],
+      "configs": [],
+      "env": "testnet",
+      "github_repo": "anza-xyz/agave",
+      "network": "solana",
+      "notes": "Official Anza solana-release tarball (agave-validator).",
+      "source": "anza-xyz/agave",
+      "tag": "v4.2.1",
+      "version": "4.2.1"
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "tarball",
+          "name": "solana-release-x86_64-unknown-linux-gnu.tar.bz2",
+          "url": "https://github.com/anza-xyz/agave/releases/download/v4.2.1/solana-release-x86_64-unknown-linux-gnu.tar.bz2"
+        }
+      ],
+      "configs": [],
+      "env": "devnet",
+      "github_repo": "anza-xyz/agave",
+      "network": "solana",
+      "notes": "Official Anza solana-release tarball (agave-validator).",
+      "source": "anza-xyz/agave",
+      "tag": "v4.2.1",
+      "version": "4.2.1"
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "tarball",
+          "name": "solana-release-x86_64-unknown-linux-gnu.tar.bz2",
+          "url": "https://github.com/anza-xyz/agave/releases/download/v4.2.1/solana-release-x86_64-unknown-linux-gnu.tar.bz2"
+        }
+      ],
+      "configs": [],
+      "env": "localnet",
+      "github_repo": "anza-xyz/agave",
+      "network": "solana",
+      "notes": "Same tarball includes solana-test-validator.",
+      "source": "anza-xyz/agave",
+      "tag": "v4.2.1",
+      "version": "4.2.1"
+    },
+    {
+      "artifacts": [
+        {
+          "kind": "apt",
+          "name": "geth",
+          "url": "apt://geth"
         },
         {
-          "kind" : "tarball",
-          "name" : "lighthouse-v8.2.1-x86_64-unknown-linux-gnu.tar.gz",
-          "url" : "https://github.com/sigp/lighthouse/releases/download/v8.2.2/lighthouse-v8.2.2-x86_64-unknown-linux-gnu.tar.gz",
-          "url_aarch64" : "https://github.com/sigp/lighthouse/releases/download/v8.2.2/lighthouse-v8.2.2-aarch64-unknown-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "lighthouse-v8.2.1-x86_64-unknown-linux-gnu.tar.gz",
+          "url": "https://github.com/sigp/lighthouse/releases/download/v8.2.2/lighthouse-v8.2.2-x86_64-unknown-linux-gnu.tar.gz",
+          "url_aarch64": "https://github.com/sigp/lighthouse/releases/download/v8.2.2/lighthouse-v8.2.2-aarch64-unknown-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "mainnet",
-      "network" : "ethereum",
-      "notes" : "Geth via apt (no tarball). JWT/conf agent-generated. Checkpoint: sync-mainnet.beaconcha.in",
-      "source" : "sigp/lighthouse + apt geth",
-      "tag" : "v8.2.2",
-      "version" : "8.2.2"
+      "configs": [],
+      "env": "mainnet",
+      "network": "ethereum",
+      "notes": "Geth via apt (no tarball). JWT/conf agent-generated. Checkpoint: sync-mainnet.beaconcha.in",
+      "source": "sigp/lighthouse + apt geth",
+      "tag": "v8.2.2",
+      "version": "8.2.2"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "apt",
-          "name" : "geth",
-          "url" : "apt://geth"
+          "kind": "apt",
+          "name": "geth",
+          "url": "apt://geth"
         },
         {
-          "kind" : "tarball",
-          "name" : "lighthouse-v8.2.1-x86_64-unknown-linux-gnu.tar.gz",
-          "url" : "https://github.com/sigp/lighthouse/releases/download/v8.2.2/lighthouse-v8.2.2-x86_64-unknown-linux-gnu.tar.gz",
-          "url_aarch64" : "https://github.com/sigp/lighthouse/releases/download/v8.2.2/lighthouse-v8.2.2-aarch64-unknown-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "lighthouse-v8.2.1-x86_64-unknown-linux-gnu.tar.gz",
+          "url": "https://github.com/sigp/lighthouse/releases/download/v8.2.2/lighthouse-v8.2.2-x86_64-unknown-linux-gnu.tar.gz",
+          "url_aarch64": "https://github.com/sigp/lighthouse/releases/download/v8.2.2/lighthouse-v8.2.2-aarch64-unknown-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "sepolia",
-      "network" : "ethereum",
-      "source" : "sigp/lighthouse + apt geth",
-      "tag" : "v8.2.2",
-      "version" : "8.2.2"
+      "configs": [],
+      "env": "sepolia",
+      "network": "ethereum",
+      "source": "sigp/lighthouse + apt geth",
+      "tag": "v8.2.2",
+      "version": "8.2.2"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "apt",
-          "name" : "geth",
-          "url" : "apt://geth"
+          "kind": "apt",
+          "name": "geth",
+          "url": "apt://geth"
         },
         {
-          "kind" : "tarball",
-          "name" : "lighthouse-v8.2.1-x86_64-unknown-linux-gnu.tar.gz",
-          "url" : "https://github.com/sigp/lighthouse/releases/download/v8.2.2/lighthouse-v8.2.2-x86_64-unknown-linux-gnu.tar.gz",
-          "url_aarch64" : "https://github.com/sigp/lighthouse/releases/download/v8.2.2/lighthouse-v8.2.2-aarch64-unknown-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "lighthouse-v8.2.1-x86_64-unknown-linux-gnu.tar.gz",
+          "url": "https://github.com/sigp/lighthouse/releases/download/v8.2.2/lighthouse-v8.2.2-x86_64-unknown-linux-gnu.tar.gz",
+          "url_aarch64": "https://github.com/sigp/lighthouse/releases/download/v8.2.2/lighthouse-v8.2.2-aarch64-unknown-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "hoodi",
-      "network" : "ethereum",
-      "source" : "sigp/lighthouse + apt geth",
-      "tag" : "v8.2.2",
-      "version" : "8.2.2"
+      "configs": [],
+      "env": "hoodi",
+      "network": "ethereum",
+      "source": "sigp/lighthouse + apt geth",
+      "tag": "v8.2.2",
+      "version": "8.2.2"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "bin",
-          "name" : "geth_linux",
-          "url" : "https://github.com/bnb-chain/bsc/releases/download/v1.7.7/geth_linux",
-          "url_aarch64" : "https://github.com/bnb-chain/bsc/releases/download/v1.7.7/geth-linux-arm64"
+          "kind": "bin",
+          "name": "geth_linux",
+          "url": "https://github.com/bnb-chain/bsc/releases/download/v1.7.7/geth_linux",
+          "url_aarch64": "https://github.com/bnb-chain/bsc/releases/download/v1.7.7/geth-linux-arm64"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "mainnet.zip",
-          "url" : "https://github.com/bnb-chain/bsc/releases/download/v1.7.7/mainnet.zip"
+          "name": "mainnet.zip",
+          "url": "https://github.com/bnb-chain/bsc/releases/download/v1.7.7/mainnet.zip"
         }
       ],
-      "env" : "mainnet",
-      "network" : "bsc",
-      "notes" : "geth fork + official mainnet.zip (genesis.json + config.toml).",
-      "source" : "bnb-chain/bsc",
-      "tag" : "v1.8.0-alpha",
-      "version" : "1.8.0-alpha"
+      "env": "mainnet",
+      "network": "bsc",
+      "notes": "geth fork + official mainnet.zip (genesis.json + config.toml).",
+      "source": "bnb-chain/bsc",
+      "tag": "v1.8.0-alpha",
+      "version": "1.8.0-alpha"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "bin",
-          "name" : "geth_linux",
-          "url" : "https://github.com/bnb-chain/bsc/releases/download/v1.7.7/geth_linux",
-          "url_aarch64" : "https://github.com/bnb-chain/bsc/releases/download/v1.7.7/geth-linux-arm64"
+          "kind": "bin",
+          "name": "geth_linux",
+          "url": "https://github.com/bnb-chain/bsc/releases/download/v1.7.7/geth_linux",
+          "url_aarch64": "https://github.com/bnb-chain/bsc/releases/download/v1.7.7/geth-linux-arm64"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "testnet.zip",
-          "url" : "https://github.com/bnb-chain/bsc/releases/download/v1.7.7/testnet.zip"
+          "name": "testnet.zip",
+          "url": "https://github.com/bnb-chain/bsc/releases/download/v1.7.7/testnet.zip"
         }
       ],
-      "env" : "testnet",
-      "network" : "bsc",
-      "source" : "bnb-chain/bsc",
-      "tag" : "v1.8.0-alpha",
-      "version" : "1.8.0-alpha"
+      "env": "testnet",
+      "network": "bsc",
+      "source": "bnb-chain/bsc",
+      "tag": "v1.8.0-alpha",
+      "version": "1.8.0-alpha"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "bin",
-          "name" : "hl-visor",
-          "url" : "https://binaries.hyperliquid.xyz/Mainnet/hl-visor"
+          "kind": "bin",
+          "name": "hl-visor",
+          "url": "https://binaries.hyperliquid.xyz/Mainnet/hl-visor"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "mainnet",
-      "network" : "hyperliquid",
-      "notes" : "Rolling hl-visor (no GitHub tag). Pin = Last-Modified + ETag from binaries.hyperliquid.xyz.",
-      "source" : "binaries.hyperliquid.xyz",
-      "version" : "2026-06-20-a955094a"
+      "configs": [],
+      "env": "mainnet",
+      "network": "hyperliquid",
+      "notes": "Rolling hl-visor (no GitHub tag). Pin = Last-Modified + ETag from binaries.hyperliquid.xyz.",
+      "source": "binaries.hyperliquid.xyz",
+      "version": "2026-06-20-a955094a"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "bin",
-          "name" : "hl-visor",
-          "url" : "https://binaries.hyperliquid-testnet.xyz/Testnet/hl-visor"
+          "kind": "bin",
+          "name": "hl-visor",
+          "url": "https://binaries.hyperliquid-testnet.xyz/Testnet/hl-visor"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "testnet",
-      "network" : "hyperliquid",
-      "source" : "binaries.hyperliquid-testnet.xyz",
-      "version" : "2026-06-19-866bcd59"
+      "configs": [],
+      "env": "testnet",
+      "network": "hyperliquid",
+      "source": "binaries.hyperliquid-testnet.xyz",
+      "version": "2026-06-19-866bcd59"
     },
     {
-      "artifacts" : [
-
-      ],
-      "configs" : [
-
-      ],
-      "env" : "mainnet",
-      "github_repo" : "OffchainLabs/nitro",
-      "network" : "arb",
-      "notes" : "Do not vendor nitro-pruned.tar here. Pin = docker extract offchainlabs/nitro-node:v3.11.2-3599aca.",
-      "skip_reason" : "Nitro binary is host/release-channel; snapshot is lifecycle --init.url, not this cache.",
-      "source" : "offchainlabs/nitro",
-      "tag" : "v3.11.3",
-      "version" : "3.11.3"
+      "artifacts": [],
+      "configs": [],
+      "env": "mainnet",
+      "github_repo": "OffchainLabs/nitro",
+      "network": "arb",
+      "notes": "Do not vendor nitro-pruned.tar here. Pin = docker extract offchainlabs/nitro-node:v3.11.2-3599aca.",
+      "skip_reason": "Nitro binary is host/release-channel; snapshot is lifecycle --init.url, not this cache.",
+      "source": "offchainlabs/nitro",
+      "tag": "v3.11.3",
+      "version": "3.11.3"
     },
     {
-      "artifacts" : [
-
-      ],
-      "configs" : [
-
-      ],
-      "env" : "sepolia",
-      "github_repo" : "OffchainLabs/nitro",
-      "network" : "arb",
-      "skip_reason" : "Nitro binary is host/release-channel; snapshot is lifecycle --init.url.",
-      "source" : "offchainlabs/nitro",
-      "tag" : "v3.11.3",
-      "version" : "3.11.3"
+      "artifacts": [],
+      "configs": [],
+      "env": "sepolia",
+      "github_repo": "OffchainLabs/nitro",
+      "network": "arb",
+      "skip_reason": "Nitro binary is host/release-channel; snapshot is lifecycle --init.url.",
+      "source": "offchainlabs/nitro",
+      "tag": "v3.11.3",
+      "version": "3.11.3"
     },
     {
-      "artifacts" : [
-
-      ],
-      "configs" : [
+      "artifacts": [],
+      "configs": [
         {
-          "name" : "robinhood-chain-info.json",
-          "url" : "https://cdn.robinhood.com/assets/generated_assets/hoodchain_docsite/chain-node-configs/robinhood-chain-info.json"
+          "name": "robinhood-chain-info.json",
+          "url": "https://cdn.robinhood.com/assets/generated_assets/hoodchain_docsite/chain-node-configs/robinhood-chain-info.json"
         },
         {
-          "name" : "robinhood-genesis.json",
-          "url" : "https://cdn.robinhood.com/assets/generated_assets/hoodchain_docsite/chain-node-configs/robinhood-genesis.json"
+          "name": "robinhood-genesis.json",
+          "url": "https://cdn.robinhood.com/assets/generated_assets/hoodchain_docsite/chain-node-configs/robinhood-genesis.json"
         }
       ],
-      "env" : "mainnet",
-      "github_repo" : "OffchainLabs/nitro",
-      "network" : "robinhood",
-      "notes" : "Official chain-info + genesis only. Same nitro pin as arb (v3.11.2-3599aca).",
-      "skip_reason" : "Nitro binary is host/release-channel. Snapshot via robinhood-snapshots.offchainlabs.com (lifecycle).",
-      "source" : "cdn.robinhood.com",
-      "tag" : "v3.11.3",
-      "version" : "3.11.3"
+      "env": "mainnet",
+      "github_repo": "OffchainLabs/nitro",
+      "network": "robinhood",
+      "notes": "Official chain-info + genesis only. Same nitro pin as arb (v3.11.2-3599aca).",
+      "skip_reason": "Nitro binary is host/release-channel. Snapshot via robinhood-snapshots.offchainlabs.com (lifecycle).",
+      "source": "cdn.robinhood.com",
+      "tag": "v3.11.3",
+      "version": "3.11.3"
     },
     {
-      "artifacts" : [
-
-      ],
-      "configs" : [
+      "artifacts": [],
+      "configs": [
         {
-          "name" : "robinhood-chain-testnet-info.json",
-          "url" : "https://cdn.robinhood.com/assets/generated_assets/hoodchain_docsite/chain-node-configs/robinhood-chain-testnet-info.json"
+          "name": "robinhood-chain-testnet-info.json",
+          "url": "https://cdn.robinhood.com/assets/generated_assets/hoodchain_docsite/chain-node-configs/robinhood-chain-testnet-info.json"
         }
       ],
-      "env" : "testnet",
-      "github_repo" : "OffchainLabs/nitro",
-      "network" : "robinhood",
-      "skip_reason" : "Nitro binary is host/release-channel.",
-      "source" : "cdn.robinhood.com",
-      "tag" : "v3.11.3",
-      "version" : "3.11.3"
+      "env": "testnet",
+      "github_repo": "OffchainLabs/nitro",
+      "network": "robinhood",
+      "skip_reason": "Nitro binary is host/release-channel.",
+      "source": "cdn.robinhood.com",
+      "tag": "v3.11.3",
+      "version": "3.11.3"
     },
     {
-      "artifacts" : [
-
-      ],
-      "configs" : [
-
-      ],
-      "env" : "mainnet",
-      "github_repo" : "ethereum-optimism/op-geth",
-      "network" : "optimism",
-      "notes" : "Pin = op-geth v1.101511.1 (docker extract). op-node v1.13.5 alongside.",
-      "skip_reason" : "op-geth / op-node are host-installed; rollup.json comes from Superchain registry at provision.",
-      "source" : "ethereum-optimism/op-geth",
-      "tag" : "v1.101702.2",
-      "version" : "1.101702.2"
+      "artifacts": [],
+      "configs": [],
+      "env": "mainnet",
+      "github_repo": "ethereum-optimism/op-geth",
+      "network": "optimism",
+      "notes": "Pin = op-geth v1.101511.1 (docker extract). op-node v1.13.5 alongside.",
+      "skip_reason": "op-geth / op-node are host-installed; rollup.json comes from Superchain registry at provision.",
+      "source": "ethereum-optimism/op-geth",
+      "tag": "v1.101702.2",
+      "version": "1.101702.2"
     },
     {
-      "artifacts" : [
-
-      ],
-      "configs" : [
-
-      ],
-      "env" : "sepolia",
-      "github_repo" : "ethereum-optimism/op-geth",
-      "network" : "optimism",
-      "notes" : "Pin = op-geth v1.101511.1 (docker extract). op-node v1.13.5 alongside.",
-      "skip_reason" : "op-geth / op-node are host-installed.",
-      "source" : "ethereum-optimism/op-geth",
-      "tag" : "v1.101702.2",
-      "version" : "1.101702.2"
+      "artifacts": [],
+      "configs": [],
+      "env": "sepolia",
+      "github_repo": "ethereum-optimism/op-geth",
+      "network": "optimism",
+      "notes": "Pin = op-geth v1.101511.1 (docker extract). op-node v1.13.5 alongside.",
+      "skip_reason": "op-geth / op-node are host-installed.",
+      "source": "ethereum-optimism/op-geth",
+      "tag": "v1.101702.2",
+      "version": "1.101702.2"
     },
     {
-      "artifacts" : [
-
-      ],
-      "configs" : [
-
-      ],
-      "env" : "mainnet",
-      "github_repo" : "base/node-reth",
-      "network" : "base",
-      "notes" : "Pin = ghcr.io/base/node-reth:v1.2.0 (docker extract). Not the deprecated op-geth path.",
-      "skip_reason" : "base-reth-node / base-consensus are host-extracted from the official image.",
-      "source" : "base/node-reth",
-      "tag" : "v1.2.0",
-      "version" : "1.2.0"
+      "artifacts": [],
+      "configs": [],
+      "env": "mainnet",
+      "github_repo": "base/node-reth",
+      "network": "base",
+      "notes": "Pin = ghcr.io/base/node-reth:v1.2.0 (docker extract). Not the deprecated op-geth path.",
+      "skip_reason": "base-reth-node / base-consensus are host-extracted from the official image.",
+      "source": "base/node-reth",
+      "tag": "v1.2.0",
+      "version": "1.2.0"
     },
     {
-      "artifacts" : [
-
-      ],
-      "configs" : [
-
-      ],
-      "env" : "sepolia",
-      "github_repo" : "base/node-reth",
-      "network" : "base",
-      "notes" : "Pin = ghcr.io/base/node-reth:v1.2.0 (docker extract).",
-      "skip_reason" : "base-reth-node / base-consensus are host-extracted from the official image.",
-      "source" : "base/node-reth",
-      "tag" : "v1.2.0",
-      "version" : "1.2.0"
+      "artifacts": [],
+      "configs": [],
+      "env": "sepolia",
+      "github_repo": "base/node-reth",
+      "network": "base",
+      "notes": "Pin = ghcr.io/base/node-reth:v1.2.0 (docker extract).",
+      "skip_reason": "base-reth-node / base-consensus are host-extracted from the official image.",
+      "source": "base/node-reth",
+      "tag": "v1.2.0",
+      "version": "1.2.0"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "zebrad-6.3.0-x86_64-unknown-linux-gnu.tar.gz",
-          "url" : "https://github.com/ZcashFoundation/zebra/releases/download/v6.3.0/zebrad-6.3.0-x86_64-unknown-linux-gnu.tar.gz",
-          "url_aarch64" : "https://github.com/ZcashFoundation/zebra/releases/download/v6.3.0/zebrad-6.3.0-aarch64-unknown-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "zebrad-6.3.0-x86_64-unknown-linux-gnu.tar.gz",
+          "url": "https://github.com/ZcashFoundation/zebra/releases/download/v6.3.0/zebrad-6.3.0-x86_64-unknown-linux-gnu.tar.gz",
+          "url_aarch64": "https://github.com/ZcashFoundation/zebra/releases/download/v6.3.0/zebrad-6.3.0-aarch64-unknown-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "mainnet",
-      "network" : "zcash",
-      "notes" : "zebrad.toml is agent-generated.",
-      "source" : "ZcashFoundation/zebra",
-      "tag" : "v6.3.0",
-      "version" : "6.3.0"
+      "configs": [],
+      "env": "mainnet",
+      "network": "zcash",
+      "notes": "zebrad.toml is agent-generated.",
+      "source": "ZcashFoundation/zebra",
+      "tag": "v6.3.0",
+      "version": "6.3.0"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "zebrad-6.3.0-x86_64-unknown-linux-gnu.tar.gz",
-          "url" : "https://github.com/ZcashFoundation/zebra/releases/download/v6.3.0/zebrad-6.3.0-x86_64-unknown-linux-gnu.tar.gz",
-          "url_aarch64" : "https://github.com/ZcashFoundation/zebra/releases/download/v6.3.0/zebrad-6.3.0-aarch64-unknown-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "zebrad-6.3.0-x86_64-unknown-linux-gnu.tar.gz",
+          "url": "https://github.com/ZcashFoundation/zebra/releases/download/v6.3.0/zebrad-6.3.0-x86_64-unknown-linux-gnu.tar.gz",
+          "url_aarch64": "https://github.com/ZcashFoundation/zebra/releases/download/v6.3.0/zebrad-6.3.0-aarch64-unknown-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "testnet",
-      "network" : "zcash",
-      "source" : "ZcashFoundation/zebra",
-      "tag" : "v6.3.0",
-      "version" : "6.3.0"
+      "configs": [],
+      "env": "testnet",
+      "network": "zcash",
+      "source": "ZcashFoundation/zebra",
+      "tag": "v6.3.0",
+      "version": "6.3.0"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "sui-mainnet-v1.76.1-ubuntu-x86_64.tgz",
-          "url" : "https://github.com/MystenLabs/sui/releases/download/mainnet-v1.76.1/sui-mainnet-v1.76.1-ubuntu-x86_64.tgz"
+          "kind": "tarball",
+          "name": "sui-mainnet-v1.76.1-ubuntu-x86_64.tgz",
+          "url": "https://github.com/MystenLabs/sui/releases/download/mainnet-v1.76.1/sui-mainnet-v1.76.1-ubuntu-x86_64.tgz"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "genesis.blob",
-          "url" : "https://github.com/MystenLabs/sui-genesis/raw/main/mainnet/genesis.blob"
+          "name": "genesis.blob",
+          "url": "https://github.com/MystenLabs/sui-genesis/raw/main/mainnet/genesis.blob"
         }
       ],
-      "env" : "mainnet",
-      "network" : "sui",
-      "notes" : "fullnode.yaml is agent-generated. genesis.blob is required.",
-      "source" : "MystenLabs/sui",
-      "tag" : "mainnet-v1.77.2",
-      "version" : "mainnet-v1.77.2"
+      "env": "mainnet",
+      "network": "sui",
+      "notes": "fullnode.yaml is agent-generated. genesis.blob is required.",
+      "source": "MystenLabs/sui",
+      "tag": "mainnet-v1.77.2",
+      "version": "mainnet-v1.77.2"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "sui-testnet-v1.77.1-ubuntu-x86_64.tgz",
-          "url" : "https://github.com/MystenLabs/sui/releases/download/testnet-v1.77.1/sui-testnet-v1.77.1-ubuntu-x86_64.tgz"
+          "kind": "tarball",
+          "name": "sui-testnet-v1.77.1-ubuntu-x86_64.tgz",
+          "url": "https://github.com/MystenLabs/sui/releases/download/testnet-v1.77.1/sui-testnet-v1.77.1-ubuntu-x86_64.tgz"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "genesis.blob",
-          "url" : "https://github.com/MystenLabs/sui-genesis/raw/main/testnet/genesis.blob"
+          "name": "genesis.blob",
+          "url": "https://github.com/MystenLabs/sui-genesis/raw/main/testnet/genesis.blob"
         }
       ],
-      "env" : "testnet",
-      "network" : "sui",
-      "source" : "MystenLabs/sui",
-      "tag" : "testnet-v1.78.0",
-      "version" : "testnet-v1.78.0"
+      "env": "testnet",
+      "network": "sui",
+      "source": "MystenLabs/sui",
+      "tag": "testnet-v1.78.0",
+      "version": "testnet-v1.78.0"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "aptos-node-performance-ubuntu-22.04.tgz",
-          "url" : "https://github.com/aptos-labs/aptos-core/releases/download/aptos-node-v1.48.6-hotfix/aptos-node-performance-ubuntu-22.04.tgz"
+          "kind": "tarball",
+          "name": "aptos-node-performance-ubuntu-22.04.tgz",
+          "url": "https://github.com/aptos-labs/aptos-core/releases/download/aptos-node-v1.48.6-hotfix/aptos-node-performance-ubuntu-22.04.tgz"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "genesis.blob",
-          "url" : "https://raw.githubusercontent.com/aptos-labs/aptos-networks/main/mainnet/genesis.blob"
+          "name": "genesis.blob",
+          "url": "https://raw.githubusercontent.com/aptos-labs/aptos-networks/main/mainnet/genesis.blob"
         },
         {
-          "name" : "waypoint.txt",
-          "url" : "https://raw.githubusercontent.com/aptos-labs/aptos-networks/main/mainnet/waypoint.txt"
+          "name": "waypoint.txt",
+          "url": "https://raw.githubusercontent.com/aptos-labs/aptos-networks/main/mainnet/waypoint.txt"
         }
       ],
-      "env" : "mainnet",
-      "network" : "aptos",
-      "notes" : "fullnode.yaml is agent-generated.",
-      "source" : "aptos-labs/aptos-core",
-      "tag" : "aptos-node-v1.48.7-hotfix-rc",
-      "version" : "aptos-node-v1.48.7-hotfix-rc"
+      "env": "mainnet",
+      "network": "aptos",
+      "notes": "fullnode.yaml is agent-generated.",
+      "source": "aptos-labs/aptos-core",
+      "tag": "aptos-node-v1.48.7-hotfix-rc",
+      "version": "aptos-node-v1.48.7-hotfix-rc"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "aptos-node-performance-ubuntu-22.04.tgz",
-          "url" : "https://github.com/aptos-labs/aptos-core/releases/download/aptos-node-v1.48.7-hotfix-rc/aptos-node-performance-ubuntu-22.04.tgz"
+          "kind": "tarball",
+          "name": "aptos-node-performance-ubuntu-22.04.tgz",
+          "url": "https://github.com/aptos-labs/aptos-core/releases/download/aptos-node-v1.48.7-hotfix-rc/aptos-node-performance-ubuntu-22.04.tgz"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "genesis.blob",
-          "url" : "https://raw.githubusercontent.com/aptos-labs/aptos-networks/main/testnet/genesis.blob"
+          "name": "genesis.blob",
+          "url": "https://raw.githubusercontent.com/aptos-labs/aptos-networks/main/testnet/genesis.blob"
         },
         {
-          "name" : "waypoint.txt",
-          "url" : "https://raw.githubusercontent.com/aptos-labs/aptos-networks/main/testnet/waypoint.txt"
+          "name": "waypoint.txt",
+          "url": "https://raw.githubusercontent.com/aptos-labs/aptos-networks/main/testnet/waypoint.txt"
         }
       ],
-      "env" : "testnet",
-      "network" : "aptos",
-      "source" : "aptos-labs/aptos-core",
-      "tag" : "aptos-node-v1.48.7-hotfix-rc",
-      "version" : "aptos-node-v1.48.7-hotfix-rc"
+      "env": "testnet",
+      "network": "aptos",
+      "source": "aptos-labs/aptos-core",
+      "tag": "aptos-node-v1.48.7-hotfix-rc",
+      "version": "aptos-node-v1.48.7-hotfix-rc"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "avalanchego-linux-amd64-v1.14.2.tar.gz",
-          "url" : "https://github.com/ava-labs/avalanchego/releases/download/v1.14.2/avalanchego-linux-amd64-v1.14.2.tar.gz",
-          "url_aarch64" : "https://github.com/ava-labs/avalanchego/releases/download/v1.14.2/avalanchego-linux-arm64-v1.14.2.tar.gz"
+          "kind": "tarball",
+          "name": "avalanchego-linux-amd64-v1.14.2.tar.gz",
+          "url": "https://github.com/ava-labs/avalanchego/releases/download/v1.14.2/avalanchego-linux-amd64-v1.14.2.tar.gz",
+          "url_aarch64": "https://github.com/ava-labs/avalanchego/releases/download/v1.14.2/avalanchego-linux-arm64-v1.14.2.tar.gz"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "mainnet",
-      "network" : "avalanche",
-      "notes" : "node config is agent-generated.",
-      "source" : "ava-labs/avalanchego",
-      "tag" : "v1.15.0-fuji",
-      "version" : "1.15.0-fuji"
+      "configs": [],
+      "env": "mainnet",
+      "network": "avalanche",
+      "notes": "node config is agent-generated.",
+      "source": "ava-labs/avalanchego",
+      "tag": "v1.15.0-fuji",
+      "version": "1.15.0-fuji"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "avalanchego-linux-amd64-v1.14.2.tar.gz",
-          "url" : "https://github.com/ava-labs/avalanchego/releases/download/v1.14.2/avalanchego-linux-amd64-v1.14.2.tar.gz",
-          "url_aarch64" : "https://github.com/ava-labs/avalanchego/releases/download/v1.14.2/avalanchego-linux-arm64-v1.14.2.tar.gz"
+          "kind": "tarball",
+          "name": "avalanchego-linux-amd64-v1.14.2.tar.gz",
+          "url": "https://github.com/ava-labs/avalanchego/releases/download/v1.14.2/avalanchego-linux-amd64-v1.14.2.tar.gz",
+          "url_aarch64": "https://github.com/ava-labs/avalanchego/releases/download/v1.14.2/avalanchego-linux-arm64-v1.14.2.tar.gz"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "fuji",
-      "network" : "avalanche",
-      "source" : "ava-labs/avalanchego",
-      "tag" : "v1.15.0-fuji",
-      "version" : "1.15.0-fuji"
+      "configs": [],
+      "env": "fuji",
+      "network": "avalanche",
+      "source": "ava-labs/avalanchego",
+      "tag": "v1.15.0-fuji",
+      "version": "1.15.0-fuji"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "apt",
-          "name" : "xrpld",
-          "url" : "apt://xrpld"
+          "kind": "apt",
+          "name": "xrpld",
+          "url": "apt://xrpld"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "validators.txt",
-          "url" : ""
+          "name": "validators.txt",
+          "url": ""
         }
       ],
-      "env" : "mainnet",
-      "github_repo" : "XRPLF/rippled",
-      "network" : "xrpl",
-      "notes" : "Catalog pin = latest stable 3.3.0 (2026-08-06). Provision writes canonical UNL (no [validator_list_threshold] 0 — stock validators-example.txt crashes xrpld: Invalid publisher key: 0). ❌ Fetch XRPLF example as-is.",
-      "skip_reason" : "",
-      "source" : "repos.ripple.com",
-      "tag" : "3.3.0",
-      "version" : "3.3.0"
+      "env": "mainnet",
+      "github_repo": "XRPLF/rippled",
+      "network": "xrpl",
+      "notes": "Catalog pin = latest stable 3.3.0 (2026-08-06). Provision writes canonical UNL (no [validator_list_threshold] 0 — stock validators-example.txt crashes xrpld: Invalid publisher key: 0). ❌ Fetch XRPLF example as-is.",
+      "skip_reason": "",
+      "source": "repos.ripple.com",
+      "tag": "3.3.0",
+      "version": "3.3.0"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "apt",
-          "name" : "xrpld",
-          "url" : "apt://xrpld"
+          "kind": "apt",
+          "name": "xrpld",
+          "url": "apt://xrpld"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "validators.txt",
-          "url" : ""
+          "name": "validators.txt",
+          "url": ""
         }
       ],
-      "env" : "testnet",
-      "github_repo" : "XRPLF/rippled",
-      "network" : "xrpl",
-      "notes" : "Catalog pin = latest stable 3.3.0 (2026-08-06). Provision writes canonical AltNet UNL (vl.altnet.rippletest.net). ❌ Stock validators-example.txt is mainnet + threshold 0.",
-      "skip_reason" : "",
-      "source" : "repos.ripple.com",
-      "tag" : "3.3.0",
-      "version" : "3.3.0"
+      "env": "testnet",
+      "github_repo": "XRPLF/rippled",
+      "network": "xrpl",
+      "notes": "Catalog pin = latest stable 3.3.0 (2026-08-06). Provision writes canonical AltNet UNL (vl.altnet.rippletest.net). ❌ Stock validators-example.txt is mainnet + threshold 0.",
+      "skip_reason": "",
+      "source": "repos.ripple.com",
+      "tag": "3.3.0",
+      "version": "3.3.0"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "dogecoin-1.14.9-x86_64-linux-gnu.tar.gz",
-          "url" : "https://github.com/dogecoin/dogecoin/releases/download/v1.14.9/dogecoin-1.14.9-x86_64-linux-gnu.tar.gz",
-          "url_aarch64" : "https://github.com/dogecoin/dogecoin/releases/download/v1.14.9/dogecoin-1.14.9-aarch64-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "dogecoin-1.14.9-x86_64-linux-gnu.tar.gz",
+          "url": "https://github.com/dogecoin/dogecoin/releases/download/v1.14.9/dogecoin-1.14.9-x86_64-linux-gnu.tar.gz",
+          "url_aarch64": "https://github.com/dogecoin/dogecoin/releases/download/v1.14.9/dogecoin-1.14.9-aarch64-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "mainnet",
-      "network" : "doge",
-      "notes" : "dogecoin.conf is agent-generated.",
-      "source" : "dogecoin/dogecoin",
-      "tag" : "v1.14.9",
-      "version" : "1.14.9"
+      "configs": [],
+      "env": "mainnet",
+      "network": "doge",
+      "notes": "dogecoin.conf is agent-generated.",
+      "source": "dogecoin/dogecoin",
+      "tag": "v1.14.9",
+      "version": "1.14.9"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "dogecoin-1.14.9-x86_64-linux-gnu.tar.gz",
-          "url" : "https://github.com/dogecoin/dogecoin/releases/download/v1.14.9/dogecoin-1.14.9-x86_64-linux-gnu.tar.gz",
-          "url_aarch64" : "https://github.com/dogecoin/dogecoin/releases/download/v1.14.9/dogecoin-1.14.9-aarch64-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "dogecoin-1.14.9-x86_64-linux-gnu.tar.gz",
+          "url": "https://github.com/dogecoin/dogecoin/releases/download/v1.14.9/dogecoin-1.14.9-x86_64-linux-gnu.tar.gz",
+          "url_aarch64": "https://github.com/dogecoin/dogecoin/releases/download/v1.14.9/dogecoin-1.14.9-aarch64-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "testnet",
-      "network" : "doge",
-      "source" : "dogecoin/dogecoin",
-      "tag" : "v1.14.9",
-      "version" : "1.14.9"
+      "configs": [],
+      "env": "testnet",
+      "network": "doge",
+      "source": "dogecoin/dogecoin",
+      "tag": "v1.14.9",
+      "version": "1.14.9"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "litecoin-0.21.5.6-x86_64-linux-gnu.tar.gz",
-          "url" : "https://download.litecoin.org/litecoin-0.21.5.6/linux/litecoin-0.21.5.6-x86_64-linux-gnu.tar.gz",
-          "url_aarch64" : "https://download.litecoin.org/litecoin-0.21.5.6/linux/litecoin-0.21.5.6-aarch64-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "litecoin-0.21.5.6-x86_64-linux-gnu.tar.gz",
+          "url": "https://download.litecoin.org/litecoin-0.21.5.6/linux/litecoin-0.21.5.6-x86_64-linux-gnu.tar.gz",
+          "url_aarch64": "https://download.litecoin.org/litecoin-0.21.5.6/linux/litecoin-0.21.5.6-aarch64-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "litecoin.conf",
-          "url" : "https://raw.githubusercontent.com/litecoin-project/litecoin/v0.21.5.6/share/examples/litecoin.conf"
+          "name": "litecoin.conf",
+          "url": "https://raw.githubusercontent.com/litecoin-project/litecoin/v0.21.5.6/share/examples/litecoin.conf"
         }
       ],
-      "env" : "mainnet",
-      "github_repo" : "litecoin-project/litecoin",
-      "network" : "ltc",
-      "notes" : "Official share/examples/litecoin.conf is vendored. Agent writes the live litecoin.conf (txindex=1, prune=0, ports) on provision.",
-      "source" : "download.litecoin.org",
-      "tag" : "v0.21.5.6",
-      "version" : "0.21.5.6"
+      "env": "mainnet",
+      "github_repo": "litecoin-project/litecoin",
+      "network": "ltc",
+      "notes": "Official share/examples/litecoin.conf is vendored. Agent writes the live litecoin.conf (txindex=1, prune=0, ports) on provision.",
+      "source": "download.litecoin.org",
+      "tag": "v0.21.5.6",
+      "version": "0.21.5.6"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "litecoin-0.21.5.6-x86_64-linux-gnu.tar.gz",
-          "url" : "https://download.litecoin.org/litecoin-0.21.5.6/linux/litecoin-0.21.5.6-x86_64-linux-gnu.tar.gz",
-          "url_aarch64" : "https://download.litecoin.org/litecoin-0.21.5.6/linux/litecoin-0.21.5.6-aarch64-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "litecoin-0.21.5.6-x86_64-linux-gnu.tar.gz",
+          "url": "https://download.litecoin.org/litecoin-0.21.5.6/linux/litecoin-0.21.5.6-x86_64-linux-gnu.tar.gz",
+          "url_aarch64": "https://download.litecoin.org/litecoin-0.21.5.6/linux/litecoin-0.21.5.6-aarch64-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "litecoin.conf",
-          "url" : "https://raw.githubusercontent.com/litecoin-project/litecoin/v0.21.5.6/share/examples/litecoin.conf"
+          "name": "litecoin.conf",
+          "url": "https://raw.githubusercontent.com/litecoin-project/litecoin/v0.21.5.6/share/examples/litecoin.conf"
         }
       ],
-      "env" : "testnet",
-      "github_repo" : "litecoin-project/litecoin",
-      "network" : "ltc",
-      "notes" : "Official share/examples/litecoin.conf is vendored. Agent writes the live litecoin.conf (txindex=1, prune=0, ports) on provision.",
-      "source" : "download.litecoin.org",
-      "tag" : "v0.21.5.6",
-      "version" : "0.21.5.6"
+      "env": "testnet",
+      "github_repo": "litecoin-project/litecoin",
+      "network": "ltc",
+      "notes": "Official share/examples/litecoin.conf is vendored. Agent writes the live litecoin.conf (txindex=1, prune=0, ports) on provision.",
+      "source": "download.litecoin.org",
+      "tag": "v0.21.5.6",
+      "version": "0.21.5.6"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "litecoin-0.21.5.6-x86_64-linux-gnu.tar.gz",
-          "url" : "https://download.litecoin.org/litecoin-0.21.5.6/linux/litecoin-0.21.5.6-x86_64-linux-gnu.tar.gz",
-          "url_aarch64" : "https://download.litecoin.org/litecoin-0.21.5.6/linux/litecoin-0.21.5.6-aarch64-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "litecoin-0.21.5.6-x86_64-linux-gnu.tar.gz",
+          "url": "https://download.litecoin.org/litecoin-0.21.5.6/linux/litecoin-0.21.5.6-x86_64-linux-gnu.tar.gz",
+          "url_aarch64": "https://download.litecoin.org/litecoin-0.21.5.6/linux/litecoin-0.21.5.6-aarch64-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "litecoin.conf",
-          "url" : "https://raw.githubusercontent.com/litecoin-project/litecoin/v0.21.5.6/share/examples/litecoin.conf"
+          "name": "litecoin.conf",
+          "url": "https://raw.githubusercontent.com/litecoin-project/litecoin/v0.21.5.6/share/examples/litecoin.conf"
         }
       ],
-      "env" : "regtest",
-      "github_repo" : "litecoin-project/litecoin",
-      "network" : "ltc",
-      "notes" : "Official share/examples/litecoin.conf is vendored. Agent writes the live litecoin.conf (txindex=1, prune=0, ports) on provision.",
-      "source" : "download.litecoin.org",
-      "tag" : "v0.21.5.6",
-      "version" : "0.21.5.6"
+      "env": "regtest",
+      "github_repo": "litecoin-project/litecoin",
+      "network": "ltc",
+      "notes": "Official share/examples/litecoin.conf is vendored. Agent writes the live litecoin.conf (txindex=1, prune=0, ports) on provision.",
+      "source": "download.litecoin.org",
+      "tag": "v0.21.5.6",
+      "version": "0.21.5.6"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "dashcore-23.1.8-x86_64-linux-gnu.tar.gz",
-          "url" : "https://github.com/dashpay/dash/releases/download/v23.1.8/dashcore-23.1.8-x86_64-linux-gnu.tar.gz",
-          "url_aarch64" : "https://github.com/dashpay/dash/releases/download/v23.1.8/dashcore-23.1.8-aarch64-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "dashcore-23.1.8-x86_64-linux-gnu.tar.gz",
+          "url": "https://github.com/dashpay/dash/releases/download/v23.1.8/dashcore-23.1.8-x86_64-linux-gnu.tar.gz",
+          "url_aarch64": "https://github.com/dashpay/dash/releases/download/v23.1.8/dashcore-23.1.8-aarch64-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "mainnet",
-      "network" : "dash",
-      "notes" : "dash.conf is agent-generated.",
-      "source" : "dashpay/dash",
-      "tag" : "v23.1.8",
-      "version" : "23.1.8"
+      "configs": [],
+      "env": "mainnet",
+      "network": "dash",
+      "notes": "dash.conf is agent-generated.",
+      "source": "dashpay/dash",
+      "tag": "v23.1.8",
+      "version": "23.1.8"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "dashcore-23.1.8-x86_64-linux-gnu.tar.gz",
-          "url" : "https://github.com/dashpay/dash/releases/download/v23.1.8/dashcore-23.1.8-x86_64-linux-gnu.tar.gz",
-          "url_aarch64" : "https://github.com/dashpay/dash/releases/download/v23.1.8/dashcore-23.1.8-aarch64-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "dashcore-23.1.8-x86_64-linux-gnu.tar.gz",
+          "url": "https://github.com/dashpay/dash/releases/download/v23.1.8/dashcore-23.1.8-x86_64-linux-gnu.tar.gz",
+          "url_aarch64": "https://github.com/dashpay/dash/releases/download/v23.1.8/dashcore-23.1.8-aarch64-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "testnet",
-      "network" : "dash",
-      "source" : "dashpay/dash",
-      "tag" : "v23.1.8",
-      "version" : "23.1.8"
+      "configs": [],
+      "env": "testnet",
+      "network": "dash",
+      "source": "dashpay/dash",
+      "tag": "v23.1.8",
+      "version": "23.1.8"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "dashcore-23.1.8-x86_64-linux-gnu.tar.gz",
-          "url" : "https://github.com/dashpay/dash/releases/download/v23.1.8/dashcore-23.1.8-x86_64-linux-gnu.tar.gz",
-          "url_aarch64" : "https://github.com/dashpay/dash/releases/download/v23.1.8/dashcore-23.1.8-aarch64-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "dashcore-23.1.8-x86_64-linux-gnu.tar.gz",
+          "url": "https://github.com/dashpay/dash/releases/download/v23.1.8/dashcore-23.1.8-x86_64-linux-gnu.tar.gz",
+          "url_aarch64": "https://github.com/dashpay/dash/releases/download/v23.1.8/dashcore-23.1.8-aarch64-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "regtest",
-      "network" : "dash",
-      "source" : "dashpay/dash",
-      "tag" : "v23.1.8",
-      "version" : "23.1.8"
+      "configs": [],
+      "env": "regtest",
+      "network": "dash",
+      "source": "dashpay/dash",
+      "tag": "v23.1.8",
+      "version": "23.1.8"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "bitcoin-cash-node-29.1.0-x86_64-linux-gnu.tar.gz",
-          "url" : "https://github.com/bitcoin-cash-node/bitcoin-cash-node/releases/download/v29.1.0/bitcoin-cash-node-29.1.0-x86_64-linux-gnu.tar.gz",
-          "url_aarch64" : "https://github.com/bitcoin-cash-node/bitcoin-cash-node/releases/download/v29.1.0/bitcoin-cash-node-29.1.0-aarch64-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "bitcoin-cash-node-29.1.0-x86_64-linux-gnu.tar.gz",
+          "url": "https://github.com/bitcoin-cash-node/bitcoin-cash-node/releases/download/v29.1.0/bitcoin-cash-node-29.1.0-x86_64-linux-gnu.tar.gz",
+          "url_aarch64": "https://github.com/bitcoin-cash-node/bitcoin-cash-node/releases/download/v29.1.0/bitcoin-cash-node-29.1.0-aarch64-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "mainnet",
-      "network" : "bch",
-      "notes" : "bitcoin.conf is agent-generated. Archive ships bitcoind.",
-      "source" : "bitcoin-cash-node/bitcoin-cash-node",
-      "tag" : "v29.1.0",
-      "version" : "29.1.0"
+      "configs": [],
+      "env": "mainnet",
+      "network": "bch",
+      "notes": "bitcoin.conf is agent-generated. Archive ships bitcoind.",
+      "source": "bitcoin-cash-node/bitcoin-cash-node",
+      "tag": "v29.1.0",
+      "version": "29.1.0"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "bitcoin-cash-node-29.1.0-x86_64-linux-gnu.tar.gz",
-          "url" : "https://github.com/bitcoin-cash-node/bitcoin-cash-node/releases/download/v29.1.0/bitcoin-cash-node-29.1.0-x86_64-linux-gnu.tar.gz",
-          "url_aarch64" : "https://github.com/bitcoin-cash-node/bitcoin-cash-node/releases/download/v29.1.0/bitcoin-cash-node-29.1.0-aarch64-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "bitcoin-cash-node-29.1.0-x86_64-linux-gnu.tar.gz",
+          "url": "https://github.com/bitcoin-cash-node/bitcoin-cash-node/releases/download/v29.1.0/bitcoin-cash-node-29.1.0-x86_64-linux-gnu.tar.gz",
+          "url_aarch64": "https://github.com/bitcoin-cash-node/bitcoin-cash-node/releases/download/v29.1.0/bitcoin-cash-node-29.1.0-aarch64-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "testnet",
-      "network" : "bch",
-      "source" : "bitcoin-cash-node/bitcoin-cash-node",
-      "tag" : "v29.1.0",
-      "version" : "29.1.0"
+      "configs": [],
+      "env": "testnet",
+      "network": "bch",
+      "source": "bitcoin-cash-node/bitcoin-cash-node",
+      "tag": "v29.1.0",
+      "version": "29.1.0"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "bitcoin-cash-node-29.1.0-x86_64-linux-gnu.tar.gz",
-          "url" : "https://github.com/bitcoin-cash-node/bitcoin-cash-node/releases/download/v29.1.0/bitcoin-cash-node-29.1.0-x86_64-linux-gnu.tar.gz",
-          "url_aarch64" : "https://github.com/bitcoin-cash-node/bitcoin-cash-node/releases/download/v29.1.0/bitcoin-cash-node-29.1.0-aarch64-linux-gnu.tar.gz"
+          "kind": "tarball",
+          "name": "bitcoin-cash-node-29.1.0-x86_64-linux-gnu.tar.gz",
+          "url": "https://github.com/bitcoin-cash-node/bitcoin-cash-node/releases/download/v29.1.0/bitcoin-cash-node-29.1.0-x86_64-linux-gnu.tar.gz",
+          "url_aarch64": "https://github.com/bitcoin-cash-node/bitcoin-cash-node/releases/download/v29.1.0/bitcoin-cash-node-29.1.0-aarch64-linux-gnu.tar.gz"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "regtest",
-      "network" : "bch",
-      "source" : "bitcoin-cash-node/bitcoin-cash-node",
-      "tag" : "v29.1.0",
-      "version" : "29.1.0"
+      "configs": [],
+      "env": "regtest",
+      "network": "bch",
+      "source": "bitcoin-cash-node/bitcoin-cash-node",
+      "tag": "v29.1.0",
+      "version": "29.1.0"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "cardano-node-11.0.1-linux-amd64.tar.gz",
-          "url" : "https://github.com/IntersectMBO/cardano-node/releases/download/11.0.1/cardano-node-11.0.1-linux-amd64.tar.gz",
-          "url_aarch64" : "https://github.com/IntersectMBO/cardano-node/releases/download/11.0.1/cardano-node-11.0.1-linux-arm64.tar.gz"
+          "kind": "tarball",
+          "name": "cardano-node-11.0.1-linux-amd64.tar.gz",
+          "url": "https://github.com/IntersectMBO/cardano-node/releases/download/11.0.1/cardano-node-11.0.1-linux-amd64.tar.gz",
+          "url_aarch64": "https://github.com/IntersectMBO/cardano-node/releases/download/11.0.1/cardano-node-11.0.1-linux-arm64.tar.gz"
         },
         {
-          "kind" : "zip",
-          "name" : "ogmios-v7.0.0-x86_64-linux.zip",
-          "url" : "https://github.com/CardanoSolutions/ogmios/releases/download/v7.0.0/ogmios-v7.0.0-x86_64-linux.zip",
-          "url_aarch64" : "https://github.com/CardanoSolutions/ogmios/releases/download/v7.0.0/ogmios-v7.0.0-aarch64-linux.zip"
+          "kind": "zip",
+          "name": "ogmios-v7.0.0-x86_64-linux.zip",
+          "url": "https://github.com/CardanoSolutions/ogmios/releases/download/v7.0.0/ogmios-v7.0.0-x86_64-linux.zip",
+          "url_aarch64": "https://github.com/CardanoSolutions/ogmios/releases/download/v7.0.0/ogmios-v7.0.0-aarch64-linux.zip"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "config.json",
-          "url" : "https://book.world.dev.cardano.org/environments/mainnet/config.json"
+          "name": "config.json",
+          "url": "https://book.world.dev.cardano.org/environments/mainnet/config.json"
         },
         {
-          "name" : "topology.json",
-          "url" : "https://book.world.dev.cardano.org/environments/mainnet/topology.json"
+          "name": "topology.json",
+          "url": "https://book.world.dev.cardano.org/environments/mainnet/topology.json"
         },
         {
-          "name" : "byron-genesis.json",
-          "url" : "https://book.world.dev.cardano.org/environments/mainnet/byron-genesis.json"
+          "name": "byron-genesis.json",
+          "url": "https://book.world.dev.cardano.org/environments/mainnet/byron-genesis.json"
         },
         {
-          "name" : "shelley-genesis.json",
-          "url" : "https://book.world.dev.cardano.org/environments/mainnet/shelley-genesis.json"
+          "name": "shelley-genesis.json",
+          "url": "https://book.world.dev.cardano.org/environments/mainnet/shelley-genesis.json"
         },
         {
-          "name" : "alonzo-genesis.json",
-          "url" : "https://book.world.dev.cardano.org/environments/mainnet/alonzo-genesis.json"
+          "name": "alonzo-genesis.json",
+          "url": "https://book.world.dev.cardano.org/environments/mainnet/alonzo-genesis.json"
         },
         {
-          "name" : "conway-genesis.json",
-          "url" : "https://book.world.dev.cardano.org/environments/mainnet/conway-genesis.json"
+          "name": "conway-genesis.json",
+          "url": "https://book.world.dev.cardano.org/environments/mainnet/conway-genesis.json"
         },
         {
-          "name" : "checkpoints.json",
-          "optional" : true,
-          "url" : "https://book.world.dev.cardano.org/environments/mainnet/checkpoints.json"
+          "name": "checkpoints.json",
+          "optional": true,
+          "url": "https://book.world.dev.cardano.org/environments/mainnet/checkpoints.json"
         },
         {
-          "name" : "peer-snapshot.json",
-          "optional" : true,
-          "url" : "https://book.world.dev.cardano.org/environments/mainnet/peer-snapshot.json"
+          "name": "peer-snapshot.json",
+          "optional": true,
+          "url": "https://book.world.dev.cardano.org/environments/mainnet/peer-snapshot.json"
         }
       ],
-      "env" : "mainnet",
-      "network" : "cardano",
-      "notes" : "Official book.world.dev.cardano.org configs. checkpoints.json optional.",
-      "source" : "IntersectMBO/cardano-node + CardanoSolutions/ogmios",
-      "tag" : "11.0.1",
-      "version" : "11.0.1"
+      "env": "mainnet",
+      "network": "cardano",
+      "notes": "Official book.world.dev.cardano.org configs. checkpoints.json optional.",
+      "source": "IntersectMBO/cardano-node + CardanoSolutions/ogmios",
+      "tag": "11.0.1",
+      "version": "11.0.1"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "cardano-node-11.0.1-linux-amd64.tar.gz",
-          "url" : "https://github.com/IntersectMBO/cardano-node/releases/download/11.0.1/cardano-node-11.0.1-linux-amd64.tar.gz",
-          "url_aarch64" : "https://github.com/IntersectMBO/cardano-node/releases/download/11.0.1/cardano-node-11.0.1-linux-arm64.tar.gz"
+          "kind": "tarball",
+          "name": "cardano-node-11.0.1-linux-amd64.tar.gz",
+          "url": "https://github.com/IntersectMBO/cardano-node/releases/download/11.0.1/cardano-node-11.0.1-linux-amd64.tar.gz",
+          "url_aarch64": "https://github.com/IntersectMBO/cardano-node/releases/download/11.0.1/cardano-node-11.0.1-linux-arm64.tar.gz"
         },
         {
-          "kind" : "zip",
-          "name" : "ogmios-v7.0.0-x86_64-linux.zip",
-          "url" : "https://github.com/CardanoSolutions/ogmios/releases/download/v7.0.0/ogmios-v7.0.0-x86_64-linux.zip",
-          "url_aarch64" : "https://github.com/CardanoSolutions/ogmios/releases/download/v7.0.0/ogmios-v7.0.0-aarch64-linux.zip"
+          "kind": "zip",
+          "name": "ogmios-v7.0.0-x86_64-linux.zip",
+          "url": "https://github.com/CardanoSolutions/ogmios/releases/download/v7.0.0/ogmios-v7.0.0-x86_64-linux.zip",
+          "url_aarch64": "https://github.com/CardanoSolutions/ogmios/releases/download/v7.0.0/ogmios-v7.0.0-aarch64-linux.zip"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "config.json",
-          "url" : "https://book.world.dev.cardano.org/environments/preprod/config.json"
+          "name": "config.json",
+          "url": "https://book.world.dev.cardano.org/environments/preprod/config.json"
         },
         {
-          "name" : "topology.json",
-          "url" : "https://book.world.dev.cardano.org/environments/preprod/topology.json"
+          "name": "topology.json",
+          "url": "https://book.world.dev.cardano.org/environments/preprod/topology.json"
         },
         {
-          "name" : "byron-genesis.json",
-          "url" : "https://book.world.dev.cardano.org/environments/preprod/byron-genesis.json"
+          "name": "byron-genesis.json",
+          "url": "https://book.world.dev.cardano.org/environments/preprod/byron-genesis.json"
         },
         {
-          "name" : "shelley-genesis.json",
-          "url" : "https://book.world.dev.cardano.org/environments/preprod/shelley-genesis.json"
+          "name": "shelley-genesis.json",
+          "url": "https://book.world.dev.cardano.org/environments/preprod/shelley-genesis.json"
         },
         {
-          "name" : "alonzo-genesis.json",
-          "url" : "https://book.world.dev.cardano.org/environments/preprod/alonzo-genesis.json"
+          "name": "alonzo-genesis.json",
+          "url": "https://book.world.dev.cardano.org/environments/preprod/alonzo-genesis.json"
         },
         {
-          "name" : "conway-genesis.json",
-          "url" : "https://book.world.dev.cardano.org/environments/preprod/conway-genesis.json"
+          "name": "conway-genesis.json",
+          "url": "https://book.world.dev.cardano.org/environments/preprod/conway-genesis.json"
         },
         {
-          "name" : "checkpoints.json",
-          "optional" : true,
-          "url" : "https://book.world.dev.cardano.org/environments/preprod/checkpoints.json"
+          "name": "checkpoints.json",
+          "optional": true,
+          "url": "https://book.world.dev.cardano.org/environments/preprod/checkpoints.json"
         },
         {
-          "name" : "peer-snapshot.json",
-          "optional" : true,
-          "url" : "https://book.world.dev.cardano.org/environments/preprod/peer-snapshot.json"
+          "name": "peer-snapshot.json",
+          "optional": true,
+          "url": "https://book.world.dev.cardano.org/environments/preprod/peer-snapshot.json"
         }
       ],
-      "env" : "preprod",
-      "network" : "cardano",
-      "source" : "IntersectMBO/cardano-node + CardanoSolutions/ogmios",
-      "tag" : "11.0.1",
-      "version" : "11.0.1"
+      "env": "preprod",
+      "network": "cardano",
+      "source": "IntersectMBO/cardano-node + CardanoSolutions/ogmios",
+      "tag": "11.0.1",
+      "version": "11.0.1"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "tarball",
-          "name" : "cardano-node-11.0.1-linux-amd64.tar.gz",
-          "url" : "https://github.com/IntersectMBO/cardano-node/releases/download/11.0.1/cardano-node-11.0.1-linux-amd64.tar.gz",
-          "url_aarch64" : "https://github.com/IntersectMBO/cardano-node/releases/download/11.0.1/cardano-node-11.0.1-linux-arm64.tar.gz"
+          "kind": "tarball",
+          "name": "cardano-node-11.0.1-linux-amd64.tar.gz",
+          "url": "https://github.com/IntersectMBO/cardano-node/releases/download/11.0.1/cardano-node-11.0.1-linux-amd64.tar.gz",
+          "url_aarch64": "https://github.com/IntersectMBO/cardano-node/releases/download/11.0.1/cardano-node-11.0.1-linux-arm64.tar.gz"
         },
         {
-          "kind" : "zip",
-          "name" : "ogmios-v7.0.0-x86_64-linux.zip",
-          "url" : "https://github.com/CardanoSolutions/ogmios/releases/download/v7.0.0/ogmios-v7.0.0-x86_64-linux.zip",
-          "url_aarch64" : "https://github.com/CardanoSolutions/ogmios/releases/download/v7.0.0/ogmios-v7.0.0-aarch64-linux.zip"
+          "kind": "zip",
+          "name": "ogmios-v7.0.0-x86_64-linux.zip",
+          "url": "https://github.com/CardanoSolutions/ogmios/releases/download/v7.0.0/ogmios-v7.0.0-x86_64-linux.zip",
+          "url_aarch64": "https://github.com/CardanoSolutions/ogmios/releases/download/v7.0.0/ogmios-v7.0.0-aarch64-linux.zip"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "config.json",
-          "url" : "https://book.world.dev.cardano.org/environments/preview/config.json"
+          "name": "config.json",
+          "url": "https://book.world.dev.cardano.org/environments/preview/config.json"
         },
         {
-          "name" : "topology.json",
-          "url" : "https://book.world.dev.cardano.org/environments/preview/topology.json"
+          "name": "topology.json",
+          "url": "https://book.world.dev.cardano.org/environments/preview/topology.json"
         },
         {
-          "name" : "byron-genesis.json",
-          "url" : "https://book.world.dev.cardano.org/environments/preview/byron-genesis.json"
+          "name": "byron-genesis.json",
+          "url": "https://book.world.dev.cardano.org/environments/preview/byron-genesis.json"
         },
         {
-          "name" : "shelley-genesis.json",
-          "url" : "https://book.world.dev.cardano.org/environments/preview/shelley-genesis.json"
+          "name": "shelley-genesis.json",
+          "url": "https://book.world.dev.cardano.org/environments/preview/shelley-genesis.json"
         },
         {
-          "name" : "alonzo-genesis.json",
-          "url" : "https://book.world.dev.cardano.org/environments/preview/alonzo-genesis.json"
+          "name": "alonzo-genesis.json",
+          "url": "https://book.world.dev.cardano.org/environments/preview/alonzo-genesis.json"
         },
         {
-          "name" : "conway-genesis.json",
-          "url" : "https://book.world.dev.cardano.org/environments/preview/conway-genesis.json"
+          "name": "conway-genesis.json",
+          "url": "https://book.world.dev.cardano.org/environments/preview/conway-genesis.json"
         },
         {
-          "name" : "checkpoints.json",
-          "optional" : true,
-          "url" : "https://book.world.dev.cardano.org/environments/preview/checkpoints.json"
+          "name": "checkpoints.json",
+          "optional": true,
+          "url": "https://book.world.dev.cardano.org/environments/preview/checkpoints.json"
         },
         {
-          "name" : "peer-snapshot.json",
-          "optional" : true,
-          "url" : "https://book.world.dev.cardano.org/environments/preview/peer-snapshot.json"
+          "name": "peer-snapshot.json",
+          "optional": true,
+          "url": "https://book.world.dev.cardano.org/environments/preview/peer-snapshot.json"
         }
       ],
-      "env" : "preview",
-      "network" : "cardano",
-      "source" : "IntersectMBO/cardano-node + CardanoSolutions/ogmios",
-      "tag" : "11.0.1",
-      "version" : "11.0.1"
+      "env": "preview",
+      "network": "cardano",
+      "source": "IntersectMBO/cardano-node + CardanoSolutions/ogmios",
+      "tag": "11.0.1",
+      "version": "11.0.1"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "apt",
-          "name" : "stellar-rpc",
-          "url" : "apt://stellar-rpc"
+          "kind": "apt",
+          "name": "stellar-rpc",
+          "url": "apt://stellar-rpc"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "captive-core-pubnet.cfg",
-          "url" : "https://raw.githubusercontent.com/stellar/go-stellar-sdk/master/ingest/ledgerbackend/configs/captive-core-pubnet.cfg"
+          "name": "captive-core-pubnet.cfg",
+          "url": "https://raw.githubusercontent.com/stellar/go-stellar-sdk/master/ingest/ledgerbackend/configs/captive-core-pubnet.cfg"
         }
       ],
-      "env" : "mainnet",
-      "github_repo" : "stellar/stellar-rpc",
-      "network" : "stellar",
-      "notes" : "stellar-rpc + stellar-core via SDF apt. Captive-core cfg is downloaded and port-patched by the agent.",
-      "source" : "apt.stellar.org",
-      "tag" : "v28.0.0",
-      "version" : "28.0.0"
+      "env": "mainnet",
+      "github_repo": "stellar/stellar-rpc",
+      "network": "stellar",
+      "notes": "stellar-rpc + stellar-core via SDF apt. Captive-core cfg is downloaded and port-patched by the agent.",
+      "source": "apt.stellar.org",
+      "tag": "v28.0.0",
+      "version": "28.0.0"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "apt",
-          "name" : "stellar-rpc",
-          "url" : "apt://stellar-rpc"
+          "kind": "apt",
+          "name": "stellar-rpc",
+          "url": "apt://stellar-rpc"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "captive-core-testnet.cfg",
-          "url" : "https://raw.githubusercontent.com/stellar/go-stellar-sdk/master/ingest/ledgerbackend/configs/captive-core-testnet.cfg"
+          "name": "captive-core-testnet.cfg",
+          "url": "https://raw.githubusercontent.com/stellar/go-stellar-sdk/master/ingest/ledgerbackend/configs/captive-core-testnet.cfg"
         }
       ],
-      "env" : "testnet",
-      "github_repo" : "stellar/stellar-rpc",
-      "network" : "stellar",
-      "source" : "apt.stellar.org",
-      "tag" : "v28.0.0",
-      "version" : "28.0.0"
+      "env": "testnet",
+      "github_repo": "stellar/stellar-rpc",
+      "network": "stellar",
+      "source": "apt.stellar.org",
+      "tag": "v28.0.0",
+      "version": "28.0.0"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "apt",
-          "name" : "stellar-rpc",
-          "url" : "apt://stellar-rpc"
+          "kind": "apt",
+          "name": "stellar-rpc",
+          "url": "apt://stellar-rpc"
         }
       ],
-      "configs" : [
+      "configs": [
         {
-          "name" : "captive-core-futurenet.cfg",
-          "url" : "https://raw.githubusercontent.com/stellar/go-stellar-sdk/master/ingest/ledgerbackend/configs/captive-core-futurenet.cfg"
+          "name": "captive-core-futurenet.cfg",
+          "url": "https://raw.githubusercontent.com/stellar/go-stellar-sdk/master/ingest/ledgerbackend/configs/captive-core-futurenet.cfg"
         }
       ],
-      "env" : "futurenet",
-      "github_repo" : "stellar/stellar-rpc",
-      "network" : "stellar",
-      "source" : "apt.stellar.org",
-      "tag" : "v28.0.0",
-      "version" : "28.0.0"
+      "env": "futurenet",
+      "github_repo": "stellar/stellar-rpc",
+      "network": "stellar",
+      "source": "apt.stellar.org",
+      "tag": "v28.0.0",
+      "version": "28.0.0"
     },
     {
-      "artifacts" : [
-
-      ],
-      "configs" : [
-
-      ],
-      "env" : "mainnet",
-      "github_repo" : "ton-blockchain/mytonctrl",
-      "network" : "ton",
-      "notes" : "Pin = latest mytonctrl release (FetchClients). Provision still runs install.sh from master — not this tag as a jar.",
-      "skip_reason" : "validator-engine comes from mytonctrl install.sh on the host, not a single GitHub jar.",
-      "source" : "ton-blockchain/mytonctrl",
-      "tag" : "v2.17.1",
-      "version" : "2.17.1"
+      "artifacts": [],
+      "configs": [],
+      "env": "mainnet",
+      "github_repo": "ton-blockchain/mytonctrl",
+      "network": "ton",
+      "notes": "Pin = latest mytonctrl release (FetchClients). Provision still runs install.sh from master — not this tag as a jar.",
+      "skip_reason": "validator-engine comes from mytonctrl install.sh on the host, not a single GitHub jar.",
+      "source": "ton-blockchain/mytonctrl",
+      "tag": "v2.17.1",
+      "version": "2.17.1"
     },
     {
-      "artifacts" : [
-
-      ],
-      "configs" : [
-
-      ],
-      "env" : "testnet",
-      "github_repo" : "ton-blockchain/mytonctrl",
-      "network" : "ton",
-      "notes" : "Pin = latest mytonctrl release (FetchClients). Provision still runs install.sh from master.",
-      "skip_reason" : "validator-engine comes from mytonctrl install.sh on the host.",
-      "source" : "ton-blockchain/mytonctrl",
-      "tag" : "v2.17.1",
-      "version" : "2.17.1"
+      "artifacts": [],
+      "configs": [],
+      "env": "testnet",
+      "github_repo": "ton-blockchain/mytonctrl",
+      "network": "ton",
+      "notes": "Pin = latest mytonctrl release (FetchClients). Provision still runs install.sh from master.",
+      "skip_reason": "validator-engine comes from mytonctrl install.sh on the host.",
+      "source": "ton-blockchain/mytonctrl",
+      "tag": "v2.17.1",
+      "version": "2.17.1"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "zip",
-          "name" : "core-geth-linux-v1.12.22.zip",
-          "url" : "https://github.com/etclabscore/core-geth/releases/download/v1.12.22/core-geth-linux-v1.12.22.zip",
-          "url_aarch64" : "https://github.com/etclabscore/core-geth/releases/download/v1.12.22/core-geth-arm64-v1.12.22.zip"
+          "kind": "zip",
+          "name": "core-geth-linux-v1.12.22.zip",
+          "url": "https://github.com/etclabscore/core-geth/releases/download/v1.12.22/core-geth-linux-v1.12.22.zip",
+          "url_aarch64": "https://github.com/etclabscore/core-geth/releases/download/v1.12.22/core-geth-arm64-v1.12.22.zip"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "mainnet",
-      "network" : "etc",
-      "notes" : "Conf agent-generated.",
-      "source" : "etclabscore/core-geth",
-      "tag" : "v1.12.23",
-      "version" : "1.12.23"
+      "configs": [],
+      "env": "mainnet",
+      "network": "etc",
+      "notes": "Conf agent-generated.",
+      "source": "etclabscore/core-geth",
+      "tag": "v1.12.23",
+      "version": "1.12.23"
     },
     {
-      "artifacts" : [
+      "artifacts": [
         {
-          "kind" : "zip",
-          "name" : "core-geth-linux-v1.12.22.zip",
-          "url" : "https://github.com/etclabscore/core-geth/releases/download/v1.12.22/core-geth-linux-v1.12.22.zip",
-          "url_aarch64" : "https://github.com/etclabscore/core-geth/releases/download/v1.12.22/core-geth-arm64-v1.12.22.zip"
+          "kind": "zip",
+          "name": "core-geth-linux-v1.12.22.zip",
+          "url": "https://github.com/etclabscore/core-geth/releases/download/v1.12.22/core-geth-linux-v1.12.22.zip",
+          "url_aarch64": "https://github.com/etclabscore/core-geth/releases/download/v1.12.22/core-geth-arm64-v1.12.22.zip"
         }
       ],
-      "configs" : [
-
-      ],
-      "env" : "mordor",
-      "network" : "etc",
-      "source" : "etclabscore/core-geth",
-      "tag" : "v1.12.23",
-      "version" : "1.12.23"
+      "configs": [],
+      "env": "mordor",
+      "network": "etc",
+      "source": "etclabscore/core-geth",
+      "tag": "v1.12.23",
+      "version": "1.12.23"
     }
   ]
 }

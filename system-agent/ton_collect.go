@@ -47,8 +47,11 @@ var (
 	tonUnixTimeRe    = regexp.MustCompile(`(?i)\bunixtime\b[\s":=]+(\d+)`)
 	tonMasterTimeRe  = regexp.MustCompile(`(?i)\bmasterchainblocktime\b[\s":=]+(\d+)`)
 	tonMasterBlockRe = regexp.MustCompile(`(?i)\bmasterchainblock(?:number)?\b[\s":=]+(\d+)`)
-	tonTimediffRe    = regexp.MustCompile(`(?i)\btimediff\b[\s":=]+(-?[0-9]+(?:\.[0-9]+)?)`)
-	tonSeqnoHintRe   = regexp.MustCompile(`(?i)(?:last applied masterchain block id|masterchain)\D{0,40}?(\d{5,})`)
+	// getstats: masterchainblock  (-1,8000000000000000,78941023):hash
+	tonMasterBlockTupleRe = regexp.MustCompile(`(?i)\bmasterchainblock\b[^\n]*?\(\s*-1\s*,\s*[0-9a-fA-F]+\s*,\s*(\d+)\s*\)`)
+	tonShardClientSeqRe   = regexp.MustCompile(`(?i)\bshardclientmasterchainseqno\s+(\d+)`)
+	tonTimediffRe         = regexp.MustCompile(`(?i)\btimediff\b[\s":=]+(-?[0-9]+(?:\.[0-9]+)?)`)
+	tonSeqnoHintRe        = regexp.MustCompile(`(?i)(?:last applied masterchain block id|masterchain)\D{0,40}?(\d{5,})`)
 	// MyTonCtrl initial sync: "Syncing blocks, last known block was 35601 s ago"
 	tonLastKnownBlockAgoRe = regexp.MustCompile(`(?i)last known block was\s+([0-9]+(?:\.[0-9]+)?)\s*s(?:ec(?:onds?)?)?\s+ago`)
 	// validator-engine --version: "Commit: bb935a83e8da…, Date: …"
@@ -215,10 +218,10 @@ func collectTon(cfg Config) map[string]any {
 		// transient systemctl SIGTERM flashes Start error while MyTonCtrl installs.
 		NodeActive: nodeActive && (bootDone || procOK || thaOpen || bootActive),
 		StartError: startErr,
-		RPCOK:          rpcOK,
-		IBD:            syncing,
-		VerifyPct:      info.VerifyPct,
-		Progress:       prog,
+		RPCOK:      rpcOK,
+		IBD:        syncing,
+		VerifyPct:  info.VerifyPct,
+		Progress:   prog,
 	}
 	if bootActive {
 		lcIn.WarmupDetail = "MyTonCtrl bootstrap (dump/install)"
@@ -485,6 +488,10 @@ func tonSyncDetail(info tonRPCInfo, syncing bool) string {
 		if tonValidatorApplyCrashLoop() {
 			return fmt.Sprintf("MyTonCtrl dump %d%% · validator restart during apply (seqno 0)", info.DumpPct)
 		}
+		if info.OutOfSyncOK && info.OutOfSyncSec >= 60 {
+			return fmt.Sprintf("MyTonCtrl dump %d%% · applying state (~%s dump age)", info.DumpPct, formatTonBehind(info.OutOfSyncSec))
+		}
+
 		return fmt.Sprintf("MyTonCtrl dump %d%% · applying state", info.DumpPct)
 	}
 	if info.OK {
@@ -596,21 +603,32 @@ func readTonOutOfSyncSec(cfg Config) (float64, int64, bool) {
 		_ = os.WriteFile(cachePath, []byte(fmt.Sprintf("%g\n", v)), 0o644)
 	}
 
-	// 1) mytonctrl status (best-effort). ❌ `-c "status"` is a config path, not a command.
+	// 1) getstats — has masterchain seqno as a tuple. MyTonCtrl status often
+	// has oos without seqno; returning that first froze the UI at seqno=0 / dump 99%.
+	if out := tonValidatorGetstats(); out != "" {
+		if v, seq, ok := parseTonSyncSignals(out); ok && seq > 0 {
+			writeCache(v)
+
+			return v, seq, true
+		}
+	}
+	// 2) mytonctrl status (dump / console not ready). ❌ `-c "status"` is a config path.
 	if out, err := runCmd(10*time.Second, "bash", "-lc", tonMytonctrlStatusCmd()); err == nil {
 		if v, seq, ok := parseTonSyncSignals(out); ok {
 			writeCache(v)
+
 			return v, seq, true
 		}
 	}
-	// 2) validator-engine-console getstats — honest even when THA is down
+	// 3) getstats again if seqno was missing (oos-only parse).
 	if out := tonValidatorGetstats(); out != "" {
 		if v, seq, ok := parseTonSyncSignals(out); ok {
 			writeCache(v)
+
 			return v, seq, true
 		}
 	}
-	// 3) cache / status files — only if mtime is recent (≤30s). Stale peak must not win.
+	// 4) cache / status files — only if mtime is recent (≤30s). Stale peak must not win.
 	for _, p := range []string{
 		cachePath,
 		"/tmp/mytonctrl_status.txt",
@@ -665,7 +683,7 @@ port=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["control"
   || jq -r '.control[0].port' "$cfg" 2>/dev/null \
   || grep -oP '"port"\s*:\s*\K[0-9]+' "$cfg" 2>/dev/null | head -1)
 [ -n "$port" ] || exit 0
-timeout 4 "$bin" -k "$cli" -p "$pub" -a "127.0.0.1:$port" -c "getstats" 2>/dev/null | head -120 || true
+timeout 4 "$bin" -k "$cli" -p "$pub" -a "127.0.0.1:$port" -c "getstats" 2>/dev/null | head -200 || true
 `
 	out, err := runCmd(6*time.Second, "bash", "-lc", script)
 	if err != nil {
@@ -706,14 +724,7 @@ func stripANSIEscapes(s string) string {
 // unixtime − masterchainblocktime. Also best-effort masterchain seqno.
 func parseTonSyncSignals(s string) (oos float64, seqno int64, ok bool) {
 	s = stripANSIEscapes(s)
-	if m := tonMasterBlockRe.FindStringSubmatch(s); len(m) >= 2 {
-		seqno, _ = strconv.ParseInt(m[1], 10, 64)
-	}
-	if seqno == 0 {
-		if m := tonSeqnoHintRe.FindStringSubmatch(s); len(m) >= 2 {
-			seqno, _ = strconv.ParseInt(m[1], 10, 64)
-		}
-	}
+	seqno = parseTonSeqno(s)
 	// Prefer Masterchain … sec (or any "out of sync … sec"). Skip local-validator blocks.
 	for _, re := range []*regexp.Regexp{tonMasterchainOutOfSyncRe, tonOutOfSyncRe} {
 		if m := re.FindStringSubmatch(s); len(m) >= 2 {
@@ -773,6 +784,37 @@ func parseTonSyncSignals(s string) (oos float64, seqno int64, ok bool) {
 		}
 	}
 	return 0, seqno, false
+}
+
+// parseTonSeqno — getstats prints masterchainblock as a tuple, not
+// masterchainblocknumber=N. Hint regex must not take workchain 8000000000000000.
+func parseTonSeqno(s string) int64 {
+	if m := tonMasterBlockTupleRe.FindStringSubmatch(s); len(m) >= 2 {
+		if n, err := strconv.ParseInt(m[1], 10, 64); err == nil && tonPlausibleMCSeqno(n) {
+			return n
+		}
+	}
+	if m := tonMasterBlockRe.FindStringSubmatch(s); len(m) >= 2 {
+		if n, err := strconv.ParseInt(m[1], 10, 64); err == nil && tonPlausibleMCSeqno(n) {
+			return n
+		}
+	}
+	if m := tonShardClientSeqRe.FindStringSubmatch(s); len(m) >= 2 {
+		if n, err := strconv.ParseInt(m[1], 10, 64); err == nil && tonPlausibleMCSeqno(n) {
+			return n
+		}
+	}
+	if m := tonSeqnoHintRe.FindStringSubmatch(s); len(m) >= 2 {
+		if n, err := strconv.ParseInt(m[1], 10, 64); err == nil && tonPlausibleMCSeqno(n) {
+			return n
+		}
+	}
+
+	return 0
+}
+
+func tonPlausibleMCSeqno(n int64) bool {
+	return n > 0 && n < 1_000_000_000
 }
 
 // tonLagClosedPct — (peakBehind - behind) / peakBehind * 100 (Solana lesson).

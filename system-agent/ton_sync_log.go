@@ -17,6 +17,10 @@ func maybeAppendTonProgressLog(cfg Config, syncing bool, info tonRPCInfo) {
 		pct = fmt.Sprintf(" pct=%.1f", info.VerifyPct*100)
 	}
 	switch {
+	case info.OutOfSyncOK && info.Seqno <= 0:
+		// Dump apply: oos is dump age, pct=99 is a hold — not lag-closed catch-up.
+		line = fmt.Sprintf("%s applying seqno=0 dump_age_sec=%g syncing=1%s\n",
+			ts, info.OutOfSyncSec, pct)
 	case info.OutOfSyncOK && syncing:
 		line = fmt.Sprintf("%s out_of_sync_sec=%g seqno=%d syncing=1%s\n",
 			ts, info.OutOfSyncSec, info.Seqno, pct)

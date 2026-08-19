@@ -3,6 +3,17 @@
   "feed": "https://toolkit.rpcnode.dev/install/VERSIONS.json",
   "releases": [
     {
+      "version": "0.4.197",
+      "date": "2026-08-19",
+      "title": "XRPL first-ledger recycle + TON dump apply",
+      "networks": ["xrpl", "ton"],
+      "notes": [
+        "XRPL 0.4.196 skipped NuDB wipe while peers/proposers>0, but PrepareDatadirHeal still stopped xrpld every collect tick (default 2s). Skip stop/wipe while .first-ledger-wait is younger than 12 min. Stop xrpld only when NuDB will actually rotate.",
+        "TON: dump-end systemctl restart sets NRestarts=1 — that is not a crash loop (was forcing sticky 1G cache).",
+        "TON getstats seqno is masterchainblock (-1,wc,SEQ), not masterchainblocknumber. Prefer getstats over MyTonCtrl so the panel does not freeze at seqno=0 / dump 99% during catch-up."
+      ]
+    },
+    {
       "version": "0.4.196",
       "date": "2026-08-19",
       "title": "XRPL canonical UNL — first validated ledger",

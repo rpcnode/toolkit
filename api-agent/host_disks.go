@@ -84,12 +84,13 @@ type findmntDoc struct {
 }
 
 type findmntNode struct {
-	Target string      `json:"target"`
-	Source string      `json:"source"`
-	Fstype string      `json:"fstype"`
-	Size   json.Number `json:"size"`
-	Avail  json.Number `json:"avail"`
-	Used   json.Number `json:"used"`
+	Target   string        `json:"target"`
+	Source   string        `json:"source"`
+	Fstype   string        `json:"fstype"`
+	Size     json.Number   `json:"size"`
+	Avail    json.Number   `json:"avail"`
+	Used     json.Number   `json:"used"`
+	Children []findmntNode `json:"children,omitempty"`
 }
 
 func (s *Server) handleHostDisks(w http.ResponseWriter, r *http.Request) {
@@ -229,15 +230,37 @@ func collectHostDiskInventory() ([]HostDisk, []HostMount, error) {
 }
 
 func collectFindmnt() ([]findmntNode, error) {
-	raw, err := exec.Command("findmnt", "-J", "-b", "-o", "TARGET,SOURCE,FSTYPE,SIZE,AVAIL,USED").CombinedOutput()
+	// -l flattens; without it -J is a tree (children under /). We flatten either way
+	// so /data/nvme2, /data/nvme3, … are not dropped.
+	raw, err := exec.Command("findmnt", "-J", "-l", "-b", "-o", "TARGET,SOURCE,FSTYPE,SIZE,AVAIL,USED").CombinedOutput()
 	if err != nil {
-		return nil, err
+		raw, err = exec.Command("findmnt", "-J", "-b", "-o", "TARGET,SOURCE,FSTYPE,SIZE,AVAIL,USED").CombinedOutput()
+		if err != nil {
+			return nil, err
+		}
 	}
 	var doc findmntDoc
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return nil, err
 	}
-	return doc.Filesystems, nil
+	return flattenFindmnt(doc.Filesystems), nil
+}
+
+func flattenFindmnt(nodes []findmntNode) []findmntNode {
+	var out []findmntNode
+	var walk func([]findmntNode)
+	walk = func(ns []findmntNode) {
+		for _, n := range ns {
+			kids := n.Children
+			n.Children = nil
+			out = append(out, n)
+			if len(kids) > 0 {
+				walk(kids)
+			}
+		}
+	}
+	walk(nodes)
+	return out
 }
 
 func buildHostMounts(fsByTarget map[string]findmntNode, flat []HostDisk) []HostMount {
@@ -275,7 +298,7 @@ func buildHostMounts(fsByTarget map[string]findmntNode, flat []HostDisk) []HostM
 			m.UsedPct = round2(float64(used) / float64(size) * 100)
 		}
 		if d, ok := byMount[target]; ok {
-			m.DiskName = d.Name
+			m.DiskName = rootDiskName(d, flat)
 			m.DiskPath = d.Path
 			m.Model = d.Model
 			m.Tran = d.Tran
@@ -295,6 +318,34 @@ func buildHostMounts(fsByTarget map[string]findmntNode, flat []HostDisk) []HostM
 					break
 				}
 			}
+		}
+		out = append(out, m)
+	}
+	// lsblk already has mountpoints on partitions (nvme2n1p1 → /data/nvme2).
+	// If findmnt was a tree and we missed children, still surface them.
+	for _, d := range flat {
+		mp := strings.TrimSpace(d.Mountpoint)
+		if mp == "" || seen[mp] || !usableMountTarget(mp, d.Fstype) {
+			continue
+		}
+		seen[mp] = true
+		m := HostMount{
+			Target:     mp,
+			Source:     d.Path,
+			Fstype:     d.Fstype,
+			SizeBytes:  d.SizeBytes,
+			AvailBytes: d.FsAvailBytes,
+			AvailHuman: d.FsAvailHuman,
+			UsedPct:    d.FsUsedPct,
+			DiskName:   rootDiskName(d, flat),
+			DiskPath:   d.Path,
+			Model:      d.Model,
+			Tran:       d.Tran,
+			Rota:       d.Rota,
+			Preferred:  d.Preferred,
+		}
+		if m.AvailHuman == "" && m.AvailBytes > 0 {
+			m.AvailHuman = humanBytes(m.AvailBytes)
 		}
 		out = append(out, m)
 	}

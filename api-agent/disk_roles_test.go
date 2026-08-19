@@ -73,3 +73,23 @@ func TestFilterDataMountsExcludesOS(t *testing.T) {
 		t.Fatalf("want ≥2 data mounts, got %+v", out)
 	}
 }
+
+func TestRecommendMultiDisk_DataNvmeBindMounts(t *testing.T) {
+	mounts := []HostMount{
+		{Target: "/", Preferred: true, AvailBytes: 437e9, SizeBytes: 463e9, DiskName: "nvme0n1", Tran: "nvme"},
+		{Target: "/data/nvme2", Preferred: true, AvailBytes: 3.5e12, SizeBytes: 3.5e12, DiskName: "nvme2n1", Tran: "nvme"},
+		{Target: "/data/nvme3", Preferred: true, AvailBytes: 3.5e12, SizeBytes: 3.5e12, DiskName: "nvme3n1", Tran: "nvme"},
+	}
+	plan := recommendMultiDiskLayout("tron", "mainnet", mounts)
+	if plan.Strategy != "jbod_2" {
+		t.Fatalf("strategy=%s notes=%v", plan.Strategy, plan.Notes)
+	}
+	for _, r := range plan.Roles {
+		if r.Mount == "/" || r.Mount == "/data" {
+			t.Fatalf("data role on OS mount: %+v", r)
+		}
+		if r.Mount != "/data/nvme2" && r.Mount != "/data/nvme3" {
+			t.Fatalf("unexpected mount %s", r.Mount)
+		}
+	}
+}

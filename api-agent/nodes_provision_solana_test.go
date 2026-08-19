@@ -55,3 +55,17 @@ func TestEnsureSolanaRunScript_HighLoadRPCFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestAgaveReleaseFallbackURL(t *testing.T) {
+	got, err := agaveReleaseFallbackURL("4.2.1", "amd64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "https://github.com/anza-xyz/agave/releases/download/v4.2.1/solana-release-x86_64-unknown-linux-gnu.tar.bz2"
+	if got != want {
+		t.Fatalf("got %s", got)
+	}
+	if _, err := agaveReleaseTarballName("arm64"); err == nil {
+		t.Fatal("linux aarch64 should be unsupported")
+	}
+}

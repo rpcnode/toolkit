@@ -25,6 +25,8 @@ func hostPackagesForNetwork(network string) []string {
 		extra = []string{"openjdk-8-jre-headless"}
 	case "ton":
 		extra = []string{"git", "python3-pip"}
+	case "solana":
+		extra = []string{"bzip2"}
 	}
 	return uniqStrings(append(common, extra...))
 }

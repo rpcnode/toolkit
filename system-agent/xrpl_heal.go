@@ -109,19 +109,28 @@ func xrplDatadirHasLedger(data string) bool {
 	return total >= 8<<20
 }
 
-// xrplReinitStaleNuDB — one-shot: leftover NuDB from LoadManager FTL first-acquire
-// keeps seq=0. Official advice is a fresh empty NuDB path.
-func xrplReinitStaleNuDB(data string) (bool, error) {
+func xrplStaleNuDBWouldReinit(data string) bool {
 	data = strings.TrimSpace(data)
 	if data == "" || xrplDatadirHasLedger(data) {
-		return false, nil
+		return false
 	}
 
 	marker := filepath.Join(data, ".nudb-reinit")
 	if info, err := os.Stat(marker); err == nil && time.Since(info.ModTime()) < 15*time.Minute {
+		return false
+	}
+
+	return true
+}
+
+// xrplReinitStaleNuDB — one-shot: leftover NuDB from LoadManager FTL first-acquire
+// keeps seq=0. Official advice is a fresh empty NuDB path.
+func xrplReinitStaleNuDB(data string) (bool, error) {
+	if !xrplStaleNuDBWouldReinit(data) {
 		return false, nil
 	}
-	_ = os.Remove(marker)
+
+	_ = os.Remove(filepath.Join(strings.TrimSpace(data), ".nudb-reinit"))
 
 	return xrplRotateNuDB(data, ".nudb-reinit", "reinit after failed first ledger acquire\n")
 }
