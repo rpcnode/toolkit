@@ -65,6 +65,16 @@ stage_versions() {
   fi
 }
 
+# Live installer is frontend/toolkit/public/install/agent.sh (curl CDN).
+# Copy that → toolkit/install so archives match what the site serves.
+sync_cdn_agent_sh() {
+  local cdn="${LOCAL_INSTALL}/agent.sh"
+  [[ -f "$cdn" ]] || return 0
+  cp -f "$cdn" "$ROOT/install/agent.sh"
+  chmod 755 "$ROOT/install/agent.sh"
+  log "agent.sh ← ${cdn}"
+}
+
 pack_archive() {
   local stage name tgz
   mkdir -p "$ARCHIVE_DIR"
@@ -187,6 +197,7 @@ if [[ ! -d "$parent" ]]; then
   die "toolkit public dir missing: $parent (set CONNECT_PUBLIC_INSTALL)"
 fi
 
+sync_cdn_agent_sh
 pack_archive
 stage_local "$LOCAL_INSTALL"
 

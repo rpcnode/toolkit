@@ -69,6 +69,7 @@ import {
   type InstallOptionGroup,
 } from './InstallOptionsPicker'
 import { resolveSyncProgressPct } from './SyncStatusCard'
+import { InstallProgressModal, type InstallProgressOutcome } from './InstallProgressModal'
 
 /** Networks with tip multi_disk_roles (must match api-agent/disk_roles.go). */
 const MULTI_DISK_NETWORKS = new Set([
@@ -340,6 +341,9 @@ export function NodeInstallWizard({
   const [installOptions, setInstallOptions] = useState<Record<string, string>>({})
   const [killTarget, setKillTarget] = useState<CheckedCatalogPort | null>(null)
   const [killing, setKilling] = useState(false)
+  const [installModalOpen, setInstallModalOpen] = useState(false)
+  const [installOutcome, setInstallOutcome] = useState<InstallProgressOutcome | null>(null)
+  const [installError, setInstallError] = useState<string | null>(null)
   const autoStarted = useRef(false)
   const nodeStartSent = useRef(false)
   const portsFetched = useRef(false)
@@ -517,6 +521,23 @@ export function NodeInstallWizard({
 
   function pushLog(line: string) {
     setLog((prev) => [...prev.slice(-40), `${new Date().toLocaleTimeString()}  ${line}`])
+  }
+
+  function startInstallWatch() {
+    setInstallError(null)
+    setInstallOutcome('running')
+    setInstallModalOpen(true)
+  }
+
+  function markInstallOk() {
+    setInstallOutcome((prev) => (prev === 'fail' ? prev : 'ok'))
+    setInstallModalOpen(true)
+  }
+
+  function markInstallFail(msg: string) {
+    setInstallOutcome('fail')
+    setInstallError(msg)
+    setInstallModalOpen(true)
   }
 
   async function askAgentPorts(force = false) {
@@ -1020,6 +1041,7 @@ export function NodeInstallWizard({
         agentAckedStep.current = 'snapshot'
         await setWlStatus('snapshot_error')
         pushLog(`ERROR: ${snapBlock}`)
+        markInstallFail(snapBlock)
         notifications.show({ color: 'red', message: snapBlock, autoClose: 8000 })
         advanced = true
         await onWorkloadUpdated?.()
@@ -1039,13 +1061,16 @@ export function NodeInstallWizard({
       await onWorkloadUpdated?.()
       void onRefresh()
       notifications.show({ color: 'teal', message: 'Ports OK — installing' })
-      // Continue automated install/start for no-snap chains.
-      if (!allowSnap && leaveTo === 'install') {
+      // One Install click: provision → snapshot/start. Modal stays until start ACK.
+      if (leaveTo === 'install' || leaveTo === 'snapshot') {
         void beginInstall()
+      } else if (leaveTo === 'start' || leaveTo === 'done') {
+        markInstallOk()
       }
     } catch (e) {
       const msg = String((e as Error).message || e)
       pushLog(`ERROR: ${msg}`)
+      markInstallFail(msg)
       notifications.show({ color: 'red', message: msg, autoClose: 8000 })
       if (/insufficient disk|snapshot/i.test(msg)) {
         setError(msg)
@@ -1148,6 +1173,7 @@ export function NodeInstallWizard({
         agentAckedStep.current = next === 'install' ? 'start' : next
         setUiStep(agentAckedStep.current)
         notifications.show({ color: 'teal', message: 'Install started (agent ACK)' })
+        markInstallOk()
       } else if (!snapReady(status) && !snapRunning(status)) {
         pushLog('Requesting snapshot download…')
         await api.snapshotStart(agentTarget)
@@ -1210,6 +1236,7 @@ export function NodeInstallWizard({
           setUiStep('install')
           agentAckedStep.current = 'install'
           pushLog(`ERROR: ${ackMsg}`)
+          markInstallFail(ackMsg)
           notifications.show({ color: 'red', message: ackMsg })
           return
         }
@@ -1220,6 +1247,7 @@ export function NodeInstallWizard({
       setUiStep('install')
       agentAckedStep.current = 'install'
       pushLog(`ERROR: ${msg}`)
+      markInstallFail(msg)
       notifications.show({ color: 'red', message: msg })
       await onWorkloadUpdated?.()
     }
@@ -1235,6 +1263,7 @@ export function NodeInstallWizard({
     setUiStep('snapshot')
     setError(msg)
     pushLog(`Snapshot failed: ${msg}`)
+    markInstallFail(msg)
     void setWlStatus('snapshot_error').then(() => onWorkloadUpdated?.())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -1266,6 +1295,7 @@ export function NodeInstallWizard({
         setUiStep('done')
         await setWlStatus('online')
         pushLog('Node online')
+        markInstallOk()
         await onWorkloadUpdated?.()
         return
       }
@@ -1294,12 +1324,14 @@ export function NodeInstallWizard({
           setUiStep(next)
           await setWlStatus('starting')
           pushLog('Agent ACK: start started/done')
+          markInstallOk()
           await onRefresh()
           await onWorkloadUpdated?.()
         } catch (e) {
           const msg = String((e as Error).message || e)
           setError(msg)
           pushLog(`Start failed: ${msg}`)
+          markInstallFail(msg)
           setRunning(false)
           setUiStep('install')
           agentAckedStep.current = 'install'
@@ -1347,6 +1379,7 @@ export function NodeInstallWizard({
       setRunning(true)
       agentAckedStep.current = fromAgent
       setUiStep(fromAgent)
+      startInstallWatch()
       pushLog(`Resumed from agent lifecycle (${fromAgent})`)
     }
   }, [status, running, portsConfirming, allowSnap, currentStep?.detail, workload?.status])
@@ -1354,6 +1387,22 @@ export function NodeInstallWizard({
   const idx = active ? stepIndex(active, allowSnap) : -1
 
   return (
+    <>
+    {installOutcome === 'running' && !installModalOpen ? (
+      <Alert
+        color="yellow"
+        variant="light"
+        mb="sm"
+        title="Install in progress"
+      >
+        <Group justify="space-between" wrap="wrap">
+          <Text size="sm">Host logs keep updating in the background.</Text>
+          <Button size="xs" variant="light" color="yellow" onClick={() => setInstallModalOpen(true)}>
+            Show logs
+          </Button>
+        </Group>
+      </Alert>
+    ) : null}
     <Box
       style={{
         display: 'grid',
@@ -1729,6 +1778,7 @@ export function NodeInstallWizard({
                   }
                   onClick={() => {
                     setPortsError(null)
+                    startInstallWatch()
                     void installWithPortCheck()
                   }}
                 >
@@ -1887,7 +1937,10 @@ export function NodeInstallWizard({
                   size="md"
                   leftSection={<IconPlayerPlay size={16} />}
                   loading={running}
-                  onClick={() => void beginInstall()}
+                  onClick={() => {
+                    startInstallWatch()
+                    void beginInstall()
+                  }}
                 >
                   Install
                 </Button>
@@ -1942,6 +1995,7 @@ export function NodeInstallWizard({
                     variant="light"
                     onClick={() => {
                       setError(null)
+                      startInstallWatch()
                       void beginInstall()
                     }}
                   >
@@ -2052,6 +2106,7 @@ export function NodeInstallWizard({
                       onClick={() => {
                         nodeStartSent.current = false
                         setError(null)
+                        startInstallWatch()
                         void beginInstall()
                       }}
                     >
@@ -2112,6 +2167,19 @@ export function NodeInstallWizard({
         </Stack>
       </Box>
     </Box>
+    <InstallProgressModal
+      opened={installModalOpen}
+      onClose={() => setInstallModalOpen(false)}
+      serverId={workload?.server_id}
+      serverName={serverLabel || server?.name}
+      network={workload?.network || networkId}
+      env={env}
+      outcome={installOutcome || 'running'}
+      error={installError || error}
+      wizardLines={log}
+      onRefreshStatus={onRefresh}
+    />
+    </>
   )
 }
 

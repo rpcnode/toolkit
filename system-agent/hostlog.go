@@ -55,10 +55,11 @@ func hostLog(level, component, action, msg string) {
 		return
 	}
 	msg = redactHostLog(strings.TrimSpace(msg))
-	line := fmt.Sprintf("%s %-5s [%s] %s %s\n",
+	line := fmt.Sprintf("%s %-5s [%s %s] %s %s\n",
 		time.Now().UTC().Format(time.RFC3339),
 		strings.ToUpper(strings.TrimSpace(level)),
 		strings.TrimSpace(component),
+		agentVersion(),
 		strings.TrimSpace(action),
 		msg,
 	)

@@ -26,7 +26,12 @@ func hostPackagesForNetwork(network string) []string {
 	case "ton":
 		extra = []string{"git", "python3-pip"}
 	case "solana":
-		extra = []string{"bzip2"}
+		// bzip2 = CLI tarball. Rest = Anza v3+ source build (tarball has no agave-validator).
+		extra = []string{
+			"bzip2", "git", "build-essential", "pkg-config", "libudev-dev",
+			"llvm", "libclang-dev", "clang", "cmake", "protobuf-compiler",
+			"libssl-dev", "libprotobuf-dev",
+		}
 	}
 	return uniqStrings(append(common, extra...))
 }

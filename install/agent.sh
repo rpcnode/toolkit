@@ -399,7 +399,7 @@ download_agents() {
   return 0
 }
 
-log_agent_binary_version() {
+installed_agent_version() {
   local ver=""
   if [[ -x "$BIN_DIR/rpcnode-api-agent" ]]; then
     ver="$("$BIN_DIR/rpcnode-api-agent" -version 2>/dev/null | tr -d '[:space:]' || true)"
@@ -410,7 +410,26 @@ log_agent_binary_version() {
   if [[ -z "$ver" && -x "$BIN_DIR/tron-api-agent" ]]; then
     ver="$("$BIN_DIR/tron-api-agent" -version 2>/dev/null | tr -d '[:space:]' || true)"
   fi
-  if [[ -n "$ver" ]]; then
+  printf '%s' "${ver:-unknown}"
+}
+
+channel_agent_version() {
+  local ver=""
+  if [[ -n "${LOCAL_ARTIFACT_DIR}" && -f "${LOCAL_ARTIFACT_DIR}/TOOLKIT_VERSION" ]]; then
+    ver="$(tr -d '[:space:]' <"${LOCAL_ARTIFACT_DIR}/TOOLKIT_VERSION" || true)"
+  elif command -v curl >/dev/null 2>&1; then
+    ver="$(curl -fsSL --connect-timeout 5 --max-time 12 "${INSTALL_BASE_URL}/TOOLKIT_VERSION" 2>/dev/null | tr -d '[:space:]' || true)"
+  fi
+  if [[ -z "$ver" && -f "${INSTALL_ROOT}/TOOLKIT_VERSION" ]]; then
+    ver="$(tr -d '[:space:]' <"${INSTALL_ROOT}/TOOLKIT_VERSION" || true)"
+  fi
+  printf '%s' "${ver:-unknown}"
+}
+
+log_agent_binary_version() {
+  local ver
+  ver="$(installed_agent_version)"
+  if [[ "$ver" != "unknown" ]]; then
     log "version $ver"
   else
     log "version unknown"
@@ -1533,6 +1552,9 @@ EOF
 }
 
 print_rpcnode_banner() {
+  local inst ch
+  inst="$(installed_agent_version)"
+  ch="$(channel_agent_version)"
   cat <<'EOF'
 
   ____  ____   ____ _   _  ___  ____  _____
@@ -1541,8 +1563,12 @@ print_rpcnode_banner() {
  |  _ <|  __/| |___| |\  | |_| | |_| | |___
  |_| \_\_|    \____|_| \_|\___/|____/|_____|
               host agent installer
-
 EOF
+  printf '              channel   %s\n' "$ch"
+  if [[ "$inst" != "unknown" ]]; then
+    printf '              installed %s\n' "$inst"
+  fi
+  printf '\n'
 }
 
 agents_already_installed() {
@@ -1722,16 +1748,20 @@ prompt_existing_install() {
     INSTALL_ACTION=reinstall
     return 0
   fi
-  cat <<'EOF' >/dev/tty
-
-RpcNode is already installed on this host.
-
-  [1] Install / reinstall / upgrade agents   (keep fullnodes + datadirs)
-  [2] Remove agents only           (tip + leaves + watchdog; keep fullnodes)
-  [3] FULL uninstall               (agents + fullnode units + /data|/etc|/opt)
-  [4] Cancel
-
-EOF
+  local inst ch
+  inst="$(installed_agent_version)"
+  ch="$(channel_agent_version)"
+  {
+    printf '\nRpcNode is already installed on this host.\n'
+    printf '  installed  %s\n' "$inst"
+    printf '  channel    %s\n' "$ch"
+    printf '\n'
+    printf '  [1] Install / reinstall / upgrade agents   (keep fullnodes + datadirs)\n'
+    printf '  [2] Remove agents only           (tip + leaves + watchdog; keep fullnodes)\n'
+    printf '  [3] FULL uninstall               (agents + fullnode units + /data|/etc|/opt)\n'
+    printf '  [4] Cancel\n'
+    printf '\n'
+  } >/dev/tty
   local choice=""
   printf 'Choose [1/2/3/4]: ' >/dev/tty
   read -r choice </dev/tty || true

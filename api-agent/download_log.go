@@ -45,6 +45,23 @@ func logDownloadFail(kind, url string, err error) {
 }
 
 // logDownloadDone — GET/docker/snapshot result after curl/wget/docker pull.
+// logProvisionClientCatalog — URLs we will hit, on the same `provision` lines as begin.
+func logProvisionClientCatalog(network, env string) {
+	network = strings.TrimSpace(network)
+	env = strings.TrimSpace(env)
+	if network == "" {
+		return
+	}
+	if env == "" {
+		env = "mainnet"
+	}
+	for _, root := range clientCatalogRoots() {
+		manURL := fmt.Sprintf("%s/clients/%s/%s/manifest.json", strings.TrimRight(root, "/"), network, env)
+		hostLogf("INFO", "api-agent", "provision", "download catalog %s/%s %s", network, env, manURL)
+		logDownload("manifest", manURL, network+"/"+env+" (will GET)")
+	}
+}
+
 func logDownloadDone(kind, url, extra string, out []byte, err error) {
 	if err != nil {
 		if msg := strings.TrimSpace(string(out)); msg != "" {

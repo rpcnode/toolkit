@@ -69,3 +69,19 @@ func TestAgaveReleaseFallbackURL(t *testing.T) {
 		t.Fatal("linux aarch64 should be unsupported")
 	}
 }
+
+func TestResolveSolanaKeygenUsesOptPath(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	kg := filepath.Join(bin, "solana-keygen")
+	if err := os.WriteFile(kg, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got := resolveSolanaKeygen(dir)
+	if got != kg {
+		t.Fatalf("got %q want %q", got, kg)
+	}
+}

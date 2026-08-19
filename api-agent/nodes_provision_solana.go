@@ -64,7 +64,7 @@ func provisionSolanaNodeEnv(req nodeProvisionRequest, prof networkPortProfile) (
 	_ = ensureNodeopUser()
 	_ = ensureSolanaSysctl()
 
-	identity, err := ensureSolanaIdentity(etc, env, cluster.Localnet)
+	identity, err := ensureSolanaIdentity(opt, etc, env, cluster.Localnet)
 	if err != nil {
 		return nil, err
 	}
@@ -485,7 +485,7 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-func ensureSolanaIdentity(etc, env string, localnet bool) (string, error) {
+func ensureSolanaIdentity(optPath, etc, env string, localnet bool) (string, error) {
 	if localnet {
 		return "", nil
 	}
@@ -512,7 +512,7 @@ func ensureSolanaIdentity(etc, env string, localnet bool) (string, error) {
 		}
 	}
 
-	keygen := resolveSolanaKeygen("")
+	keygen := resolveSolanaKeygen(optPath)
 	if keygen == "" {
 		return "", fmt.Errorf("solana-keygen not found; cannot create identity at %s", path)
 	}
@@ -621,8 +621,8 @@ func agaveReleaseFallbackURL(version, goarch string) (string, error) {
 	return fmt.Sprintf("https://github.com/anza-xyz/agave/releases/download/%s/%s", tag, name), nil
 }
 
-// installAgaveReleaseBinaries — official Anza solana-release tarball (agave-validator + keygen).
-// No cargo build. CDN catalog first, GitHub fallback.
+// installAgaveReleaseBinaries — Anza GitHub tarball (CLI + keygen + test-validator).
+// As of Agave v3 the tarball does NOT include agave-validator — that is built from source.
 func installAgaveReleaseBinaries(optPath, env string) error {
 	ver := agaveReleaseVersion()
 	name, err := agaveReleaseTarballName(runtimeGOARCH())
@@ -652,40 +652,148 @@ curl -fsSL --connect-timeout 30 --max-time 900 -o %q %q
 mkdir -p %q
 tar -xjf %q -C %q
 SRC=""
-for d in %q %q/solana-release %q/solana-release/bin %q/bin; do
-  if [ -x "$d/agave-validator" ] || [ -x "$d/solana-test-validator" ]; then SRC="$d"; break; fi
-  if [ -x "$d/bin/agave-validator" ]; then SRC="$d/bin"; break; fi
+for d in %q/solana-release/bin %q/bin %q/solana-release %q; do
+  if [ -d "$d" ]; then SRC="$d"; break; fi
 done
 if [ -z "$SRC" ]; then
-  echo "agave-validator not found in tarball" >&2
+  echo "empty tarball extract" >&2
   find %q -maxdepth 4 -type f | head -40 >&2
   exit 1
 fi
-for b in agave-validator solana-keygen solana-test-validator solana; do
-  if [ -x "$SRC/$b" ]; then install -m 755 "$SRC/$b" %q/$b; fi
+echo "tarball bin: $(ls -1 "$SRC" 2>/dev/null | tr '\n' ' ')"
+for b in agave-validator solana-keygen solana-test-validator solana agave-ledger-tool; do
+  if [ -e "$SRC/$b" ]; then install -m 755 "$SRC/$b" %q/$b; fi
 done
-if [ ! -x %q/agave-validator ] && [ ! -x %q/solana-test-validator ]; then
-  echo "Agave binaries missing after extract" >&2
-  exit 1
-fi
 rm -rf %q %q
 `, tmp, url, extractDir, tmp, extractDir,
 		extractDir, extractDir, extractDir, extractDir, extractDir,
-		destBin, destBin, destBin, extractDir, tmp))
+		destBin, extractDir, tmp))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		err = fmt.Errorf("install Agave %s: %v (%s)", ver, err, strings.TrimSpace(string(out)))
+		err = fmt.Errorf("install Agave CLI %s: %v (%s)", ver, err, strings.TrimSpace(string(out)))
 		logDownloadFail("GET", url, err)
 		return err
 	}
-	logDownloadOK("GET", url, "agave → "+destBin)
+	logDownloadOK("GET", url, "agave CLI → "+destBin)
+	if msg := strings.TrimSpace(string(out)); msg != "" {
+		hostLogf("INFO", "api-agent", "provision", "solana/%s tarball %s", env, msg)
+	}
 	return nil
+}
+
+func agaveValidatorWorkdir(ver string) string {
+	return filepath.Join("/var/tmp", "rpcnode-agave-src-"+ver)
+}
+
+// adoptExistingAgaveValidator copies a finished binary if cargo already produced it
+// (in-progress cargo-install-all.sh still compiling other crates does not count as missing).
+func adoptExistingAgaveValidator(dest, work, env string) bool {
+	cands := []string{
+		dest,
+		filepath.Join(work, "bin", "agave-validator"),
+		filepath.Join(work, "target", "release", "agave-validator"),
+	}
+	for _, cand := range cands {
+		if !fileExists(cand) {
+			continue
+		}
+		if cand != dest {
+			if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+				return false
+			}
+			if err := copyFile(cand, dest); err != nil {
+				return false
+			}
+			_ = os.Chmod(dest, 0o755)
+		}
+		if !fileExists(dest) {
+			continue
+		}
+		hostLogf("INFO", "api-agent", "provision",
+			"solana/%s reuse agave-validator from %s → %s", env, cand, dest)
+		return true
+	}
+	return false
+}
+
+// buildAgaveValidatorFromSource — Anza v3+ GitHub tarball is CLI-only.
+// Builds ONLY --bin agave-validator. Does not run cargo-install-all.sh (whole workspace).
+func buildAgaveValidatorFromSource(optPath, env string) error {
+	ver := agaveReleaseVersion()
+	tag := "v" + strings.TrimPrefix(ver, "v")
+	dest := filepath.Join(optPath, "bin", "agave-validator")
+	work := agaveValidatorWorkdir(ver)
+	gitURL := "https://github.com/anza-xyz/agave.git"
+	if adoptExistingAgaveValidator(dest, work, env) {
+		return nil
+	}
+	hostLogf("INFO", "api-agent", "provision",
+		"solana/%s Anza tarball has no agave-validator — cargo build --bin agave-validator %s (30–90 min)", env, tag)
+	logDownload("GET", gitURL+"#"+tag, "source dest="+work)
+	if err := os.MkdirAll(filepath.Join(optPath, "bin"), 0o755); err != nil {
+		return err
+	}
+	script := fmt.Sprintf(`set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+export HOME="${HOME:-/root}"
+export CARGO_HOME="${CARGO_HOME:-/root/.cargo}"
+export RUSTUP_HOME="${RUSTUP_HOME:-/root/.rustup}"
+DEST=%q
+WORK=%q
+TAG=%q
+GIT=%q
+if [ -x "$DEST" ]; then echo "already at $DEST"; exit 0; fi
+for cand in "$WORK/bin/agave-validator" "$WORK/target/release/agave-validator"; do
+  if [ -x "$cand" ]; then
+    install -m 755 "$cand" "$DEST"
+    echo "reused $cand → $DEST"
+    exit 0
+  fi
+done
+if ! command -v rustc >/dev/null || ! command -v cargo >/dev/null; then
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+fi
+# shellcheck disable=SC1091
+. "$CARGO_HOME/env"
+if [ ! -d "$WORK/.git" ]; then
+  rm -rf "$WORK"
+  git clone --depth 1 --branch "$TAG" "$GIT" "$WORK"
+fi
+cd "$WORK"
+cargo build --release --bin agave-validator
+mkdir -p bin
+install -m 755 target/release/agave-validator bin/agave-validator
+install -m 755 bin/agave-validator "$DEST"
+test -x "$DEST"
+`, dest, work, tag, gitURL)
+	cmd := exec.Command("bash", "-lc", script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		err = fmt.Errorf("build Agave %s: %v (%s)", tag, err, trimBuildLog(string(out)))
+		logDownloadFail("GET", gitURL+"#"+tag, err)
+		return err
+	}
+	logDownloadOK("GET", gitURL+"#"+tag, "agave-validator → "+dest)
+	if msg := strings.TrimSpace(string(out)); msg != "" {
+		hostLogf("INFO", "api-agent", "provision", "solana/%s source %s", env, msg)
+	}
+	return nil
+}
+
+func trimBuildLog(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= 4000 {
+		return s
+	}
+	return s[len(s)-4000:]
 }
 
 // ensureSolanaBinaryInstalled finds Agave / test-validator or downloads the official tarball.
 func ensureSolanaBinaryInstalled(optPath, env string, localnet bool) (string, error) {
 	bin := resolveSolanaBinary(optPath, localnet)
 	if fileExists(bin) {
+		hostLogf("INFO", "api-agent", "provision", "download skip solana/%s already at %s", env, bin)
+		logDownload("skip", bin, "solana/"+env+" already installed")
 		_ = os.MkdirAll(filepath.Join(optPath, "bin"), 0o755)
 		link := filepath.Join(optPath, "bin", filepath.Base(bin))
 		if !fileExists(link) && bin != link {
@@ -697,6 +805,7 @@ func ensureSolanaBinaryInstalled(optPath, env string, localnet bool) (string, er
 
 		return bin, nil
 	}
+	hostLogf("INFO", "api-agent", "provision", "download Agave tarball solana/%s → %s/bin", env, optPath)
 	if err := installAgaveReleaseBinaries(optPath, env); err != nil {
 		return "", err
 	}
@@ -704,12 +813,21 @@ func ensureSolanaBinaryInstalled(optPath, env string, localnet bool) (string, er
 	if fileExists(bin) {
 		return bin, nil
 	}
+	if !localnet {
+		if err := buildAgaveValidatorFromSource(optPath, env); err != nil {
+			return "", err
+		}
+		bin = resolveSolanaBinary(optPath, localnet)
+		if fileExists(bin) {
+			return bin, nil
+		}
+	}
 	name := "agave-validator"
 	if localnet {
 		name = "solana-test-validator"
 	}
 
-	return "", fmt.Errorf("%s missing after Agave tarball install under %s", name, optPath)
+	return "", fmt.Errorf("%s missing after Anza tarball + source build under %s", name, optPath)
 }
 
 func ensureSolanaSysctl() error {
@@ -742,7 +860,7 @@ func rewriteSolanaUnit(prof networkPortProfile, req nodeProvisionRequest) error 
 	data := prof.DataPath
 	ledger, accounts, snapshots := resolveSolanaDiskDirs(req, data, prof.Env)
 	logPath := filepath.Join(data, "solana-"+prof.Env+".log")
-	identity, err := ensureSolanaIdentity(etc, prof.Env, cluster.Localnet)
+	identity, err := ensureSolanaIdentity(prof.OptPath, etc, prof.Env, cluster.Localnet)
 	if err != nil {
 		return err
 	}

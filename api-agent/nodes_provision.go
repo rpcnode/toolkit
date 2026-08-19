@@ -1352,6 +1352,7 @@ func (s *Server) handleNodesProvisionBody(w http.ResponseWriter, req nodeProvisi
 	}
 	// Re-provision supersedes an interrupted wipe — do not resume-delete a fresh node.
 	hostLogf("INFO", "api-agent", "provision", "begin %s/%s", req.Network, req.Env)
+	logProvisionClientCatalog(req.Network, req.Env)
 	clearRemoveJobOnProvision(req.Network, req.Env)
 	if !networkEnvSupported(req.Network, req.Env) {
 		writeJSON(w, http.StatusBadRequest, unsupportedNetworkEnvPayload(req.Network, req.Env))
@@ -1484,11 +1485,13 @@ func (s *Server) handleNodesProvisionBody(w http.ResponseWriter, req nodeProvisi
 		return
 	}
 	if err != nil {
+		hostLogf("ERROR", "api-agent", "provision", "fail %s/%s: %v", req.Network, req.Env, err)
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"ok": false, "error": "provision_failed", "message": err.Error(),
 		})
 		return
 	}
+	hostLogf("INFO", "api-agent", "provision", "ok %s/%s", req.Network, req.Env)
 	result["version"] = agentVersion()
 	result["units_start"] = "scheduled"
 	result["units_start_delay_ms"] = 600
