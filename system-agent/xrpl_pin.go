@@ -63,8 +63,12 @@ func xrplFirstLedgerStuckFor(data string) bool {
 
 func xrplDebugLogHasInboundStall(data string) bool {
 	lines := textLogTail(filepath.Join(strings.TrimSpace(data), "debug.log"), 80)
-	blob := strings.ToLower(strings.Join(lines, "\n"))
-	if blob == "" {
+	return xrplInboundStallBlob(strings.Join(lines, "\n"))
+}
+
+func xrplInboundStallBlob(blob string) bool {
+	blob = strings.ToLower(blob)
+	if strings.TrimSpace(blob) == "" {
 		return false
 	}
 	if strings.Contains(blob, "ledger data request timeout seq=0") {
@@ -73,12 +77,7 @@ func xrplDebugLogHasInboundStall(data string) bool {
 	if strings.Contains(blob, "inboundledger") && strings.Contains(blob, "timeout") {
 		return true
 	}
-	if strings.Contains(blob, "need validated ledger") {
-		return true
-	}
-	if strings.Contains(blob, "accepted_ledger=0") && strings.Contains(blob, "seq=0") {
-		return true
-	}
+
 	return false
 }
 
@@ -95,7 +94,25 @@ func xrplLiveBuildVersion(cfg Config) string {
 	return strings.TrimSpace(out)
 }
 
+func xrplAcquiringValidated(cfg Config) bool {
+	return xrplInfoAcquiringValidated(probeXRPLServerInfo(cfg))
+}
+
+func xrplInfoAcquiringValidated(info xrplServerInfo) bool {
+	if !info.OK || info.Seq > 0 {
+		return false
+	}
+	if info.Uptime < 20 {
+		return false
+	}
+
+	return info.Peers > 0 || info.Proposers > 0
+}
+
 func xrplFirstLedgerIsStuck(cfg Config) bool {
+	if xrplAcquiringValidated(cfg) {
+		return false
+	}
 	if xrplFirstLedgerStuckFor(cfg.DataDir) || xrplDebugLogHasInboundStall(cfg.DataDir) {
 		return true
 	}
@@ -103,6 +120,7 @@ func xrplFirstLedgerIsStuck(cfg Config) bool {
 	if info.OK && info.Seq <= 0 && info.Uptime >= int64(xrplFirstLedgerStuck.Seconds()) {
 		return true
 	}
+
 	return false
 }
 

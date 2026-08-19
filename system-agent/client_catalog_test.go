@@ -32,8 +32,10 @@ func TestFormatClientVersion(t *testing.T) {
 		"Bitcoin Cash Node:29.1.0(eb32.0)":       "29.1.0(eb32.0)",
 		"/Dogecoin Core:1.14.9/":                 "1.14.9",
 		"Geth/v1.14.12/linux-amd64/go":           "geth 1.14.12",
+		"Geth/v1.17.4-stable-36a7dc72/linux-amd64/go1.25.7": "geth 1.17.4",
 		"geth 1.17.4 · lighthouse 8.2.1":         "geth 1.17.4 · lighthouse 8.2.1",
-		"Geth/v1.17.4-stable/linux · Lighthouse v8.2.1": "geth 1.17.4-stable · lighthouse 8.2.1",
+		"Geth/v1.17.4-stable/linux · Lighthouse v8.2.1": "geth 1.17.4 · lighthouse 8.2.1",
+		"1.8.0-alpha":                            "1.8.0-alpha",
 		"GreatVoyage-v4.8.2.1":                   "4.8.2.1",
 		"4.8.2.1":                                "4.8.2.1",
 		"DASH CORE 23.1.8":                       "dash core 23.1.8",
@@ -90,16 +92,19 @@ func TestResolveTronPinned(t *testing.T) {
 }
 
 func TestEthereumClientVersionDisplay(t *testing.T) {
-	got := formatEthereumClientVersion("Geth/v1.17.4-stable-36a7dc72/linux-amd64/go1.25.7", "Lighthouse v8.2.1")
-	want := "geth 1.17.4-stable-36a7dc72 · lighthouse 8.2.1"
+	got := formatEthereumClientVersion("Geth/v1.17.4-stable-36a7dc72/linux-amd64/go1.25.7", "Lighthouse 8.2.1-b263df5 x86_64-linux")
+	want := "geth 1.17.4 · lighthouse 8.2.1"
 	if got != want {
 		t.Fatalf("formatEthereumClientVersion=%q want %q", got, want)
 	}
 	if parseLighthouseVersion("Lighthouse v8.2.1\nBLS library: blst") != "8.2.1" {
 		t.Fatalf("parseLighthouseVersion line: %q", parseLighthouseVersion("Lighthouse v8.2.1\nBLS library: blst"))
 	}
-	if parseLighthouseVersion("Lighthouse/v8.2.1-abc/x86_64-linux") != "8.2.1-abc" {
+	if parseLighthouseVersion("Lighthouse/v8.2.1-abc/x86_64-linux") != "8.2.1" {
 		t.Fatalf("parseLighthouseVersion ua: %q", parseLighthouseVersion("Lighthouse/v8.2.1-abc/x86_64-linux"))
+	}
+	if parseLighthouseVersion("Lighthouse 8.2.1-b263df5 x86_64-linux") != "8.2.1" {
+		t.Fatalf("parseLighthouseVersion bin: %q", parseLighthouseVersion("Lighthouse 8.2.1-b263df5 x86_64-linux"))
 	}
 }
 

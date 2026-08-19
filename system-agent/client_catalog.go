@@ -279,7 +279,64 @@ func formatClientVersion(s string) string {
 	out = strings.ToLower(out)
 	out = strings.ReplaceAll(out, "/", " ")
 	out = strings.Join(strings.Fields(out), " ")
-	return out
+	return shortenFormattedClientVersion(out)
+}
+
+// shortenFormattedClientVersion — "geth 1.17.4-stable-36a7dc72" → "geth 1.17.4",
+// "lighthouse 8.2.1-b263df5" → "lighthouse 8.2.1". Keeps 1.8.0-alpha / BCH (eb32.0).
+func shortenFormattedClientVersion(s string) string {
+	fields := strings.Fields(s)
+	if len(fields) == 0 {
+		return s
+	}
+	for i := len(fields) - 1; i >= 0; i-- {
+		if clientVersionToken(fields[i]) || strings.Contains(fields[i], "(") {
+			fields[i] = shortReleaseVersion(fields[i])
+			return strings.Join(fields[:i+1], " ")
+		}
+	}
+	return s
+}
+
+func shortReleaseVersion(s string) string {
+	s = trimVersionV(strings.TrimSpace(s))
+	if s == "" {
+		return ""
+	}
+	end, dots := 0, 0
+	for i, r := range s {
+		if r >= '0' && r <= '9' {
+			end = i + 1
+			continue
+		}
+		if r == '.' {
+			dots++
+			end = i + 1
+			continue
+		}
+		break
+	}
+	if dots < 1 || end == 0 {
+		return s
+	}
+	if end < len(s) && s[end] == '(' {
+		return s
+	}
+	core := s[:end]
+	if end >= len(s) {
+		return core
+	}
+	rest := strings.TrimPrefix(s[end:], "-")
+	low := strings.ToLower(rest)
+	if i := strings.IndexAny(low, " \t"); i >= 0 {
+		low = low[:i]
+		rest = rest[:i]
+	}
+	if strings.HasPrefix(low, "alpha") || strings.HasPrefix(low, "beta") ||
+		strings.HasPrefix(low, "rc") || strings.HasPrefix(low, "preview") {
+		return core + "-" + rest
+	}
+	return core
 }
 
 // normalizeClientVersion — semver-ish token for local/latest compare.
@@ -409,7 +466,7 @@ func parseLighthouseVersion(raw string) string {
 		rest = strings.TrimSpace(rest)
 		fields := strings.Fields(rest)
 		if len(fields) > 0 && clientVersionToken(fields[0]) {
-			return trimVersionV(fields[0])
+			return shortReleaseVersion(fields[0])
 		}
 	}
 	if n := normalizeClientVersion(raw); n != "" && clientVersionToken(n) {

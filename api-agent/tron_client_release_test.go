@@ -78,3 +78,24 @@ func TestVendoredNamedConfURL(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestParseVendoredManifestFilesPath(t *testing.T) {
+	raw := []byte(`{
+		"version": "8.2.2",
+		"files": [
+			{"role": "artifact", "arch": "x86_64", "status": "ok", "path": "ethereum/mainnet/dist/x86_64/lh.tgz"},
+			{"role": "artifact", "arch": "aarch64", "status": "ok", "path": "ethereum/mainnet/dist/aarch64/lh.tgz"}
+		]
+	}`)
+	rel, err := parseVendoredManifest("ethereum", "mainnet", "https://cdn.example/install", raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "https://cdn.example/install/clients/ethereum/mainnet/dist/x86_64/lh.tgz"
+	if hostIsARM() {
+		want = "https://cdn.example/install/clients/ethereum/mainnet/dist/aarch64/lh.tgz"
+	}
+	if rel.ArtifactURL != want {
+		t.Fatalf("artifact=%q want %q", rel.ArtifactURL, want)
+	}
+}

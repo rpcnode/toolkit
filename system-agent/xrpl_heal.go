@@ -454,20 +454,33 @@ func xrplEnsureFetchDepthFull(s string) string {
 }
 
 func xrplEnsureStanzaLines(s, name string, lines []string) string {
+	header := "[" + name + "]\n"
+	idx := strings.Index(s, header)
+	stanza := ""
+	if idx >= 0 {
+		rest := s[idx+len(header):]
+		if next := strings.Index(rest, "\n["); next >= 0 {
+			stanza = rest[:next]
+		} else {
+			stanza = rest
+		}
+	}
+
 	missing := make([]string, 0, len(lines))
 	for _, line := range lines {
-		if !strings.Contains(s, line) {
+		if !strings.Contains(stanza, line) {
 			missing = append(missing, line)
 		}
 	}
 	if len(missing) == 0 {
 		return s
 	}
-	header := "[" + name + "]\n"
-	if idx := strings.Index(s, header); idx >= 0 {
+	if idx >= 0 {
 		insertAt := idx + len(header)
+
 		return s[:insertAt] + strings.Join(missing, "\n") + "\n" + s[insertAt:]
 	}
+
 	return strings.TrimRight(s, "\n") + "\n\n" + header + strings.Join(missing, "\n") + "\n"
 }
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -49,6 +50,20 @@ ExecStart=/usr/bin/ton/validator-engine/validator-engine --db /var/ton-work/db/ 
 	out, changed := healTonValidatorExecStart(src, 1<<30)
 	if !changed || !strings.Contains(out, "--celldb-cache-size=1073741824") {
 		t.Fatalf("want 1G after crash-loop cap:\n%s", out)
+	}
+}
+
+func TestTonOOMCapSticky(t *testing.T) {
+	cfg := Config{Network: "ton", Env: "mainnet", StateFile: filepath.Join(t.TempDir(), "agent-state.json")}
+	if tonOOMCapSticky(cfg) {
+		t.Fatal("empty must not force 1G")
+	}
+	markTonOOMCap(cfg)
+	if !tonOOMCapSticky(cfg) {
+		t.Fatal("want sticky 1G after OOM")
+	}
+	if tonCelldbHealCache(cfg) != 1<<30 {
+		t.Fatal("sticky must keep 1G")
 	}
 }
 

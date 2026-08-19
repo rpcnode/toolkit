@@ -267,23 +267,22 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 	// MyTonCtrl rewrites ExecStart; do NOT recycle while apply is in progress
 	// (seqno stays 0 for a day if we SIGKILL every heal tick).
 	if isTon && !removing && !provisioning && tonBootstrapDone(p.cfg) {
-		cache := tonCelldbCacheBytes(float64(ramGB()))
-		if tonValidatorOOM() || tonValidatorApplyCrashLoop() {
-			cache = 1 << 30
-		}
+		cache := tonCelldbHealCache(p.cfg)
 		changed, err := healTonValidatorMemoryCache(cache)
 		if err != nil {
 			log.Printf("pipeline: ton celldb heal: %v", err)
 		}
-		if changed && (tonValidatorDown() || tonValidatorOOM()) {
+		oom := tonValidatorOOM()
+		down := tonValidatorDown()
+		if oom || (changed && down) {
 			if err := recycleTonValidator(); err != nil {
 				log.Printf("pipeline: ton validator recycle after celldb heal: %v", err)
 			} else {
-				hostLogf("INFO", "system-agent", "start", "capped validator celldb cache + recycle")
+				hostLogf("INFO", "system-agent", "start", "capped validator celldb 1G + recycle (OOM)")
 			}
 		} else if changed {
 			hostLogf("INFO", "system-agent", "start", "capped validator celldb cache (apply in progress — no recycle)")
-		} else if tonValidatorDown() {
+		} else if down {
 			if err := nudgeTonValidatorStack(); err != nil {
 				log.Printf("pipeline: ton validator start: %v", err)
 			} else {
@@ -299,8 +298,29 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 			hostLogf("INFO", "system-agent", "start", "healed %s ExecStop=-timeout server_stop", p.cfg.NodeService)
 		}
 		hasLedger := xrplStatusHasLedger(st) || xrplDatadirHasLedger(p.cfg.DataDir)
+		acquiring := !hasLedger && xrplAcquiringValidated(p.cfg)
 		xrplNoteFirstLedgerWait(p.cfg.DataDir, hasLedger)
-		if !hasLedger {
+		healedVL := false
+		if ok, err := healXRPLValidatorsFile(p.cfg.EtcDir, p.cfg.Env); err != nil {
+			log.Printf("pipeline: xrpl validators.txt: %v", err)
+		} else if ok {
+			healedVL = true
+			unit := p.cfg.NodeService
+			if unit != "" && !strings.HasSuffix(unit, ".service") {
+				unit += ".service"
+			}
+			if unit != "" {
+				if err := recycleXRPLUnit(unit, p.cfg); err != nil {
+					log.Printf("pipeline: xrpl recycle after validators.txt: %v", err)
+				} else {
+					hostLogf("INFO", "system-agent", "start", "healed validators.txt (UNL keys, no threshold 0)")
+				}
+			}
+		}
+		// Same tick as a UNL rewrite: RPC is down during recycle. Do not
+		// treat seq=0 as a failed acquire and wipe NuDB.
+		skipDisruptive := acquiring || healedVL
+		if !hasLedger && !skipDisruptive {
 			if pinned, err := healXRPLFirstLedgerBinary(p.cfg); err != nil {
 				log.Printf("pipeline: xrpl catalog client: %v", err)
 			} else if pinned {
@@ -319,10 +339,9 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 			}
 		}
 		rotated := false
-		if !hasLedger || xrplShouldHealStateDB(p.cfg.DataDir, p.cfg.NodeService) {
+		if !hasLedger && !skipDisruptive {
 			xrplPrepareDatadirHeal(p.cfg)
-		}
-		if !hasLedger {
+
 			var err error
 			rotated, err = xrplReinitStaleNuDB(p.cfg.DataDir)
 			if err != nil {
@@ -332,7 +351,7 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 				log.Printf("pipeline: reinit stale NuDB under %s", p.cfg.DataDir)
 			}
 		}
-		if !rotated && xrplShouldHealStateDB(p.cfg.DataDir, p.cfg.NodeService) {
+		if !skipDisruptive && !rotated && xrplShouldHealStateDB(p.cfg.DataDir, p.cfg.NodeService) {
 			ok, err := xrplHealCorruptStateDB(p.cfg.DataDir, p.cfg.NodeService)
 			if err != nil {
 				log.Printf("pipeline: xrpl state-db reinit: %v", err)
@@ -351,7 +370,7 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 		if unit != "" && !strings.HasSuffix(unit, ".service") {
 			unit += ".service"
 		}
-		if changed || rotated {
+		if rotated || (changed && !skipDisruptive) {
 			if unit != "" {
 				if err := recycleXRPLUnit(unit, p.cfg); err != nil {
 					log.Printf("pipeline: xrpl recycle after cfg heal: %v", err)
@@ -365,7 +384,7 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 			} else {
 				hostLogf("INFO", "system-agent", "start", "xrpld down (stale server_stop) — start")
 			}
-		} else if !hasLedger && unit != "" && systemdUnitInstalled(unit) &&
+		} else if !hasLedger && !skipDisruptive && unit != "" && systemdUnitInstalled(unit) &&
 			xrplUnitHasLoadStall(unit) && xrplCooldownReady(p.cfg.DataDir, ".load-stall-recycle", 12*time.Minute) {
 			xrplMarkCooldown(p.cfg.DataDir, ".load-stall-recycle", "LoadManager stall while seq=0\n")
 			if err := recycleXRPLUnit(unit, p.cfg); err != nil {
@@ -473,6 +492,9 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 			} else {
 				p.noteAttempt(prog, "node_start", "")
 				prog.Auto.NodeStartedAt = time.Now().UTC().Format(time.RFC3339)
+				if err := saveNodeRun(p.cfg, "running", "install"); err != nil {
+					log.Printf("pipeline: node-run.json: %v", err)
+				}
 				hostLogf("INFO", "system-agent", "start", "ok %s/%s unit=%s", p.cfg.Network, p.cfg.Env, p.cfg.NodeService)
 				log.Printf("pipeline: auto-started node network=%s env=%s", p.cfg.Network, p.cfg.Env)
 			}
@@ -673,10 +695,7 @@ func (p *LifecyclePipeline) startNode() error {
 		// Also nudge stock MyTonCtrl units when bootstrap already finished.
 		// ❌ /usr/bin/ton/validator-engine is a build dir mid-dump — only marker or real binary.
 		if fileExists(filepath.Join(etc, "bootstrap.done")) || tonValidatorEngineBin() != "" {
-			cache := tonCelldbCacheBytes(float64(ramGB()))
-			if tonValidatorOOM() || tonValidatorApplyCrashLoop() {
-				cache = 1 << 30
-			}
+			cache := tonCelldbHealCache(p.cfg)
 			if changed, err := healTonValidatorMemoryCache(cache); err != nil {
 				log.Printf("pipeline: ton celldb heal: %v", err)
 			} else if changed && (tonValidatorDown() || tonValidatorOOM()) {

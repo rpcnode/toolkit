@@ -1,9 +1,10 @@
 # Chain client update channel
 
-Primary source of truth is the **vendored CDN catalog** (RpcNode.app → `frontend/toolkit/public/clients`):
+Primary source of truth is the **vendored CDN catalog** (RpcNode.app → `frontend/toolkit/public/install/clients`):
 
 ```text
-GET {CLIENTS_BASE_URL}/clients/<network>/<env>/manifest.json
+GET {CLIENTS_BASE_URL}/install/clients/<network>/<env>/manifest.json
+GET {CLIENTS_BASE_URL}/clients/<network>/<env>/manifest.json   # same tree
 ```
 
 Default `CLIENTS_BASE_URL` is `https://toolkit.rpcnode.dev`. Agent does **not** invent jar/conf URLs when this file exists. Agent binaries: `https://toolkit.rpcnode.dev/install`.
@@ -36,7 +37,7 @@ macOS UI (RpcNode.app — клиенты + выпуск агента):
 ./scripts/open-rpcnode.sh
 ```
 
-Таблица **сейчас / новая**. Скачивание пишет в `frontend/toolkit/public/clients/<сеть>/<env>/`. После деплоя `frontend/toolkit` агент качает с `https://toolkit.rpcnode.dev/clients/…`. См. `tools/FetchClients/README.md`.
+Таблица **сейчас / новая**. Скачивание пишет в `frontend/toolkit/public/install/clients/<сеть>/<env>/`. После деплоя оба URL (`/install/clients/…` и `/clients/…`) отдают эту папку. См. `tools/FetchClients/README.md`.
 
 Терминал:
 
@@ -52,11 +53,11 @@ Layout after a fetch:
 install/clients/catalog.json
 install/clients/<network>/<env>/conf/
 
-# toolkit CDN repo (git + deploy):
-frontend/toolkit/public/clients/<network>/<env>/VERSION
-frontend/toolkit/public/clients/<network>/<env>/manifest.json
-frontend/toolkit/public/clients/<network>/<env>/conf/
-frontend/toolkit/public/clients/<network>/<env>/dist/   # jars / tarballs — publish these
+# toolkit CDN repo (git + deploy) — one tree, two URLs:
+frontend/toolkit/public/install/clients/<network>/<env>/VERSION
+frontend/toolkit/public/install/clients/<network>/<env>/manifest.json
+frontend/toolkit/public/install/clients/<network>/<env>/conf/
+frontend/toolkit/public/install/clients/<network>/<env>/dist/
 ```
 
 Snapshots are **not** fetched here (lifecycle Snapshot step). Apt clients (geth, stellar-rpc, rippled) are recorded, not downloaded.

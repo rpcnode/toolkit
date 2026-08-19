@@ -3,6 +3,16 @@
   "feed": "https://toolkit.rpcnode.dev/install/VERSIONS.json",
   "releases": [
     {
+      "version": "0.4.196",
+      "date": "2026-08-19",
+      "title": "XRPL canonical UNL — first validated ledger",
+      "networks": ["xrpl"],
+      "notes": [
+        "Stock validators-example.txt ships [validator_list_threshold] 0 → xrpld exits 255 (Invalid publisher key: 0).",
+        "Install and heal write canonical UNL (vl.ripple.com + unl.xrplf.org). Agent does not wipe NuDB while peers/proposers>0 waiting for validated_ledger."
+      ]
+    },
+    {
       "version": "0.4.191",
       "date": "2026-08-19",
       "title": "Client update steps in host audit log",

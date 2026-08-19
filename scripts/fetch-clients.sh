@@ -508,6 +508,53 @@ def sha256_file(path: Path) -> str:
             h.update(chunk)
     return h.hexdigest()
 
+def xrpl_canonical_validators(env: str) -> str:
+    if env == "testnet":
+        return (
+            "[validator_list_sites]\n"
+            "https://vl.altnet.rippletest.net\n"
+            "\n"
+            "[validator_list_keys]\n"
+            "ED264807102805220DA0F312E71FC2C69E1552C9C5790F6C25E3729DEB573D5860\n"
+        )
+    return (
+        "[validator_list_sites]\n"
+        "https://vl.ripple.com\n"
+        "https://unl.xrplf.org\n"
+        "\n"
+        "[validator_list_keys]\n"
+        "ED2677ABFFD1B33AC6FBC3062B71F1E8397C1505E1C42C64D11AD1B28FF73F4734\n"
+        "ED42AEC58B701EEBB77356FFFEC26F83C1F0407263530F068C7C73D392C7E06FD1\n"
+    )
+
+def write_xrpl_canonical_unl(d: Path, net: str, env: str, files: list) -> list:
+    # Stock XRPLF validators-example.txt ships `[validator_list_threshold]\\n0`
+    # → xrpld FTL "Invalid validator list publisher key: 0".
+    conf = d / "conf"
+    conf.mkdir(parents=True, exist_ok=True)
+    body = xrpl_canonical_validators(env)
+    kept = []
+    for rec in files:
+        name = (rec.get("name") or "").lower()
+        if rec.get("role") == "config" and "validator" in name:
+            continue
+        kept.append(rec)
+    for name in ("validators.txt", "validators-example.txt"):
+        dest = conf / name
+        dest.write_text(body, encoding="utf-8")
+        kept.append({
+            "role": "config",
+            "kind": "",
+            "name": name,
+            "url": "",
+            "status": "ok",
+            "path": str(dest.relative_to(dest_root)),
+            "bytes": dest.stat().st_size,
+            "sha256": sha256_file(dest),
+        })
+    print(f"  config   validators.txt  canonical UNL ({env})")
+    return kept
+
 url_cache = {}
 ok = fail = skip = optional_miss = 0
 report = []
@@ -594,6 +641,9 @@ for r in todo:
             report.append(f"| `{key}` | FAIL | {name} | {url} | |")
             fail += 1
         files.append(rec)
+
+    if net == "xrpl":
+        files = write_xrpl_canonical_unl(d, net, env, files)
 
     artifact_url = ""
     artifact_kind = ""

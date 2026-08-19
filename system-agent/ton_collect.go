@@ -90,7 +90,7 @@ func collectTon(cfg Config) map[string]any {
 	// we have a real catch-up signal (oos) or validator/THA is past dump.
 	// ❌ Clearing immediately on bootstrap.done → empty bar until getstats works.
 	if bootDone && !bootActive {
-		if oos, seq, ok := readTonOutOfSyncSec(cfg); ok && oos >= 0 && seq > 0 && (procOK || thaOpen) {
+		if oos, seq, ok := readTonOutOfSyncSec(cfg); ok && oos >= 0 && seq > 0 {
 			dumpPct = 0
 			dumpDetail = ""
 			clearTonDumpProgress(cfg)

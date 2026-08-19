@@ -681,14 +681,14 @@
       ],
       "configs" : [
         {
-          "name" : "validators-example.txt",
-          "url" : "https://raw.githubusercontent.com/XRPLF/rippled/master/cfg/validators-example.txt"
+          "name" : "validators.txt",
+          "url" : ""
         }
       ],
       "env" : "mainnet",
       "github_repo" : "XRPLF/rippled",
       "network" : "xrpl",
-      "notes" : "Catalog pin = latest stable 3.3.0 (2026-08-06). Provision/update install this deb. ❌ Unpinned apt (that is how 3.2.0 landed). 3.2.0 first-ledger XRPLF#7572.",
+      "notes" : "Catalog pin = latest stable 3.3.0 (2026-08-06). Provision writes canonical UNL (no [validator_list_threshold] 0 — stock validators-example.txt crashes xrpld: Invalid publisher key: 0). ❌ Fetch XRPLF example as-is.",
       "skip_reason" : "",
       "source" : "repos.ripple.com",
       "tag" : "3.3.0",
@@ -704,14 +704,14 @@
       ],
       "configs" : [
         {
-          "name" : "validators-example.txt",
-          "url" : "https://raw.githubusercontent.com/XRPLF/rippled/master/cfg/validators-example.txt"
+          "name" : "validators.txt",
+          "url" : ""
         }
       ],
       "env" : "testnet",
       "github_repo" : "XRPLF/rippled",
       "network" : "xrpl",
-      "notes" : "Catalog pin = latest stable 3.3.0 (2026-08-06). Provision/update install this deb. ❌ Unpinned apt (that is how 3.2.0 landed). 3.2.0 first-ledger XRPLF#7572.",
+      "notes" : "Catalog pin = latest stable 3.3.0 (2026-08-06). Provision writes canonical AltNet UNL (vl.altnet.rippletest.net). ❌ Stock validators-example.txt is mainnet + threshold 0.",
       "skip_reason" : "",
       "source" : "repos.ripple.com",
       "tag" : "3.3.0",

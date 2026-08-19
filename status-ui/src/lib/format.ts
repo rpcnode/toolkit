@@ -93,6 +93,13 @@ export function formatClientVersion(raw: unknown): string {
   ) {
     return ''
   }
+  if (s.includes('·')) {
+    return s
+      .split('·')
+      .map((p) => formatClientVersion(p.trim()))
+      .filter(Boolean)
+      .join(' · ')
+  }
   while (s.startsWith('/') || s.endsWith('/')) {
     if (s.startsWith('/')) s = s.slice(1)
     if (s.endsWith('/')) s = s.slice(0, -1)
@@ -122,11 +129,57 @@ export function formatClientVersion(raw: unknown): string {
     }
   }
   if (!out) out = s
-  return out
+  out = out
     .toLowerCase()
     .replace(/\//g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+  return shortenFormattedClientVersion(out)
+}
+
+/** "geth 1.17.4-stable-36a7dc72" → "geth 1.17.4"; keep 1.8.0-alpha / 29.1.0(eb32.0). */
+function shortenFormattedClientVersion(s: string): string {
+  const fields = s.split(/\s+/).filter(Boolean)
+  if (!fields.length) return s
+  for (let i = fields.length - 1; i >= 0; i--) {
+    if (looksLikeClientVersionToken(fields[i]) || fields[i].includes('(')) {
+      fields[i] = shortReleaseVersion(fields[i])
+      return fields.slice(0, i + 1).join(' ')
+    }
+  }
+  return s
+}
+
+function shortReleaseVersion(s: string): string {
+  let t = s.replace(/^v/i, '').trim()
+  if (!t) return ''
+  let end = 0
+  let dots = 0
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i]
+    if (c >= '0' && c <= '9') {
+      end = i + 1
+      continue
+    }
+    if (c === '.') {
+      dots++
+      end = i + 1
+      continue
+    }
+    break
+  }
+  if (dots < 1 || end === 0) return t
+  if (t[end] === '(') return t
+  const core = t.slice(0, end)
+  if (end >= t.length) return core
+  let rest = t.slice(end).replace(/^-/, '')
+  const sp = rest.search(/[ \t]/)
+  if (sp >= 0) rest = rest.slice(0, sp)
+  const low = rest.toLowerCase()
+  if (low.startsWith('alpha') || low.startsWith('beta') || low.startsWith('rc') || low.startsWith('preview')) {
+    return `${core}-${rest}`
+  }
+  return core
 }
 
 /** Product UA that restates the network label — show version only (BCH/LTC/…). */

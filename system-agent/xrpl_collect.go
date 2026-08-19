@@ -23,8 +23,9 @@ type xrplServerInfo struct {
 	Uptime     int64
 	BuildVer   string
 	PubkeyNode string
-	Error      string
-	Synced     bool
+	Proposers   int
+	Error       string
+	Synced      bool
 }
 
 // collectXRPL — stock xrpld lifecycle.
@@ -427,6 +428,11 @@ func probeXRPLServerInfo(cfg Config) xrplServerInfo {
 	}
 	if v, ok := info["uptime"].(float64); ok {
 		out.Uptime = int64(v)
+	}
+	if lc, ok := info["last_close"].(map[string]any); ok {
+		if v, ok := lc["proposers"].(float64); ok {
+			out.Proposers = int(v)
+		}
 	}
 	if lv, ok := info["validated_ledger"].(map[string]any); ok {
 		if seq, ok := lv["seq"].(float64); ok {

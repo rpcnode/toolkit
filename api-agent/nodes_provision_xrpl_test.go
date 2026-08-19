@@ -36,6 +36,40 @@ func TestXRPLNodeSizeForRAM(t *testing.T) {
 	}
 }
 
+func TestWriteXRPLValidatorsFileStripsThresholdZero(t *testing.T) {
+	dir := t.TempDir()
+	broken := `[validator_list_keys]
+# [validator_list_threshold]
+0
+`
+	if err := os.WriteFile(filepath.Join(dir, "validators.txt"), []byte(broken), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeXRPLValidatorsFile(dir, "mainnet"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "validators.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !xrplValidatorsOK(string(got), "mainnet") {
+		t.Fatalf("%s", got)
+	}
+	if strings.Contains(string(got), "threshold") || xrplBareZeroLineRe.MatchString(string(got)) {
+		t.Fatalf("still threshold/0:\n%s", got)
+	}
+}
+
+func TestXRPLCanonicalValidatorsTestnet(t *testing.T) {
+	body := xrplCanonicalValidators("testnet")
+	if strings.Contains(body, "threshold") || strings.Contains(body, "vl.ripple.com") {
+		t.Fatal(body)
+	}
+	if !xrplValidatorsOK(body, "testnet") {
+		t.Fatal(body)
+	}
+}
+
 func TestWriteXRPLConfigDefaultWeeksHistory(t *testing.T) {
 	dir := t.TempDir()
 	etc := filepath.Join(dir, "etc")
@@ -196,8 +230,8 @@ func TestWriteXRPLConfigStockHistory(t *testing.T) {
 	if !strings.Contains(body, "[ledger_history]\n2000\n") {
 		t.Fatalf("stock window:\n%s", body)
 	}
-	if !strings.Contains(body, "online_delete=2000") {
-		t.Fatalf("stock online_delete:\n%s", body)
+	if strings.Contains(body, "online_delete=") {
+		t.Fatalf("empty NuDB must not set online_delete yet:\n%s", body)
 	}
 }
 

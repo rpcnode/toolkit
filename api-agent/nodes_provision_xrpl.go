@@ -617,42 +617,7 @@ func writeXRPLConfig(etc, data string, req nodeProvisionRequest, cluster xrplNet
 }
 
 func ensureXRPLValidators(etc string, cluster xrplNetwork) error {
-	dest := filepath.Join(etc, "validators.txt")
-	if fileExists(dest) {
-		return nil
-	}
-
-	// Prefer packaged validators from Ripple/XRPLF deb.
-	for _, src := range []string{
-		"/etc/opt/ripple/validators.txt",
-		"/etc/xrpld/validators.txt",
-		"/opt/ripple/etc/validators.txt",
-	} {
-		if !fileExists(src) {
-			continue
-		}
-		b, err := os.ReadFile(src)
-		if err != nil {
-			continue
-		}
-		return os.WriteFile(dest, b, 0o644)
-	}
-
-	url := "https://raw.githubusercontent.com/XRPLF/rippled/master/cfg/validators-example.txt"
-	if normalizeEnv(cluster.Env) == "testnet" {
-		// Same example file; AltNet relies on network_id + ips_fixed + VL fetch.
-		url = "https://raw.githubusercontent.com/XRPLF/rippled/master/cfg/validators-example.txt"
-	}
-	tmp := filepath.Join(os.TempDir(), "xrpl-validators.txt")
-	if err := downloadNamedConf("xrpl", cluster.Env, "validators-example.txt", url, tmp); err != nil {
-		return fmt.Errorf("validators.txt download: %w", err)
-	}
-	b, err := os.ReadFile(tmp)
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(dest, b, 0o644)
+	return writeXRPLValidatorsFile(etc, cluster.Env)
 }
 
 // xrplNodeSizeForRAMGiB — official capacity-planning table. Skip `large`

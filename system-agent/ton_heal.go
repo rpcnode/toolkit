@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var (
@@ -66,11 +67,47 @@ func healTonValidatorMemory() (bool, error) {
 	return healTonValidatorMemoryCache(tonCelldbCacheBytes(float64(ramGB())))
 }
 
+func tonOOMCapPath(cfg Config) string {
+	dir := filepath.Dir(strings.TrimSpace(cfg.StateFile))
+	if dir == "" || dir == "." {
+		dir = filepath.Join("/var/lib/rpcnode", "ton-"+strings.ToLower(strings.TrimSpace(cfg.Env)))
+	}
+	return filepath.Join(dir, "ton-oom-cap.json")
+}
+
+func tonOOMCapSticky(cfg Config) bool {
+	doc := readJSONFile(tonOOMCapPath(cfg))
+	return truthy(doc["force_1g"])
+}
+
+func markTonOOMCap(cfg Config) {
+	path := tonOOMCapPath(cfg)
+	_ = ensureDir(filepath.Dir(path))
+	_ = writeJSONFile(path, map[string]any{
+		"force_1g":   true,
+		"updated_at": time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+func tonCelldbHealCache(cfg Config) int64 {
+	if tonValidatorOOM() || tonValidatorApplyCrashLoop() {
+		markTonOOMCap(cfg)
+		return 1 << 30
+	}
+	if tonOOMCapSticky(cfg) {
+		return 1 << 30
+	}
+	return tonCelldbCacheBytes(float64(ramGB()))
+}
+
 func healTonValidatorMemoryCache(cache int64) (bool, error) {
 	if cache <= 0 {
 		cache = 1 << 30
 	}
-	_ = writeTonValidatorMemoryDropin()
+	// MemoryMax is a kill ceiling, not "RAM the node needs". 16G would OOM a
+	// live mainnet validator (working set ≫ celldb cache). 85% of the host
+	// is the product cap; the OOM fix is celldb 1G + no preload-all.
+	_ = writeTonValidatorMemoryDropin("85%")
 	anyChanged := false
 	for _, path := range tonValidatorUnitPaths() {
 		raw, err := os.ReadFile(path)
@@ -95,15 +132,18 @@ func healTonValidatorMemoryCache(cache int64) (bool, error) {
 	return anyChanged, nil
 }
 
-func writeTonValidatorMemoryDropin() error {
+func writeTonValidatorMemoryDropin(memMax string) error {
 	dir := "/etc/systemd/system/validator.service.d"
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
+	if strings.TrimSpace(memMax) == "" {
+		memMax = "85%"
+	}
 	path := filepath.Join(dir, "rpcnode-memory.conf")
 	body := `[Service]
 MemoryAccounting=yes
-MemoryMax=85%
+MemoryMax=` + memMax + `
 `
 	prev, _ := os.ReadFile(path)
 	if string(prev) == body {
