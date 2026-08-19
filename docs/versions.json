@@ -3,6 +3,53 @@
   "feed": "https://toolkit.rpcnode.dev/install/VERSIONS.json",
   "releases": [
     {
+      "version": "0.4.208",
+      "date": "2026-08-19",
+      "title": "Release 0.4.208",
+      "notes": [
+        "Shipped via update-remote-agent.sh --publish."
+      ]
+    },
+    {
+      "version": "0.4.207",
+      "date": "2026-08-19",
+      "title": "Host & node: disk IOPS / util",
+      "notes": [
+        "metrics.json now includes host disk_read_iops, disk_write_iops, disk_read_mb_s, disk_write_mb_s, disk_util_pct (hottest whole disk from /proc/diskstats — same signal as iostat).",
+        "Host & node shows Read / Write IOPS, MB/s and %util. Node unit IOPS from cgroup io.stat when IOAccounting is on."
+      ]
+    },
+    {
+      "version": "0.4.206",
+      "date": "2026-08-19",
+      "title": "Remove: mask units so Restart=always cannot respawn",
+      "notes": [
+        "Panel remove now disable+mask+SIGTERM --kill-who=all before ACK. Restart=always / watchdog cannot bring leaf agents or the node back.",
+        "TON: oneshot RemainAfterExit (ton-<env>.service) is not 'still running'. Truth is validator-engine / mytoncore. Stock validator.service is masked, not deleted."
+      ]
+    },
+    {
+      "version": "0.4.205",
+      "date": "2026-08-19",
+      "title": "Install: host disk insights (md / LVM / raw NVMe)",
+      "notes": [
+        "GET /api/v1/host/disks returns insights + unused disks: software RAID is a bottleneck, LVM / is the OS disk, raw NVMe is where node data should go.",
+        "Install wizard shows that summary for every network. JBOD recommend prefers raw NVMe over md /data."
+      ]
+    },
+    {
+      "version": "0.4.204",
+      "date": "2026-08-19",
+      "title": "TON: catch-up stalled when oos does not drop",
+      "networks": [
+        "ton"
+      ],
+      "notes": [
+        "seqno>0 + ~27h behind + 0.1% is not 'won't start' — validator is up.",
+        "If local seqno rises but out_of_sync_sec grows: catch-up slower than tip (serializer / I/O). UI says that, not 0.1% lag closed."
+      ]
+    },
+    {
       "version": "0.4.203",
       "date": "2026-08-19",
       "title": "Release 0.4.203",

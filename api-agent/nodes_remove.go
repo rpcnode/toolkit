@@ -362,16 +362,19 @@ func stopNodeStackForRemove(network, env string) (map[string]any, error) {
 	}
 	steps := []string{}
 
-	// Prevent Restart=on-failure from bringing the node back mid-stop.
+	// Pin first: disable+mask so Restart=always / watchdog / oneshot wrappers
+	// cannot respawn while we SIGTERM. Never mask tip host units.
+	self := removeTargetsSelfAgent(network, env)
 	if _, err := exec.LookPath("systemctl"); err == nil {
-		for _, u := range nodeUnitsForRemove(network, env) {
-			if isHostBootstrapUnit(u) {
+		for _, u := range unitsToPinForRemove(network, env) {
+			if self && unitBelongsToThisProcess(u) {
+				steps = append(steps, "kept self unmasked for ACK: "+u)
 				continue
 			}
-			_ = exec.Command("systemctl", "disable", u).Run()
-			steps = append(steps, "disabled "+u)
+			steps = append(steps, pinUnitDown(u)...)
 		}
 	}
+	hostLogf("info", "api-agent", "remove", "pin+kill %s/%s units=%d", network, env, len(unitsToPinForRemove(network, env)))
 
 	stopBudget := stopTimeoutForNetwork(network)
 	// Never `systemctl stop` — that runs ExecStop and hangs / Job canceled
@@ -445,7 +448,7 @@ func resetNodeUnitsAfterStop(network, env string) []string {
 		if isHostBootstrapUnit(u) {
 			continue
 		}
-		_ = exec.Command("systemctl", "kill", "-s", "SIGKILL", "--kill-who=main", u).Run()
+		_ = exec.Command("systemctl", "kill", "-s", "SIGKILL", "--kill-who=all", u).Run()
 		_ = exec.Command("systemctl", "reset-failed", u).Run()
 		steps = append(steps, "reset unit "+u)
 	}
@@ -472,7 +475,7 @@ func sigtermNodeUnits(network, env string) []string {
 		if isHostBootstrapUnit(u) {
 			continue
 		}
-		_ = exec.Command("systemctl", "kill", "-s", "SIGTERM", "--kill-who=main", u).Run()
+		_ = exec.Command("systemctl", "kill", "-s", "SIGTERM", "--kill-who=all", u).Run()
 		steps = append(steps, "sigterm "+u)
 	}
 	if len(steps) == 0 {
@@ -615,7 +618,7 @@ func escalateStopNode(network, env string) []string {
 			if isHostBootstrapUnit(u) {
 				continue
 			}
-			_ = exec.Command("systemctl", "kill", "-s", "SIGTERM", "--kill-who=main", u).Run()
+			_ = exec.Command("systemctl", "kill", "-s", "SIGTERM", "--kill-who=all", u).Run()
 			steps = append(steps, "sigterm "+u)
 		}
 	}
@@ -644,7 +647,8 @@ func systemctlForceKillDisable(unit string) []string {
 	}
 	steps := []string{}
 	_ = exec.Command("systemctl", "disable", unit).Run()
-	_ = exec.Command("systemctl", "kill", "-s", "SIGKILL", "--kill-who=main", unit).Run()
+	_ = exec.Command("systemctl", "mask", "--runtime", unit).Run()
+	_ = exec.Command("systemctl", "kill", "-s", "SIGKILL", "--kill-who=all", unit).Run()
 	steps = append(steps, "kill-forced "+unit)
 	_ = exec.Command("systemctl", "reset-failed", unit).Run()
 	steps = append(steps, "disabled "+unit)
@@ -859,7 +863,7 @@ func wipeNodeMetadataForRemove(network, env string) (paths []string, steps []str
 	env = normalizeEnv(env)
 
 	for _, u := range nodeUnitsForRemove(network, env) {
-		if isHostBootstrapUnit(u) {
+		if isHostBootstrapUnit(u) || isStockSharedNodeUnit(network, u) {
 			continue
 		}
 		p := filepath.Join("/etc/systemd/system", u)
@@ -1139,6 +1143,130 @@ func isHostBootstrapUnit(unit string) bool {
 	}
 }
 
+// stockSharedNodeUnits — host-global units we stop/mask but do not delete
+// (MyTonCtrl validator.service lives outside RpcNode unit files).
+func stockSharedNodeUnits(network string) []string {
+	switch normalizeNetwork(network) {
+	case "ton":
+		return []string{
+			"validator.service",
+			"mytoncore.service",
+			"ton-http-api.service",
+			"ton_http_api.service",
+		}
+	default:
+		return nil
+	}
+}
+
+func isStockSharedNodeUnit(network, unit string) bool {
+	want := strings.TrimSpace(unit)
+	for _, u := range stockSharedNodeUnits(network) {
+		if u == want {
+			return true
+		}
+	}
+	return false
+}
+
+func unitsToPinForRemove(network, env string) []string {
+	out := append([]string{}, nodeUnitsForRemove(network, env)...)
+	out = append(out, perNodeAgentUnits(network, env)...)
+	return filterTeardownUnits(out)
+}
+
+// pinUnitDown — disable + mask + SIGTERM the cgroup. Restart=always cannot
+// respawn a masked unit; watchdog skips masked/disabled.
+func pinUnitDown(unit string) []string {
+	unit = strings.TrimSpace(unit)
+	if unit == "" || isHostBootstrapUnit(unit) {
+		return nil
+	}
+	_ = exec.Command("systemctl", "disable", unit).Run()
+	// --runtime: do not replace /etc unit files with /dev/null (stock TON validator).
+	_ = exec.Command("systemctl", "mask", "--runtime", unit).Run()
+	_ = exec.Command("systemctl", "kill", "-s", "SIGTERM", "--kill-who=all", unit).Run()
+	_ = exec.Command("systemctl", "mask", "--runtime", unit).Run()
+	return []string{"pinned " + unit}
+}
+
+func unpinUnit(unit string) {
+	unit = strings.TrimSpace(unit)
+	if unit == "" || isHostBootstrapUnit(unit) {
+		return
+	}
+	_ = exec.Command("systemctl", "unmask", "--runtime", unit).Run()
+	_ = exec.Command("systemctl", "unmask", unit).Run()
+}
+
+func unpinAllRemovePins(network, env string) []string {
+	if _, err := exec.LookPath("systemctl"); err != nil {
+		return nil
+	}
+	var steps []string
+	for _, u := range unitsToPinForRemove(network, env) {
+		unpinUnit(u)
+		steps = append(steps, "unmasked "+u)
+	}
+	return steps
+}
+
+// systemdUnitBlocksRemove — oneshot RemainAfterExit + SubState=exited is a
+// wrapper linger (TON ton-<env>.service), not a live daemon.
+func systemdUnitBlocksRemove(activeState, subState, typ, remainAfterExit string) bool {
+	activeState = strings.ToLower(strings.TrimSpace(activeState))
+	subState = strings.ToLower(strings.TrimSpace(subState))
+	typ = strings.ToLower(strings.TrimSpace(typ))
+	remain := strings.ToLower(strings.TrimSpace(remainAfterExit))
+	linger := typ == "oneshot" && (remain == "yes" || remain == "1" || remain == "true")
+	if linger && (subState == "exited" || subState == "dead") {
+		return false
+	}
+	switch activeState {
+	case "active", "activating", "reloading":
+		return true
+	}
+	switch subState {
+	case "activating", "deactivating", "running", "start", "start-pre", "start-post":
+		return true
+	}
+	return false
+}
+
+func unitStillBlockingRemove(unit string) string {
+	unit = strings.TrimSpace(unit)
+	if unit == "" {
+		return ""
+	}
+	out, err := exec.Command("systemctl", "show",
+		"-p", "ActiveState", "-p", "SubState", "-p", "Type", "-p", "RemainAfterExit",
+		unit).CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	active, sub, typ, remain := "", "", "", ""
+	for _, line := range strings.Split(string(out), "\n") {
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		switch k {
+		case "ActiveState":
+			active = v
+		case "SubState":
+			sub = v
+		case "Type":
+			typ = v
+		case "RemainAfterExit":
+			remain = v
+		}
+	}
+	if systemdUnitBlocksRemove(active, sub, typ, remain) {
+		return "unit-" + active + "/" + sub + ":" + unit
+	}
+	return ""
+}
+
 func killNodeProcesses(network, env string) {
 	network = normalizeNetwork(network)
 	env = normalizeEnv(env)
@@ -1294,23 +1422,31 @@ func nodeStillRunning(network, env string) string {
 		// kill — systemd leftovers must not block remove ACK.
 		// zcash: zebrad (current) or leftover zcashd.
 		return nodeDaemonStillRunning(network, env)
+	case "ton":
+		if s := tonDaemonStillRunning(); s != "" {
+			return s
+		}
 	}
 	// Any node unit still active/activating = not removed.
+	// Oneshot RemainAfterExit (TON ton-<env>.service) stays "active" after
+	// ExecStart exits — that is not the daemon. Ignore linger; trust processes.
 	if _, err := exec.LookPath("systemctl"); err == nil {
 		for _, u := range nodeUnitsForRemove(network, env) {
 			if isHostBootstrapUnit(u) {
 				continue
 			}
-			if exec.Command("systemctl", "is-active", "--quiet", u).Run() == nil {
-				return "unit-active:" + u
-			}
-			// activating / deactivating also means stop incomplete
-			out, _ := exec.Command("systemctl", "is-active", u).CombinedOutput()
-			st := strings.TrimSpace(string(out))
-			if st == "activating" || st == "deactivating" || st == "reloading" {
-				return "unit-" + st + ":" + u
+			if reason := unitStillBlockingRemove(u); reason != "" {
+				return reason
 			}
 		}
+	}
+	return ""
+}
+
+func tonDaemonStillRunning() string {
+	needles := []string{"validator-engine", "mytoncore", "ton-http-api", "ton_http_api"}
+	if hit := procCmdlineContains(needles); hit != "" {
+		return hit
 	}
 	return ""
 }

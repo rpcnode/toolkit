@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseTonOutOfSync(t *testing.T) {
@@ -112,6 +113,33 @@ func TestTonLagClosedPct(t *testing.T) {
 		t.Fatalf("near healthy want 99.9 got %v ok=%v", p3, ok)
 	}
 	_ = os.Remove(tonCatchupStatePath(cfg))
+}
+
+func TestTonCatchupStalledWhenOosStuck(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{StateFile: filepath.Join(dir, "state.json"), Env: "testnet"}
+	shrink := time.Now().UTC().Add(-20 * time.Minute)
+	saveTonCatchupState(cfg, 97328, 97328, 78966233, shrink)
+	p, stalled, ok := tonLagClosed(cfg, 97331, 78966240)
+	if !ok || !stalled {
+		t.Fatalf("stuck ~27h oos must stall: pct=%v stalled=%v ok=%v", p, stalled, ok)
+	}
+	if p != 0.1 {
+		t.Fatalf("still at peak want 0.1 got %v", p)
+	}
+}
+
+func TestTonCatchupSlowerThanTip(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{StateFile: filepath.Join(dir, "state.json"), Env: "testnet"}
+	saveTonCatchupState(cfg, 94000, 94000, 78941023, time.Now().UTC())
+	p, stalled, ok := tonLagClosed(cfg, 94227, 78941799)
+	if !ok || !stalled {
+		t.Fatalf("seqno up + oos up must be slower-than-tip: pct=%v stalled=%v ok=%v", p, stalled, ok)
+	}
+	if p != 0.1 {
+		t.Fatalf("oos grew — still at new peak want 0.1 got %v", p)
+	}
 }
 
 func TestTonVerifyPctHealthy(t *testing.T) {

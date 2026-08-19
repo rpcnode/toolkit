@@ -651,6 +651,18 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	if histLen(memHist) == 0 {
 		memHist = liveHist["memory"]
 	}
+	diskRead := liveHist["disk_read_iops"]
+	diskWrite := liveHist["disk_write_iops"]
+	diskUtil := liveHist["disk_util"]
+	if histLen(diskRead) == 0 {
+		diskRead = hist["disk_read_iops"]
+	}
+	if histLen(diskWrite) == 0 {
+		diskWrite = hist["disk_write_iops"]
+	}
+	if histLen(diskUtil) == 0 {
+		diskUtil = hist["disk_util"]
+	}
 	pickCur := func(key string) any {
 		if v, ok := curHost[key]; ok && v != nil {
 			return v
@@ -702,6 +714,12 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 			"net_tx_mbps":    firstMetrics(liveCur["net_tx_mbps"], curHost["net_tx_mbps"]),
 			"net_rx_bps":     firstMetrics(liveCur["net_rx_bps"], curHost["net_rx_bps"]),
 			"net_tx_bps":     firstMetrics(liveCur["net_tx_bps"], curHost["net_tx_bps"]),
+			"disk_read_iops":  firstMetrics(liveCur["disk_read_iops"], curHost["disk_read_iops"]),
+			"disk_write_iops": firstMetrics(liveCur["disk_write_iops"], curHost["disk_write_iops"]),
+			"disk_read_mb_s":  firstMetrics(liveCur["disk_read_mb_s"], curHost["disk_read_mb_s"]),
+			"disk_write_mb_s": firstMetrics(liveCur["disk_write_mb_s"], curHost["disk_write_mb_s"]),
+			"disk_util_pct":   firstMetrics(liveCur["disk_util_pct"], curHost["disk_util_pct"]),
+			"disk_busy":       firstMetrics(liveCur["disk_busy"], curHost["disk_busy"]),
 			// Per-node unit accounting (system-agent); nil when unset.
 			"node_net_rx_mbps":  pickNodeNetField(curHost, st, "node_net_rx_mbps"),
 			"node_net_tx_mbps":  pickNodeNetField(curHost, st, "node_net_tx_mbps"),
@@ -709,9 +727,13 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 			"node_net_tx_bps":   pickNodeNetField(curHost, st, "node_net_tx_bps"),
 			"node_net_rx_bytes": pickNodeNetField(curHost, st, "node_net_rx_bytes"),
 			"node_net_tx_bytes": pickNodeNetField(curHost, st, "node_net_tx_bytes"),
-			"node_cpu_pct":      pickNodeNetField(curHost, st, "node_cpu_pct"),
-			"node_mem_pct":      pickNodeNetField(curHost, st, "node_mem_pct"),
-			"node_mem_used_mb":  pickNodeNetField(curHost, st, "node_mem_used_mb"),
+			"node_cpu_pct":         pickNodeNetField(curHost, st, "node_cpu_pct"),
+			"node_mem_pct":         pickNodeNetField(curHost, st, "node_mem_pct"),
+			"node_mem_used_mb":     pickNodeNetField(curHost, st, "node_mem_used_mb"),
+			"node_disk_read_iops":  pickNodeNetField(curHost, st, "node_disk_read_iops"),
+			"node_disk_write_iops": pickNodeNetField(curHost, st, "node_disk_write_iops"),
+			"node_disk_read_mb_s":  pickNodeNetField(curHost, st, "node_disk_read_mb_s"),
+			"node_disk_write_mb_s": pickNodeNetField(curHost, st, "node_disk_write_mb_s"),
 			"disk_used_pct":     disk["used_pct"],
 			"disk_used_gb":      disk["used_gb"],
 			"disk_total_gb":     disk["total_gb"],
@@ -726,10 +748,15 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 			"memory":      memHist,
 			"net_rx":      netRx,
 			"net_tx":      netTx,
-			"node_net_rx": firstHist(hist["node_net_rx"], nodeNetHist(st, "node_net_rx")),
-			"node_net_tx": firstHist(hist["node_net_tx"], nodeNetHist(st, "node_net_tx")),
-			"node_cpu":    firstHist(hist["node_cpu"], nodeNetHist(st, "node_cpu")),
-			"node_memory": firstHist(hist["node_memory"], nodeNetHist(st, "node_memory")),
+			"node_net_rx":          firstHist(hist["node_net_rx"], nodeNetHist(st, "node_net_rx")),
+			"node_net_tx":          firstHist(hist["node_net_tx"], nodeNetHist(st, "node_net_tx")),
+			"node_cpu":             firstHist(hist["node_cpu"], nodeNetHist(st, "node_cpu")),
+			"node_memory":          firstHist(hist["node_memory"], nodeNetHist(st, "node_memory")),
+			"disk_read_iops":       diskRead,
+			"disk_write_iops":      diskWrite,
+			"disk_util":            diskUtil,
+			"node_disk_read_iops":  firstHist(hist["node_disk_read_iops"], nodeNetHist(st, "node_disk_read_iops")),
+			"node_disk_write_iops": firstHist(hist["node_disk_write_iops"], nodeNetHist(st, "node_disk_write_iops")),
 		},
 		"gateway": gw,
 	})

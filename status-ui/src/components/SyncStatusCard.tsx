@@ -543,7 +543,11 @@ export function SyncStatusCard({
                   <Text span size="sm" c="dimmed" fw={600} ml={6}>
                     sec behind
                   </Text>
-                  {progress != null ? (
+                  {sync.catchup_stalled ? (
+                    <Text span size="sm" c="yellow" fw={600} ml={8}>
+                      · catch-up slower than tip
+                    </Text>
+                  ) : progress != null && progress > 0.15 ? (
                     <Text span size="sm" c="dimmed" fw={600} ml={8}>
                       · {progress.toFixed(1)}% lag closed
                     </Text>

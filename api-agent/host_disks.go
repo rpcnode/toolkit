@@ -47,6 +47,9 @@ type HostMount struct {
 	Tran         string `json:"tran,omitempty"`
 	Rota         *bool  `json:"rota,omitempty"`
 	Preferred    bool   `json:"preferred,omitempty"`
+	Kind         string `json:"kind,omitempty"`       // raw_nvme | md_raid | lvm | hdd | ssd | other
+	RaidLevel    string `json:"raid_level,omitempty"` // raid0, raid1, …
+	Layer        string `json:"layer,omitempty"`      // md2, vg0-root
 }
 
 // SolanaDiskLayoutPlan — recommended / confirmed JBOD paths for Agave.
@@ -100,25 +103,33 @@ func (s *Server) handleHostDisks(w http.ResponseWriter, r *http.Request) {
 	}
 	network := normalizeNetwork(strings.TrimSpace(r.URL.Query().Get("network")))
 	env := normalizeEnv(strings.TrimSpace(r.URL.Query().Get("env")))
-	disks, mounts, err := collectHostDiskInventory()
+	disks, mounts, unused, err := collectHostDiskInventory()
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"ok": true, "disks": []HostDisk{}, "mounts": []HostMount{},
+			"unused": []HostDisk{}, "insights": []HostDiskInsight{},
 			"error": err.Error(), "message": "disk inventory unavailable (lsblk/findmnt)",
 		})
 		return
 	}
+	insights, summary := analyzeHostDisks(network, disks, mounts, unused)
 	out := map[string]any{
-		"ok":     true,
-		"disks":  disks,
-		"mounts": mounts,
-		"count":  len(disks),
+		"ok":       true,
+		"disks":    disks,
+		"mounts":   mounts,
+		"unused":   unused,
+		"insights": insights,
+		"summary":  summary,
+		"count":    len(disks),
 	}
 	if network != "" && networkHasMultiDiskRoles(network) {
 		if env == "" {
 			env = "mainnet"
 		}
 		plan := recommendMultiDiskLayout(network, env, mounts)
+		if summary != "" {
+			plan.Notes = append([]string{"Host disks: " + summary}, plan.Notes...)
+		}
 		out["recommended"] = plan
 		out["network"] = network
 		out["env"] = env
@@ -132,15 +143,15 @@ func solanaDiskLayoutRules() []string {
 	return multiDiskLayoutRules("solana")
 }
 
-func collectHostDiskInventory() ([]HostDisk, []HostMount, error) {
+func collectHostDiskInventory() ([]HostDisk, []HostMount, []HostDisk, error) {
 	raw, err := exec.Command("lsblk", "-J", "-b", "-o",
 		"NAME,PATH,SIZE,TYPE,ROTA,TRAN,MODEL,MOUNTPOINT,FSTYPE,PKNAME").CombinedOutput()
 	if err != nil {
-		return nil, nil, fmt.Errorf("lsblk: %w (%s)", err, strings.TrimSpace(string(raw)))
+		return nil, nil, nil, fmt.Errorf("lsblk: %w (%s)", err, strings.TrimSpace(string(raw)))
 	}
 	var doc lsblkDoc
 	if err := json.Unmarshal(raw, &doc); err != nil {
-		return nil, nil, fmt.Errorf("lsblk json: %w", err)
+		return nil, nil, nil, fmt.Errorf("lsblk json: %w", err)
 	}
 	fsByTarget := map[string]findmntNode{}
 	if fm, err := collectFindmnt(); err == nil {
@@ -202,7 +213,8 @@ func collectHostDiskInventory() ([]HostDisk, []HostMount, error) {
 			}
 		}
 		flat = append(flat, hd)
-		if hd.Type == "disk" || hd.Type == "nvme" {
+		t := strings.ToLower(hd.Type)
+		if t == "disk" || t == "nvme" || strings.HasPrefix(t, "raid") {
 			disks = append(disks, hd)
 		}
 		for _, c := range n.Children {
@@ -214,6 +226,8 @@ func collectHostDiskInventory() ([]HostDisk, []HostMount, error) {
 	}
 
 	mounts := buildHostMounts(fsByTarget, flat)
+	annotateHostMounts(mounts, flat)
+	unused := unusedHostDisks(disks, mounts, flat)
 	sort.Slice(disks, func(i, j int) bool {
 		if disks[i].Preferred != disks[j].Preferred {
 			return disks[i].Preferred
@@ -221,12 +235,13 @@ func collectHostDiskInventory() ([]HostDisk, []HostMount, error) {
 		return disks[i].SizeBytes > disks[j].SizeBytes
 	})
 	sort.Slice(mounts, func(i, j int) bool {
-		if mounts[i].Preferred != mounts[j].Preferred {
-			return mounts[i].Preferred
+		qi, qj := mountQuality(mounts[i]), mountQuality(mounts[j])
+		if qi != qj {
+			return qi > qj
 		}
 		return mounts[i].AvailBytes > mounts[j].AvailBytes
 	})
-	return disks, mounts, nil
+	return disks, mounts, unused, nil
 }
 
 func collectFindmnt() ([]findmntNode, error) {
@@ -352,12 +367,32 @@ func buildHostMounts(fsByTarget map[string]findmntNode, flat []HostDisk) []HostM
 	return out
 }
 
-func rootDiskName(d HostDisk, _ []HostDisk) string {
-	if d.Type == "disk" || d.Type == "nvme" {
+func rootDiskName(d HostDisk, flat []HostDisk) string {
+	t := strings.ToLower(strings.TrimSpace(d.Type))
+	if t == "disk" || t == "nvme" {
 		return d.Name
 	}
-	if d.Parent != "" {
-		return d.Parent
+	cur := d
+	for i := 0; i < 8 && cur.Parent != ""; i++ {
+		found := false
+		for _, x := range flat {
+			if x.Name != cur.Parent {
+				continue
+			}
+			xt := strings.ToLower(strings.TrimSpace(x.Type))
+			if xt == "disk" || xt == "nvme" {
+				return x.Name
+			}
+			cur = x
+			found = true
+			break
+		}
+		if !found {
+			return cur.Parent
+		}
+	}
+	if cur.Parent != "" {
+		return cur.Parent
 	}
 	return d.Name
 }

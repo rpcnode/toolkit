@@ -87,6 +87,8 @@ func removeJobShouldResume(status, network, env string) bool {
 
 // clearRemoveJobOnProvision — Confirm ports / re-provision supersedes a stuck wipe.
 func clearRemoveJobOnProvision(network, env string) {
+	// Runtime mask from remove would block enable --now of leaf + TON validator.
+	_ = unpinAllRemovePins(network, env)
 	path := removeJobPath(network, env)
 	b, err := os.ReadFile(path)
 	if err != nil {

@@ -26,6 +26,7 @@ func TestPerNodeAgentUnitsNeverHostBootstrap(t *testing.T) {
 		{"bsc", "mainnet"},
 		{"ethereum", "sepolia"},
 		{"solana", "mainnet"},
+		{"ton", "testnet"},
 		{"arb", "mainnet"},
 		{"robinhood", "mainnet"},
 		{"optimism", "mainnet"},
@@ -292,6 +293,7 @@ func TestNodeUnitsForRemoveAllSupported(t *testing.T) {
 		"optimism":    {"optimism-mainnet.service", "optimism-op-node-mainnet.service"},
 		"base":        {"base-mainnet.service", "base-consensus-mainnet.service"},
 		"stellar":     {"stellar-mainnet.service"},
+		"ton":         {"ton-mainnet.service", "ton-mainnet-bootstrap.service", "ton-http-api.service", "ton_http_api.service", "mytoncore.service", "validator.service"},
 	}
 	for net, want := range cases {
 		got := nodeUnitsForRemove(net, "mainnet")
@@ -338,6 +340,57 @@ func TestNodeDataPathsBitcoinScoped(t *testing.T) {
 	for _, p := range paths {
 		if strings.HasSuffix(p, "/data/bitcoin") || p == "/data/bitcoin/signet" || p == "/data/bitcoin/regtest" {
 			t.Fatalf("must not wipe sibling env path %s", p)
+		}
+	}
+}
+
+func TestSystemdUnitBlocksRemove_OneshotLingerIgnored(t *testing.T) {
+	if systemdUnitBlocksRemove("active", "exited", "oneshot", "yes") {
+		t.Fatal("TON ton-<env>.service RemainAfterExit linger must not block remove ACK")
+	}
+	if systemdUnitBlocksRemove("inactive", "dead", "oneshot", "yes") {
+		t.Fatal("dead oneshot must not block")
+	}
+	if !systemdUnitBlocksRemove("activating", "start", "oneshot", "yes") {
+		t.Fatal("oneshot still starting (bootstrap) must block")
+	}
+	if !systemdUnitBlocksRemove("active", "running", "simple", "no") {
+		t.Fatal("live simple unit must block")
+	}
+}
+
+func TestStockSharedNodeUnits_TONNotDeleted(t *testing.T) {
+	if !isStockSharedNodeUnit("ton", "validator.service") {
+		t.Fatal("validator.service is stock MyTonCtrl")
+	}
+	if isStockSharedNodeUnit("ton", "ton-testnet.service") {
+		t.Fatal("rpcnode wrapper is ours — may delete")
+	}
+	if isStockSharedNodeUnit("bitcoin", "validator.service") {
+		t.Fatal("stock TON units are TON-only")
+	}
+	got := unitsToPinForRemove("ton", "testnet")
+	want := map[string]bool{
+		"ton-testnet.service":                       true,
+		"validator.service":                         true,
+		"rpcnode-api-agent-ton-testnet.service":     true,
+		"rpcnode-system-agent-ton-testnet.service":  true,
+	}
+	for name := range want {
+		found := false
+		for _, u := range got {
+			if u == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("pin list missing %s in %v", name, got)
+		}
+	}
+	for _, u := range got {
+		if isHostBootstrapUnit(u) {
+			t.Fatalf("tip unit pinned: %s", u)
 		}
 	}
 }

@@ -149,7 +149,7 @@ func (s *Server) handleDevOpenAPI(w http.ResponseWriter, r *http.Request) {
 		},
 		"endpoints": []map[string]any{
 			{"method": "GET", "path": "/api/v1/node", "desc": "Node health, sync, versions, services, instance"},
-			{"method": "GET", "path": "/api/v1/metrics", "desc": "CPU/mem/load/RPS snapshot (+ short history)"},
+			{"method": "GET", "path": "/api/v1/metrics", "desc": "CPU/mem/load/disk IOPS/RPS snapshot (+ short history)"},
 			{"method": "GET", "path": "/api/v1/updates", "desc": "Toolkit agent + chain client update availability"},
 			{"method": "GET", "path": "/api/v1/client", "desc": "Chain client_version + client_update (local/latest/phase)"},
 			{"method": "GET", "path": "/api/v1/client/release", "desc": "Native client catalog: version + artifact_url (tron=GitHub GreatVoyage)"},
@@ -164,7 +164,7 @@ func (s *Server) handleDevOpenAPI(w http.ResponseWriter, r *http.Request) {
 			{"method": "GET", "path": "/api/v1/webhooks", "desc": "Configured outbound webhook URLs"},
 			{"method": "PUT", "path": "/api/v1/webhooks", "desc": "Replace webhook URL list {\"urls\":[...]}", "body": true},
 			{"method": "POST", "path": "/api/v1/webhooks", "desc": "Append one URL {\"url\":\"https://...\"}", "body": true},
-			{"method": "GET", "path": "/api/v1/host/disks", "desc": "Host block devices + mounts (lsblk/findmnt); ?network=solana adds recommended JBOD layout"},
+			{"method": "GET", "path": "/api/v1/host/disks", "desc": "Host disks + mounts + insights (md/LVM/raw NVMe); ?network= adds JBOD recommend"},
 			{"method": "GET", "path": "/api/v1/nodes", "desc": "Local env instances present on this host"},
 			{"method": "POST", "path": "/api/v1/nodes/plan", "desc": "Return tip catalog ports for network/env (fixed, no remap)", "body": true},
 			{"method": "POST", "path": "/api/v1/nodes/check-ports", "desc": "Check catalog ports free/reclaimable before Install", "body": true},

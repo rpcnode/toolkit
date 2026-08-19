@@ -27,11 +27,20 @@ type nodeResourceTracker struct {
 	memPct    float64
 	memUsedMB float64
 
+	diskReadIOPS  float64
+	diskWriteIOPS float64
+	diskReadMBs   float64
+	diskWriteMBs  float64
+
 	prevRx, prevTx   uint64
 	prevCPUNsec      uint64
 	prevAt           time.Time
 	havePrev         bool
 	havePrevCPU      bool
+
+	prevDiskR, prevDiskW     uint64
+	prevDiskRI, prevDiskWI   uint64
+	havePrevDisk             bool
 
 	// Ring for charts (~same window as host metrics).
 	samples []nodeResourceSample
@@ -46,6 +55,8 @@ type nodeResourceSample struct {
 	CPUPct    float64
 	MemPct    float64
 	MemUsedMB float64
+	DiskReadIOPS  float64
+	DiskWriteIOPS float64
 }
 
 func newNodeNetTracker() *nodeResourceTracker {
@@ -66,6 +77,7 @@ func (n *nodeResourceTracker) Sample(unit string) {
 	if !ok {
 		return
 	}
+	diskR, diskW, diskRI, diskWI, haveDisk := readUnitIOStat(unit)
 	// MemoryCurrent includes page cache (bitcoind file≈tens of GiB) and is NOT
 	// comparable to host MemAvailable-based %. Prefer cgroup anon (+RSS fallback).
 	memBytes := readUnitAnonMemoryBytes(unit, mainPID)
@@ -101,6 +113,11 @@ func (n *nodeResourceTracker) Sample(unit string) {
 		n.prevAt = now
 		n.havePrev = true
 		n.havePrevCPU = cpuNsec > 0 || mainPID > 0
+		if haveDisk {
+			n.prevDiskR, n.prevDiskW = diskR, diskW
+			n.prevDiskRI, n.prevDiskWI = diskRI, diskWI
+			n.havePrevDisk = true
+		}
 		n.pushLocked(now.Unix())
 		return
 	}
@@ -135,6 +152,15 @@ func (n *nodeResourceTracker) Sample(unit string) {
 	}
 	n.prevCPUNsec = cpuNsec
 	n.havePrevCPU = true
+	if haveDisk {
+		if n.havePrevDisk {
+			n.diskReadIOPS, n.diskWriteIOPS, n.diskReadMBs, n.diskWriteMBs =
+				nodeDiskRates(n.prevDiskR, n.prevDiskW, n.prevDiskRI, n.prevDiskWI, diskR, diskW, diskRI, diskWI, dt)
+		}
+		n.prevDiskR, n.prevDiskW = diskR, diskW
+		n.prevDiskRI, n.prevDiskWI = diskRI, diskWI
+		n.havePrevDisk = true
+	}
 	n.prevAt = now
 	n.pushLocked(now.Unix())
 }
@@ -143,6 +169,7 @@ func (n *nodeResourceTracker) pushLocked(t int64) {
 	s := nodeResourceSample{
 		T: t, NetRxMbps: n.rxMbps, NetTxMbps: n.txMbps,
 		CPUPct: n.cpuPct, MemPct: n.memPct, MemUsedMB: n.memUsedMB,
+		DiskReadIOPS: n.diskReadIOPS, DiskWriteIOPS: n.diskWriteIOPS,
 	}
 	n.samples[n.pos] = s
 	n.pos = (n.pos + 1) % SampleCount
@@ -162,27 +189,37 @@ func (n *nodeResourceTracker) Snapshot() map[string]any {
 	netTx := make([]MetricPoint, 0, len(ordered))
 	cpu := make([]MetricPoint, 0, len(ordered))
 	mem := make([]MetricPoint, 0, len(ordered))
+	diskR := make([]MetricPoint, 0, len(ordered))
+	diskW := make([]MetricPoint, 0, len(ordered))
 	for _, s := range ordered {
 		netRx = append(netRx, MetricPoint{T: s.T, V: round2(s.NetRxMbps)})
 		netTx = append(netTx, MetricPoint{T: s.T, V: round2(s.NetTxMbps)})
 		cpu = append(cpu, MetricPoint{T: s.T, V: round2(s.CPUPct)})
 		mem = append(mem, MetricPoint{T: s.T, V: round2(s.MemPct)})
+		diskR = append(diskR, MetricPoint{T: s.T, V: round1(s.DiskReadIOPS)})
+		diskW = append(diskW, MetricPoint{T: s.T, V: round1(s.DiskWriteIOPS)})
 	}
 	return map[string]any{
-		"node_net_rx_mbps":  round2(n.rxMbps),
-		"node_net_tx_mbps":  round2(n.txMbps),
-		"node_net_rx_bps":   round1(n.rxBps),
-		"node_net_tx_bps":   round1(n.txBps),
-		"node_net_rx_bytes": n.rxBytes,
-		"node_net_tx_bytes": n.txBytes,
-		"node_cpu_pct":      round2(n.cpuPct),
-		"node_mem_pct":      round2(n.memPct),
-		"node_mem_used_mb":  round1(n.memUsedMB),
+		"node_net_rx_mbps":     round2(n.rxMbps),
+		"node_net_tx_mbps":     round2(n.txMbps),
+		"node_net_rx_bps":      round1(n.rxBps),
+		"node_net_tx_bps":      round1(n.txBps),
+		"node_net_rx_bytes":    n.rxBytes,
+		"node_net_tx_bytes":    n.txBytes,
+		"node_cpu_pct":         round2(n.cpuPct),
+		"node_mem_pct":         round2(n.memPct),
+		"node_mem_used_mb":     round1(n.memUsedMB),
+		"node_disk_read_iops":  round1(n.diskReadIOPS),
+		"node_disk_write_iops": round1(n.diskWriteIOPS),
+		"node_disk_read_mb_s":  round2(n.diskReadMBs),
+		"node_disk_write_mb_s": round2(n.diskWriteMBs),
 		"history": map[string]any{
-			"node_net_rx": netRx,
-			"node_net_tx": netTx,
-			"node_cpu":    cpu,
-			"node_memory": mem,
+			"node_net_rx":         netRx,
+			"node_net_tx":         netTx,
+			"node_cpu":            cpu,
+			"node_memory":         mem,
+			"node_disk_read_iops": diskR,
+			"node_disk_write_iops": diskW,
 		},
 	}
 }
@@ -211,6 +248,8 @@ func mergeNodeNetIntoCurrent(cur map[string]any, snap map[string]any) {
 		"node_net_rx_bps", "node_net_tx_bps",
 		"node_net_rx_bytes", "node_net_tx_bytes",
 		"node_cpu_pct", "node_mem_pct", "node_mem_used_mb",
+		"node_disk_read_iops", "node_disk_write_iops",
+		"node_disk_read_mb_s", "node_disk_write_mb_s",
 	} {
 		if v, ok := snap[k]; ok {
 			cur[k] = v
@@ -226,7 +265,10 @@ func mergeNodeHistoryInto(hostHist map[string]any, snap map[string]any) {
 	if nh == nil {
 		return
 	}
-	for _, k := range []string{"node_net_rx", "node_net_tx", "node_cpu", "node_memory"} {
+	for _, k := range []string{
+		"node_net_rx", "node_net_tx", "node_cpu", "node_memory",
+		"node_disk_read_iops", "node_disk_write_iops",
+	} {
 		if v, ok := nh[k]; ok {
 			hostHist[k] = v
 		}
@@ -254,6 +296,22 @@ func readUnitAnonMemoryBytes(unit string, mainPID int64) uint64 {
 		}
 	}
 	return 0
+}
+
+func readUnitIOStat(unit string) (rbytes, wbytes, rios, wios uint64, ok bool) {
+	cg := strings.TrimSpace(systemdControlGroup(unit))
+	if cg == "" {
+		return 0, 0, 0, 0, false
+	}
+	if !strings.HasPrefix(cg, "/") {
+		cg = "/" + cg
+	}
+	b, err := os.ReadFile("/sys/fs/cgroup" + cg + "/io.stat")
+	if err != nil || len(b) == 0 {
+		return 0, 0, 0, 0, false
+	}
+	rbytes, wbytes, rios, wios = parseCgroupIOStat(string(b))
+	return rbytes, wbytes, rios, wios, true
 }
 
 func systemdControlGroup(unit string) string {
@@ -387,14 +445,15 @@ func ensureLocalNodeIPAccounting(unit string) {
 	dropDir := filepath.Join("/etc/systemd/system", unit+".d")
 	_ = os.MkdirAll(dropDir, 0o755)
 	body := `[Service]
-# RpcNode: per-node NIC / CPU / Memory (leaf ensure).
+# RpcNode: per-node NIC / CPU / Memory / IO (leaf ensure).
 IPAccounting=yes
 CPUAccounting=yes
 MemoryAccounting=yes
+IOAccounting=yes
 `
 	_ = os.WriteFile(filepath.Join(dropDir, "ip-accounting.conf"), []byte(body), 0o644)
 	_ = exec.Command("systemctl", "daemon-reload").Run()
 	_ = exec.Command("systemctl", "set-property", unit,
-		"IPAccounting=yes", "CPUAccounting=yes", "MemoryAccounting=yes").Run()
+		"IPAccounting=yes", "CPUAccounting=yes", "MemoryAccounting=yes", "IOAccounting=yes").Run()
 	log.Printf("node resource accounting enabled on %s", unit)
 }

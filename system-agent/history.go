@@ -33,6 +33,13 @@ type HostSample struct {
 	NetTxMbps float64 `json:"net_tx_mbps"`
 	NetRxBps  float64 `json:"net_rx_bps"`
 	NetTxBps  float64 `json:"net_tx_bps"`
+	// Host disk I/O from /proc/diskstats (whole physical disks; max %util).
+	DiskReadIOPS  float64 `json:"disk_read_iops"`
+	DiskWriteIOPS float64 `json:"disk_write_iops"`
+	DiskReadMBs   float64 `json:"disk_read_mb_s"`
+	DiskWriteMBs  float64 `json:"disk_write_mb_s"`
+	DiskUtilPct   float64 `json:"disk_util_pct"`
+	DiskBusy      string  `json:"disk_busy,omitempty"`
 }
 
 type MetricsHistory struct {
@@ -49,6 +56,10 @@ type MetricsHistory struct {
 	prevNetTx   uint64
 	prevNetAt   time.Time
 	havePrevNet bool
+	// Disk delta for /proc/diskstats
+	prevDisk     []diskDevSnap
+	prevDiskAt   time.Time
+	havePrevDisk bool
 }
 
 func newMetricsHistory() *MetricsHistory {
@@ -80,6 +91,9 @@ func (h *MetricsHistory) Snapshot() map[string]any {
 	mem := make([]MetricPoint, 0, len(ordered))
 	netRx := make([]MetricPoint, 0, len(ordered))
 	netTx := make([]MetricPoint, 0, len(ordered))
+	diskR := make([]MetricPoint, 0, len(ordered))
+	diskW := make([]MetricPoint, 0, len(ordered))
+	diskUtil := make([]MetricPoint, 0, len(ordered))
 	var cur HostSample
 	if len(ordered) > 0 {
 		cur = ordered[len(ordered)-1]
@@ -90,6 +104,9 @@ func (h *MetricsHistory) Snapshot() map[string]any {
 		mem = append(mem, MetricPoint{T: s.T, V: round2(s.MemPct)})
 		netRx = append(netRx, MetricPoint{T: s.T, V: round2(s.NetRxMbps)})
 		netTx = append(netTx, MetricPoint{T: s.T, V: round2(s.NetTxMbps)})
+		diskR = append(diskR, MetricPoint{T: s.T, V: round1(s.DiskReadIOPS)})
+		diskW = append(diskW, MetricPoint{T: s.T, V: round1(s.DiskWriteIOPS)})
+		diskUtil = append(diskUtil, MetricPoint{T: s.T, V: round2(s.DiskUtilPct)})
 	}
 	osName, arch, _ := liveUname()
 	return map[string]any{
@@ -104,19 +121,28 @@ func (h *MetricsHistory) Snapshot() map[string]any {
 			"mem_used_mb":  round1(cur.MemUsed),
 			"mem_total_mb": round1(cur.MemTotal),
 			"mem_pct":      round2(cur.MemPct),
-			"net_rx_mbps":  round2(cur.NetRxMbps),
-			"net_tx_mbps":  round2(cur.NetTxMbps),
-			"net_rx_bps":   round1(cur.NetRxBps),
-			"net_tx_bps":   round1(cur.NetTxBps),
-			"os":           osName,
-			"arch":         arch,
+			"net_rx_mbps":      round2(cur.NetRxMbps),
+			"net_tx_mbps":      round2(cur.NetTxMbps),
+			"net_rx_bps":       round1(cur.NetRxBps),
+			"net_tx_bps":       round1(cur.NetTxBps),
+			"disk_read_iops":   round1(cur.DiskReadIOPS),
+			"disk_write_iops":  round1(cur.DiskWriteIOPS),
+			"disk_read_mb_s":   round2(cur.DiskReadMBs),
+			"disk_write_mb_s":  round2(cur.DiskWriteMBs),
+			"disk_util_pct":    round2(cur.DiskUtilPct),
+			"disk_busy":        cur.DiskBusy,
+			"os":               osName,
+			"arch":             arch,
 		},
 		"history": map[string]any{
-			"load":   load,
-			"cpu":    cpu,
-			"memory": mem,
-			"net_rx": netRx,
-			"net_tx": netTx,
+			"load":            load,
+			"cpu":             cpu,
+			"memory":          mem,
+			"net_rx":          netRx,
+			"net_tx":          netTx,
+			"disk_read_iops":  diskR,
+			"disk_write_iops": diskW,
+			"disk_util":       diskUtil,
 		},
 		"samples": ordered,
 	}
@@ -143,6 +169,7 @@ func (h *MetricsHistory) Collect() HostSample {
 	memUsed, memTotal, memPct := readMem()
 	busy := h.readCPUBusyPct()
 	rxBps, txBps, rxMbps, txMbps := h.readNetRates()
+	disk := h.readDiskRates()
 	ncpu := readNCPU()
 	loadPct := 0.0
 	if ncpu > 0 {
@@ -159,7 +186,31 @@ func (h *MetricsHistory) Collect() HostSample {
 		MemUsed: memUsed, MemTotal: memTotal, MemPct: memPct,
 		NetRxMbps: rxMbps, NetTxMbps: txMbps,
 		NetRxBps: rxBps, NetTxBps: txBps,
+		DiskReadIOPS: disk.ReadIOPS, DiskWriteIOPS: disk.WriteIOPS,
+		DiskReadMBs: disk.ReadMBs, DiskWriteMBs: disk.WriteMBs,
+		DiskUtilPct: disk.UtilPct, DiskBusy: disk.BusyName,
 	}
+}
+
+func (h *MetricsHistory) readDiskRates() diskRates {
+	devs, ok := readDiskstats()
+	if !ok {
+		return diskRates{}
+	}
+	now := time.Now()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.havePrevDisk || h.prevDiskAt.IsZero() {
+		h.prevDisk = devs
+		h.prevDiskAt = now
+		h.havePrevDisk = true
+		return diskRates{}
+	}
+	dt := now.Sub(h.prevDiskAt).Seconds()
+	rates := diskRatesFromDelta(h.prevDisk, devs, dt)
+	h.prevDisk = devs
+	h.prevDiskAt = now
+	return rates
 }
 
 func readNCPU() int {

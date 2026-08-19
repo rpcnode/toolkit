@@ -121,6 +121,8 @@ export type SyncInfo = {
   cluster_slot?: number
   /** Toncoin: validator out-of-sync seconds (MyTonCtrl / getstats). */
   out_of_sync_sec?: number
+  /** Toncoin: oos not shrinking (serializer / no peers). */
+  catchup_stalled?: boolean
   /** Toncoin: MyTonCtrl dump download % from bootstrap.log (aria2/wget). */
   dump_pct?: number
   /** Stellar local ledger (alias of blocks). */
@@ -441,6 +443,19 @@ export type MetricsPayload = {
     /** Per-node unit memory % of host RAM. */
     node_mem_pct?: number
     node_mem_used_mb?: number
+    /** Host disk I/O — /proc/diskstats, whole physical disks. */
+    disk_read_iops?: number
+    disk_write_iops?: number
+    disk_read_mb_s?: number
+    disk_write_mb_s?: number
+    /** Hottest disk %util (iostat). */
+    disk_util_pct?: number
+    disk_busy?: string
+    /** Per-node unit cgroup io.stat. */
+    node_disk_read_iops?: number
+    node_disk_write_iops?: number
+    node_disk_read_mb_s?: number
+    node_disk_write_mb_s?: number
   }
   gateway?: {
     rps_1m?: number
@@ -467,5 +482,10 @@ export type MetricsPayload = {
     node_net_tx?: MetricPoint[]
     node_cpu?: MetricPoint[]
     node_memory?: MetricPoint[]
+    disk_read_iops?: MetricPoint[]
+    disk_write_iops?: MetricPoint[]
+    disk_util?: MetricPoint[]
+    node_disk_read_iops?: MetricPoint[]
+    node_disk_write_iops?: MetricPoint[]
   }
 }

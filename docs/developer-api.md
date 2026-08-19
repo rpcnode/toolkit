@@ -86,8 +86,8 @@ Optional: `AGENT_API_TOKEN_REQUIRED=1` — require agent key for `/api/*`.
 | `GET` | `/api/v1` | Catalog + auth hints + event type list |
 | `GET` | `/api/v1/node` | Health, sync/RPC, versions, instance, services, disk, snapshot summary |
 | `GET` | `/api/v1/status` | Alias of `/api/v1/node` |
-| `GET` | `/api/v1/metrics` | Current CPU/mem/load/RPS + short history (same shape as `/api/metrics.json`) |
-| `GET` | `/api/v1/host/disks` | Host block devices + mounts (`lsblk`/`findmnt`); `?network=solana&env=` adds recommended JBOD layout |
+| `GET` | `/api/v1/metrics` | Current CPU/mem/load/disk IOPS/%util/RPS + short history (same shape as `/api/metrics.json`) |
+| `GET` | `/api/v1/host/disks` | Host block devices + mounts (`lsblk`/`findmnt`); `insights` (md / LVM / raw NVMe); `?network=` adds recommended JBOD (raw NVMe over md) |
 | `GET` | `/api/v1/updates` | Toolkit agent + chain client update availability (`needs_attention`) |
 | `POST` | `/api/v1/node/restart` | Soft-restart fullnode (RPC sleep → `systemctl stop`→`start` / ExecStop → wake) |
 | `POST` | `/api/v1/node/stop` | Soft-stop fullnode (RPC sleep → CLI/RPC then `systemctl stop`; stays down until Restart) |
@@ -112,7 +112,7 @@ Panel disk layout (SQLite, per node UUID):
 
 ## Host disks (`GET /api/v1/host/disks`)
 
-Inventory for multi-disk JBOD layout (Solana + eth/bsc/arb/… with `multi_disk_roles`). Source: `lsblk -J` + `findmnt -J`.
+Inventory for Install + multi-disk JBOD. Source: `lsblk -J` + `findmnt -J`. Always includes `insights` (what we concluded: raw NVMe vs md RAID vs LVM `/`) and `unused` disks. `?network=` adds `recommended` — raw NVMe is preferred over `/data` on md.
 
 ```json
 {
@@ -140,7 +140,18 @@ Inventory for multi-disk JBOD layout (Solana + eth/bsc/arb/… with `multi_disk_
       "disk_name": "nvme0n1",
       "tran": "nvme",
       "rota": false,
-      "preferred": true
+      "preferred": true,
+      "kind": "raw_nvme"
+    }
+  ],
+  "unused": [],
+  "summary": "raw NVMe /mnt/nvme0+/mnt/nvme1",
+  "insights": [
+    {
+      "level": "good",
+      "code": "raw_nvme",
+      "title": "Raw NVMe (no md / no LVM)",
+      "detail": "/mnt/nvme0, /mnt/nvme1 — single-disk ext4/xfs."
     }
   ],
   "network": "solana",

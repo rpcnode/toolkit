@@ -211,6 +211,50 @@ function looksLikeClientVersionToken(s: string): boolean {
   return /^\d+\.\d+[\w.+_-]*$/.test(t)
 }
 
+/** Host disk IOPS (reads or writes completed / s). */
+export function fmtIOPS(v: unknown): string {
+  if (v == null || v === '') return '—'
+  const n = Number(v)
+  if (Number.isNaN(n)) return String(v)
+  if (n >= 10000) return `${(n / 1000).toFixed(1)}k`
+  if (n >= 10) return n.toFixed(0)
+  return n.toFixed(1)
+}
+
+/** Host disk throughput (MB/s, 1e6 bytes). */
+export function fmtDiskMBs(v: unknown): string {
+  if (v == null || v === '') return '—'
+  const n = Number(v)
+  if (Number.isNaN(n)) return String(v)
+  if (n >= 1000) return `${(n / 1000).toFixed(2)} GB/s`
+  if (n >= 10) return `${n.toFixed(1)} MB/s`
+  return `${n.toFixed(2)} MB/s`
+}
+
+/** Align two metric series (disk read/write IOPS, etc.). */
+export function chartPairSeries(
+  a?: MetricPoint[],
+  b?: MetricPoint[],
+  aKey = 'a',
+  bKey = 'b',
+): Array<Record<string, string | number>> {
+  const n = Math.max(a?.length || 0, b?.length || 0)
+  if (!n) return []
+  const out: Array<Record<string, string | number>> = []
+  for (let i = 0; i < n; i++) {
+    const pa = a?.[i] as MetricPoint & { T?: number; V?: number } | undefined
+    const pb = b?.[i] as MetricPoint & { T?: number; V?: number } | undefined
+    const t = pa?.t ?? pa?.T ?? pb?.t ?? pb?.T
+    if (t == null || Number.isNaN(Number(t))) continue
+    out.push({
+      time: dayjs.unix(Number(t)).format('HH:mm:ss'),
+      [aKey]: Number(Number(pa?.v ?? pa?.V ?? 0).toFixed(2)),
+      [bKey]: Number(Number(pb?.v ?? pb?.V ?? 0).toFixed(2)),
+    })
+  }
+  return out
+}
+
 /** Human host network rate (Mbps preferred). */
 export function fmtMbps(v: unknown): string {
   if (v == null || v === '') return '—'

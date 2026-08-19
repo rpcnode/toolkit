@@ -17,9 +17,25 @@ type Props = {
 }
 
 function mountLabel(m: HostMountInfo): string {
+  const kind =
+    m.kind === 'raw_nvme'
+      ? 'raw NVMe'
+      : m.kind === 'md_raid'
+        ? m.raid_level
+          ? `md ${m.raid_level}`
+          : 'md RAID'
+        : m.kind === 'lvm'
+          ? 'LVM'
+          : m.tran
+            ? m.tran.toUpperCase()
+            : m.preferred
+              ? 'SSD'
+              : m.rota
+                ? 'HDD'
+                : undefined
   const bits = [
     m.target,
-    m.tran ? m.tran.toUpperCase() : m.preferred ? 'SSD' : m.rota ? 'HDD' : undefined,
+    kind,
     m.avail_human ? `${m.avail_human} free` : undefined,
     m.model,
   ].filter(Boolean)

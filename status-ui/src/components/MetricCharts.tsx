@@ -3,7 +3,7 @@ import { Badge, Card, Grid, Group, SimpleGrid, Stack, Text, Title, Tooltip } fro
 import { AreaChart } from '@mantine/charts'
 import { IconHelp } from '@tabler/icons-react'
 import type { MetricsPayload, StatusPayload } from '../types'
-import { chartNetSeries, chartSeries, fmtBytesGiB, fmtMbps, num } from '../lib/format'
+import { chartPairSeries, chartNetSeries, chartSeries, fmtBytesGiB, fmtDiskMBs, fmtIOPS, fmtMbps, num } from '../lib/format'
 
 type RpcSnap = {
   rps_1m?: number
@@ -98,6 +98,13 @@ function latencyLevel(ms?: number): Level {
   return 'ok'
 }
 
+function diskUtilLevel(pct?: number): Level {
+  if (pct == null || Number.isNaN(pct)) return undefined
+  if (pct >= 90) return 'critical'
+  if (pct >= 70) return 'warn'
+  return 'ok'
+}
+
 function rpsLevel(rps?: number): Level {
   if (rps == null || Number.isNaN(rps)) return undefined
   if (rps >= 5000) return 'critical'
@@ -146,7 +153,12 @@ export function MetricCharts({
   const nodeNet = chartNetSeries(hist?.node_net_rx, hist?.node_net_tx)
   const nodeCpu = chartSeries(hist?.node_cpu, 'cpu')
   const nodeMem = chartSeries(hist?.node_memory, 'mem')
+  const diskIO = chartPairSeries(hist?.disk_read_iops, hist?.disk_write_iops, 'read', 'write')
+  const diskUtil = chartSeries(hist?.disk_util, 'util')
+  const nodeDiskIO = chartPairSeries(hist?.node_disk_read_iops, hist?.node_disk_write_iops, 'read', 'write')
   const hasNode = cur?.node_net_rx_mbps != null || cur?.node_cpu_pct != null || cur?.node_mem_pct != null
+  const hasDisk = cur?.disk_read_iops != null || cur?.disk_write_iops != null || cur?.disk_util_pct != null
+  const hasNodeDisk = cur?.node_disk_read_iops != null || cur?.node_disk_write_iops != null
 
   const hostCard = (
     <Card>
@@ -154,7 +166,7 @@ export function MetricCharts({
         <div>
           <Title order={3}>Host & node</Title>
           <Text c="dimmed" size="xs">
-            Host NIC/CPU/RAM · this node unit (cgroup accounting)
+            Host NIC/CPU/RAM/disk · this node unit (cgroup accounting)
           </Text>
         </div>
         <Group gap="md" wrap="wrap">
@@ -194,6 +206,36 @@ export function MetricCharts({
             hint="OS load average over 1 minute."
             compact
           />
+          <Stat
+            label="Disk Read"
+            value={fmtIOPS(cur?.disk_read_iops)}
+            hint={`Host 4k-equivalent read IOPS (completed reads / s, /proc/diskstats). ${fmtDiskMBs(cur?.disk_read_mb_s)}`}
+          />
+          <Stat
+            label="Disk Write"
+            value={fmtIOPS(cur?.disk_write_iops)}
+            hint={`Host write IOPS (completed writes / s). ${fmtDiskMBs(cur?.disk_write_mb_s)}`}
+          />
+          <Stat
+            label="Disk util"
+            value={cur?.disk_util_pct == null || Number.isNaN(cur.disk_util_pct) ? '—' : `${num(cur.disk_util_pct, 1)}%`}
+            hint={`Hottest disk busy percent (iostat %util)${cur?.disk_busy ? ` — ${cur.disk_busy}` : ''}. 90%+ means the disk is the bottleneck.`}
+            level={diskUtilLevel(cur?.disk_util_pct)}
+          />
+          {hasNodeDisk ? (
+            <>
+              <Stat
+                label="Node Read"
+                value={fmtIOPS(cur?.node_disk_read_iops)}
+                hint={`This node unit read IOPS (cgroup io.stat). ${fmtDiskMBs(cur?.node_disk_read_mb_s)}`}
+              />
+              <Stat
+                label="Node Write"
+                value={fmtIOPS(cur?.node_disk_write_iops)}
+                hint={`This node unit write IOPS (cgroup io.stat). ${fmtDiskMBs(cur?.node_disk_write_mb_s)}`}
+              />
+            </>
+          ) : null}
         </Group>
       </Group>
       {cur?.node_net_rx_bytes != null || cur?.node_net_tx_bytes != null ? (
@@ -228,6 +270,51 @@ export function MetricCharts({
           />
         </Grid.Col>
       </Grid>
+
+      <Grid mb="md">
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <PairChartCard
+            title="Host disk IOPS"
+            hint="Completed reads/writes per second on whole physical disks (/proc/diskstats). Same signal as iostat r/s + w/s."
+            data={diskIO}
+            aKey="read"
+            bKey="write"
+            aColor="teal.5"
+            bColor="orange.5"
+            aLabel={`Read ${fmtIOPS(cur?.disk_read_iops)} · ${fmtDiskMBs(cur?.disk_read_mb_s)}`}
+            bLabel={`Write ${fmtIOPS(cur?.disk_write_iops)} · ${fmtDiskMBs(cur?.disk_write_mb_s)}`}
+            emptyHint={hasDisk ? 'Collecting disk samples…' : 'Disk I/O not ready yet (Update agent)'}
+          />
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 6 }}>
+          <ChartCard
+            title={`Disk util %${cur?.disk_busy ? ` · ${cur.disk_busy}` : ''}`}
+            hint="Hottest disk busy percent (iostat %util). 70% warn, 90%+ the disk is saturated."
+            data={diskUtil}
+            dataKey="util"
+            color="pink.5"
+            emptyHint={hasDisk ? 'Collecting…' : 'Disk util not ready yet'}
+          />
+        </Grid.Col>
+      </Grid>
+
+      {hasNodeDisk || nodeDiskIO.length ? (
+        <Card padding="sm" className="metric-chart-panel" mb="md">
+          <PairChartCard
+            title="Node disk IOPS"
+            hint="This node unit only (cgroup io.stat). Needs IOAccounting — enabled on Update / ensure."
+            data={nodeDiskIO}
+            aKey="read"
+            bKey="write"
+            aColor="teal.5"
+            bColor="orange.5"
+            aLabel={`Read ${fmtIOPS(cur?.node_disk_read_iops)} · ${fmtDiskMBs(cur?.node_disk_read_mb_s)}`}
+            bLabel={`Write ${fmtIOPS(cur?.node_disk_write_iops)} · ${fmtDiskMBs(cur?.node_disk_write_mb_s)}`}
+            emptyHint="Collecting node disk samples…"
+            bare
+          />
+        </Card>
+      ) : null}
 
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md" mb="md">
         <ChartCard
@@ -450,11 +537,13 @@ function Stat({
   value,
   hint,
   compact,
+  level,
 }: {
   label: string
   value: string
   hint?: string
   compact?: boolean
+  level?: Level
 }) {
   return (
     <div>
@@ -467,7 +556,7 @@ function Stat({
       <Text
         fw={700}
         size={compact ? 'sm' : 'lg'}
-        c={compact ? 'dimmed' : undefined}
+        c={levelColor(level) ?? (compact ? 'dimmed' : undefined)}
         style={{ fontVariantNumeric: 'tabular-nums' }}
       >
         {value}
@@ -517,6 +606,78 @@ function ChartCard({
           {emptyHint || 'Collecting samples…'}
         </Text>
       )}
+    </Card>
+  )
+}
+
+function PairChartCard({
+  title,
+  hint,
+  data,
+  aKey,
+  bKey,
+  aColor,
+  bColor,
+  aLabel,
+  bLabel,
+  emptyHint,
+  bare,
+}: {
+  title: string
+  hint?: string
+  data: Array<Record<string, string | number>>
+  aKey: string
+  bKey: string
+  aColor: string
+  bColor: string
+  aLabel: string
+  bLabel: string
+  emptyHint?: string
+  bare?: boolean
+}) {
+  const inner = (
+    <>
+      <Group gap={4} wrap="wrap" align="center" mb={6}>
+        <Text size="xs" c="dimmed" fw={600}>
+          {title}
+        </Text>
+        {hint ? <MetricHelp label={hint} /> : null}
+        <Badge size="xs" variant="light" color="teal">
+          {aLabel}
+        </Badge>
+        <Badge size="xs" variant="light" color="orange">
+          {bLabel}
+        </Badge>
+      </Group>
+      {data.length ? (
+        <AreaChart
+          h={140}
+          data={data}
+          dataKey="time"
+          series={[
+            { name: aKey, color: aColor, label: 'Read' },
+            { name: bKey, color: bColor, label: 'Write' },
+          ]}
+          curveType="monotone"
+          withDots={false}
+          gridAxis="xy"
+          tickLine="none"
+          strokeWidth={2}
+          fillOpacity={0.18}
+          withLegend
+          legendProps={{ verticalAlign: 'top', height: 20 }}
+        />
+      ) : (
+        <Text c="dimmed" size="sm" py="md" ta="center">
+          {emptyHint || 'Collecting samples…'}
+        </Text>
+      )}
+    </>
+  )
+  if (bare) return inner
+  return (
+    <Card padding="sm" className="metric-chart-panel" h="100%">
+      {inner}
     </Card>
   )
 }

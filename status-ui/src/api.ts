@@ -404,6 +404,16 @@ export type HostMountInfo = {
   tran?: string
   rota?: boolean
   preferred?: boolean
+  kind?: string
+  raid_level?: string
+  layer?: string
+}
+
+export type HostDiskInsight = {
+  level?: 'good' | 'warn' | 'info' | string
+  code?: string
+  title?: string
+  detail?: string
 }
 
 /** One JBOD role from tip multi_disk_roles catalog. */
@@ -593,6 +603,9 @@ export const api = {
       ok?: boolean
       disks?: HostDiskInfo[]
       mounts?: HostMountInfo[]
+      unused?: HostDiskInfo[]
+      insights?: HostDiskInsight[]
+      summary?: string
       recommended?: MultiDiskLayoutPlan
       multi_disk_roles?: DiskRoleDef[]
       layout_rules?: string[]

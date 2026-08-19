@@ -29,6 +29,7 @@ type tonRPCInfo struct {
 	Synced        bool
 	VerifyPct     float64 // 0..1; only set when honest
 	DumpPct       int     // MyTonCtrl dump install % (0 = unknown)
+	CatchupStalled bool // oos not shrinking, or growing while seqno moves (slower than tip)
 }
 
 var (
@@ -129,8 +130,9 @@ func collectTon(cfg Config) map[string]any {
 				dumpPct = 0
 				info.DumpPct = 0
 			} else if info.Seqno > 0 && !oom {
-				if p, ok := tonLagClosedPct(cfg, oos); ok {
+				if p, stalled, ok := tonLagClosed(cfg, oos, info.Seqno); ok {
 					info.VerifyPct = p / 100
+					info.CatchupStalled = stalled
 					dumpPct = 0
 					info.DumpPct = 0
 					clearTonDumpProgress(cfg)
@@ -388,6 +390,9 @@ func collectTon(cfg Config) map[string]any {
 	if verifyPctUI != nil {
 		syncBlock["verification_pct"] = verifyPctUI
 	}
+	if info.CatchupStalled {
+		syncBlock["catchup_stalled"] = true
+	}
 
 	var height any
 	if info.Seqno > 0 {
@@ -472,7 +477,9 @@ func tonSyncDetail(info tonRPCInfo, syncing bool) string {
 		return fmt.Sprintf("OOM killer — celldb preload/huge cache · seqno %d", info.Seqno)
 	}
 	lag := ""
-	if info.VerifyPct > 0 && info.VerifyPct < 1 && info.OutOfSyncOK && info.Seqno > 0 {
+	if info.CatchupStalled && info.OutOfSyncOK && info.Seqno > 0 {
+		lag = " · catch-up slower than tip"
+	} else if info.VerifyPct > 0.002 && info.VerifyPct < 1 && info.OutOfSyncOK && info.Seqno > 0 {
 		lag = fmt.Sprintf(" · %.1f%% lag closed", info.VerifyPct*100)
 	}
 	if info.OutOfSyncOK && info.Seqno > 0 {
@@ -820,19 +827,44 @@ func tonPlausibleMCSeqno(n int64) bool {
 // tonLagClosedPct — (peakBehind - behind) / peakBehind * 100 (Solana lesson).
 // Grows only when out_of_sync_sec actually shrinks. ❌ Not seqno/tip ratio.
 func tonLagClosedPct(cfg Config, behindSec float64) (float64, bool) {
+	p, _, ok := tonLagClosed(cfg, behindSec, 0)
+	return p, ok
+}
+
+const tonCatchupStallAfter = 15 * time.Minute
+const tonCatchupShrinkMinSec = 60.0
+
+// tonLagClosed — lag-closed % plus stall when oos does not drop
+// (local seqno moves slower than tip → hole stays / grows).
+func tonLagClosed(cfg Config, behindSec float64, seqno int64) (float64, bool, bool) {
 	if behindSec < 0 {
-		return 0, false
+		return 0, false, false
 	}
 	if behindSec <= tonOutOfSyncHealthySec {
-		return 99.9, true
+		return 99.9, false, true
 	}
-	maxBehind := loadTonCatchupMaxBehind(cfg)
+	st := loadTonCatchupState(cfg)
+	maxBehind := st.maxBehind
 	if behindSec > maxBehind {
 		maxBehind = behindSec
-		saveTonCatchupMaxBehind(cfg, maxBehind)
 	}
+	now := time.Now().UTC()
+	lastShrink := st.lastShrink
+	if lastShrink.IsZero() {
+		lastShrink = now
+	}
+	if st.lastBehind > 0 && st.lastBehind-behindSec >= tonCatchupShrinkMinSec {
+		lastShrink = now
+	}
+	// Tip pulling away: seqno advanced but oos grew (local apply < network).
+	falling := st.lastSeqno > 0 && seqno > st.lastSeqno &&
+		st.lastBehind > 0 && behindSec > st.lastBehind+30
+	stalled := falling || (!lastShrink.IsZero() &&
+		now.Sub(lastShrink) >= tonCatchupStallAfter &&
+		behindSec >= 3600)
+	saveTonCatchupState(cfg, maxBehind, behindSec, seqno, lastShrink)
 	if maxBehind <= tonOutOfSyncHealthySec {
-		return 0, false
+		return 0, stalled, false
 	}
 	pct := (maxBehind - behindSec) / maxBehind * 100
 	if pct > 99.9 {
@@ -841,7 +873,14 @@ func tonLagClosedPct(cfg Config, behindSec float64) (float64, bool) {
 	if pct < 0.1 {
 		pct = 0.1
 	}
-	return float64(int(pct*10+0.5)) / 10, true
+	return float64(int(pct*10+0.5)) / 10, stalled, true
+}
+
+type tonCatchupState struct {
+	maxBehind  float64
+	lastBehind float64
+	lastSeqno  int64
+	lastShrink time.Time
 }
 
 func tonCatchupStatePath(cfg Config) string {
@@ -852,33 +891,53 @@ func tonCatchupStatePath(cfg Config) string {
 	return filepath.Join(base, "ton-catchup.json")
 }
 
-func loadTonCatchupMaxBehind(cfg Config) float64 {
-	doc := readJSONFile(tonCatchupStatePath(cfg))
-	if doc == nil {
-		return 0
-	}
-	switch v := doc["max_behind_sec"].(type) {
+func tonJSONFloat(v any) float64 {
+	switch n := v.(type) {
 	case float64:
-		return v
+		return n
 	case int64:
-		return float64(v)
+		return float64(n)
 	case int:
-		return float64(v)
+		return float64(n)
 	default:
 		return 0
 	}
 }
 
-func saveTonCatchupMaxBehind(cfg Config, maxBehind float64) {
+func loadTonCatchupState(cfg Config) tonCatchupState {
+	doc := readJSONFile(tonCatchupStatePath(cfg))
+	if doc == nil {
+		return tonCatchupState{}
+	}
+	st := tonCatchupState{
+		maxBehind:  tonJSONFloat(doc["max_behind_sec"]),
+		lastBehind: tonJSONFloat(doc["last_behind_sec"]),
+		lastSeqno:  int64(tonJSONFloat(doc["last_seqno"])),
+	}
+	if s, ok := doc["last_shrink_at"].(string); ok && s != "" {
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			st.lastShrink = t
+		}
+	}
+	return st
+}
+
+func saveTonCatchupState(cfg Config, maxBehind, lastBehind float64, seqno int64, lastShrink time.Time) {
 	if maxBehind <= 0 {
 		return
 	}
 	path := tonCatchupStatePath(cfg)
 	_ = ensureDir(filepath.Dir(path))
-	_ = writeJSONFile(path, map[string]any{
-		"max_behind_sec": maxBehind,
-		"updated_at":     time.Now().UTC().Format(time.RFC3339),
-	})
+	doc := map[string]any{
+		"max_behind_sec":  maxBehind,
+		"last_behind_sec": lastBehind,
+		"last_seqno":      seqno,
+		"updated_at":      time.Now().UTC().Format(time.RFC3339),
+	}
+	if !lastShrink.IsZero() {
+		doc["last_shrink_at"] = lastShrink.UTC().Format(time.RFC3339)
+	}
+	_ = writeJSONFile(path, doc)
 }
 
 func clearTonCatchupMaxBehind(cfg Config) {

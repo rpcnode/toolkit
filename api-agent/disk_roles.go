@@ -195,6 +195,10 @@ func recommendMultiDiskLayout(network, env string, mounts []HostMount) MultiDisk
 	}
 
 	sort.SliceStable(cands, func(i, j int) bool {
+		qi, qj := mountQuality(cands[i]), mountQuality(cands[j])
+		if qi != qj {
+			return qi > qj
+		}
 		if cands[i].Preferred != cands[j].Preferred {
 			return cands[i].Preferred
 		}
@@ -352,11 +356,9 @@ func filterDataMountCandidates(mounts []HostMount) []HostMount {
 	}
 
 	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Target == "/data" && out[j].Target != "/data" {
-			return true
-		}
-		if out[j].Target == "/data" && out[i].Target != "/data" {
-			return false
+		qi, qj := mountQuality(out[i]), mountQuality(out[j])
+		if qi != qj {
+			return qi > qj
 		}
 		if out[i].Preferred != out[j].Preferred {
 			return out[i].Preferred

@@ -34,6 +34,8 @@ import {
   type CheckedCatalogPort,
   type AgentTarget,
   type DiskRoleDef,
+  type HostDiskInfo,
+  type HostDiskInsight,
   type HostMountInfo,
   type MultiDiskLayoutPlan,
   type RegistryNode,
@@ -56,6 +58,7 @@ import {
 import { isXrplNetwork, supportsIbdStep, supportsSnapshotStep } from '../lib/network'
 import { agentLogLines } from './AgentLogsPanel'
 import { DiskLayoutPanel } from './DiskLayoutPanel'
+import { HostDiskInsights } from './HostDiskInsights'
 import {
   XrplHistoryPicker,
   xrplHistoryInstallLabel,
@@ -330,6 +333,9 @@ export function NodeInstallWizard({
   const [updateOpen, setUpdateOpen] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [diskMounts, setDiskMounts] = useState<HostMountInfo[]>([])
+  const [diskUnused, setDiskUnused] = useState<HostDiskInfo[]>([])
+  const [diskInsights, setDiskInsights] = useState<HostDiskInsight[]>([])
+  const [diskSummary, setDiskSummary] = useState('')
   const [diskRecommended, setDiskRecommended] = useState<MultiDiskLayoutPlan | null>(null)
   const [diskLayout, setDiskLayout] = useState<MultiDiskLayoutPlan | null>(null)
   const [diskRoles, setDiskRoles] = useState<DiskRoleDef[]>([])
@@ -820,14 +826,13 @@ export function NodeInstallWizard({
   ])
 
   useEffect(() => {
-    if (!wantsDiskLayout) return
     if (stepPending || active !== 'ports') return
     if (disksFetched.current) return
     if (!workload?.server_id) return
     disksFetched.current = true
     void loadHostDisks()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wantsDiskLayout, networkId, active, stepPending, workload?.server_id, env])
+  }, [networkId, active, stepPending, workload?.server_id, env])
 
   useEffect(() => {
     const groups = fallbackInstallGroups(networkId, env)
@@ -857,6 +862,9 @@ export function NodeInstallWizard({
         throw new Error(res.message || res.error || 'host disks failed')
       }
       setDiskMounts(res.mounts || [])
+      setDiskUnused(res.unused || [])
+      setDiskInsights(res.insights || [])
+      setDiskSummary(res.summary || '')
       setDiskRules(res.layout_rules || [])
       setDiskRoles(res.multi_disk_roles || [])
       const rec = res.recommended || null
@@ -1727,6 +1735,18 @@ export function NodeInstallWizard({
                 </Stack>
               )}
 
+              {!unsupported && (
+                <HostDiskInsights
+                  network={networkId}
+                  loading={diskLoading}
+                  error={diskError}
+                  mounts={diskMounts}
+                  unused={diskUnused}
+                  insights={diskInsights}
+                  summary={diskSummary}
+                />
+              )}
+
               {wantsDiskLayout && !unsupported && (
                 <DiskLayoutPanel
                   network={networkId}
@@ -1749,15 +1769,13 @@ export function NodeInstallWizard({
               <Group justify="space-between" mt="sm">
                 <Button
                   variant="default"
-                  loading={portsLoading || (wantsDiskLayout && diskLoading)}
+                  loading={portsLoading || diskLoading}
                   disabled={!workload?.server_id || portsConfirming}
                   onClick={() => {
                     portsFetched.current = true
                     setPortsError(null)
                     void askAgentPorts(true)
-                    if (wantsDiskLayout) {
-                      void loadHostDisks()
-                    }
+                    void loadHostDisks()
                   }}
                 >
                   {unsupported ? 'Check agent again' : 'Refresh catalog'}
