@@ -420,6 +420,7 @@ func ensureDogecoindInstalled(optPath string) (string, error) {
 	url := preferVendoredArtifact("doge", "mainnet",
 		fmt.Sprintf("https://github.com/dogecoin/dogecoin/releases/download/v%s/%s", ver, name))
 	tmp := filepath.Join(os.TempDir(), name)
+	logDownload("GET", url, "doge dest="+tmp)
 	destBin := filepath.Join(optPath, "bin")
 	if err := os.MkdirAll(destBin, 0o755); err != nil {
 		return "", fmt.Errorf("mkdir %s: %w", destBin, err)
@@ -438,6 +439,7 @@ install -m 755 %q/dogecoin-%s/bin/dogecoin-cli %q/dogecoin-cli
 rm -rf %q %q
 `, tmp, url, extractDir, tmp, extractDir, extractDir, ver, destBin, extractDir, ver, destBin, extractDir, tmp))
 	out, err := cmd.CombinedOutput()
+	logDownloadDone("GET", url, "doge dest="+tmp, out, err)
 	if err != nil {
 		return "", fmt.Errorf("install dogecoind %s: %v (%s)", ver, err, strings.TrimSpace(string(out)))
 	}

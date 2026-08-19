@@ -49,15 +49,32 @@ func clientCatalogRoots() []string {
 	return out
 }
 
+// rewriteDeadClientsCDNURL — FetchClients wrote /clients/… but live files are /install/clients/…
+// (nginx alias not deployed). Same host, same tree.
+func rewriteDeadClientsCDNURL(u string) string {
+	const dead = "https://toolkit.rpcnode.dev/clients/"
+	const live = "https://toolkit.rpcnode.dev/install/clients/"
+	if strings.HasPrefix(u, dead) {
+		fixed := live + strings.TrimPrefix(u, dead)
+		logDownload("rewrite", u, "→ "+fixed)
+		return fixed
+	}
+	return u
+}
+
 // preferVendoredArtifact — CDN manifest first (our fetched dist/), official URL only if CDN miss.
 func preferVendoredArtifact(network, env, fallback string) string {
 	rel, err := fetchVendoredClientRelease(network, env)
 	if err != nil {
+		logDownload("artifact", fallback, fmt.Sprintf("%s/%s CDN miss: %v — fallback", network, env, err))
 		return fallback
 	}
 	if u := strings.TrimSpace(rel.ArtifactURL); u != "" {
+		u = rewriteDeadClientsCDNURL(u)
+		logDownload("artifact", u, fmt.Sprintf("%s/%s source=cdn", network, env))
 		return u
 	}
+	logDownload("artifact", fallback, fmt.Sprintf("%s/%s empty artifact — fallback", network, env))
 	return fallback
 }
 
@@ -66,8 +83,13 @@ func preferVendoredConf(network, env, fallback string) string {
 	rel, err := fetchVendoredClientRelease(network, env)
 	if err == nil {
 		if u := strings.TrimSpace(rel.ConfURL); u != "" {
+			u = rewriteDeadClientsCDNURL(u)
+			logDownload("conf", u, fmt.Sprintf("%s/%s source=cdn", network, env))
 			return u
 		}
+	}
+	if fallback != "" {
+		logDownload("conf", fallback, fmt.Sprintf("%s/%s fallback", network, env))
 	}
 	return fallback
 }
@@ -116,22 +138,29 @@ func fetchVendoredClientRelease(network, env string) (tronClientRelease, error) 
 
 func fetchVendoredManifestURL(root, network, env string) (tronClientRelease, error) {
 	manURL := fmt.Sprintf("%s/clients/%s/%s/manifest.json", strings.TrimRight(root, "/"), network, env)
+	logDownload("manifest", manURL, network+"/"+env)
 	client := &http.Client{Timeout: 20 * time.Second}
 	req, err := http.NewRequest(http.MethodGet, manURL, nil)
 	if err != nil {
+		logDownloadFail("manifest", manURL, err)
 		return tronClientRelease{}, err
 	}
 	req.Header.Set("User-Agent", "rpcnode-api-agent")
 	resp, err := client.Do(req)
 	if err != nil {
+		logDownloadFail("manifest", manURL, err)
 		return tronClientRelease{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return tronClientRelease{}, fmt.Errorf("vendored catalog HTTP %d %s", resp.StatusCode, manURL)
+		err := fmt.Errorf("vendored catalog HTTP %d %s", resp.StatusCode, manURL)
+		logDownloadFail("manifest", manURL, err)
+		return tronClientRelease{}, err
 	}
+	logDownloadOK("manifest", manURL, fmt.Sprintf("HTTP %d %s/%s", resp.StatusCode, network, env))
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 256<<10))
 	if err != nil {
+		logDownloadFail("manifest", manURL, err)
 		return tronClientRelease{}, err
 	}
 	return parseVendoredManifest(network, env, root, raw)
@@ -213,21 +242,21 @@ func pickVendoredArtifact(root string, man vendoredManifest, arm bool) string {
 	}
 	if chosen != nil {
 		if u := vendoredCDNFileURL(root, chosen.Path); u != "" {
-			return u
+			return rewriteDeadClientsCDNURL(u)
 		}
 	}
 	if arm {
 		if u := strings.TrimSpace(man.ArtifactURLAarch64); u != "" && strings.Contains(u, "/clients/") {
-			return u
+			return rewriteDeadClientsCDNURL(u)
 		}
 	}
 	if u := strings.TrimSpace(man.ArtifactURL); u != "" && strings.Contains(u, "/clients/") {
-		return u
+		return rewriteDeadClientsCDNURL(u)
 	}
 	if chosen != nil && strings.Contains(chosen.URL, "/clients/") {
-		return strings.TrimSpace(chosen.URL)
+		return rewriteDeadClientsCDNURL(strings.TrimSpace(chosen.URL))
 	}
-	return pickVendoredJar(man, arm)
+	return rewriteDeadClientsCDNURL(pickVendoredJar(man, arm))
 }
 
 func pickVendoredJar(man vendoredManifest, arm bool) string {

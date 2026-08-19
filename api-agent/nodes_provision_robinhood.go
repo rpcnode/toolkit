@@ -392,6 +392,9 @@ func writeRobinhoodNitroEnv(etc string, cluster robinhoodNetwork) error {
 	if url == "" {
 		url = resolveRobinhoodInitURL(cluster)
 	}
+	if url != "" {
+		logDownload("snapshot", url, "robinhood/"+cluster.Env+" --init.url")
+	}
 	body := fmt.Sprintf(`# managed by rpcnode provision (robinhood)
 NITRO_INIT_URL=%s
 TRON_SNAPSHOT_URL=%s

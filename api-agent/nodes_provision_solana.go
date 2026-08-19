@@ -638,6 +638,7 @@ func installAgaveReleaseBinaries(optPath, env string) error {
 	}
 	url := preferVendoredArtifact("solana", env, fallback)
 	tmp := filepath.Join(os.TempDir(), name)
+	logDownload("GET", url, "agave dest="+tmp)
 	destBin := filepath.Join(optPath, "bin")
 	if err := os.MkdirAll(destBin, 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", destBin, err)
@@ -673,8 +674,11 @@ rm -rf %q %q
 		destBin, destBin, destBin, extractDir, tmp))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("install Agave %s: %v (%s)", ver, err, strings.TrimSpace(string(out)))
+		err = fmt.Errorf("install Agave %s: %v (%s)", ver, err, strings.TrimSpace(string(out)))
+		logDownloadFail("GET", url, err)
+		return err
 	}
+	logDownloadOK("GET", url, "agave → "+destBin)
 	return nil
 }
 

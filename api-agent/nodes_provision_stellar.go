@@ -832,17 +832,21 @@ func buildStellarRPCFromSource(dest string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
 	defer cancel()
 
+	gitURL := "https://github.com/stellar/stellar-rpc.git"
+	logDownload("GET", gitURL, "stellar-rpc "+tag)
 	clone := exec.CommandContext(ctx, "git", "clone", "--depth", "1", "--branch", tag,
-		"https://github.com/stellar/stellar-rpc.git", work)
+		gitURL, work)
 	if out, err := clone.CombinedOutput(); err != nil {
 		// tag might be without v prefix or branch name = version
 		clone2 := exec.CommandContext(ctx, "git", "clone", "--depth", "1", "--branch", "v"+strings.TrimPrefix(tag, "v"),
 			"https://github.com/stellar/stellar-rpc.git", work)
 		if out2, err2 := clone2.CombinedOutput(); err2 != nil {
+			logDownloadDone("GET", gitURL, "stellar-rpc "+tag, out2, err2)
 			return fmt.Errorf("git clone stellar-rpc %s: %v (%s); %v (%s)",
 				tag, err, strings.TrimSpace(string(out)), err2, strings.TrimSpace(string(out2)))
 		}
 	}
+	logDownloadOK("GET", gitURL, "stellar-rpc "+tag)
 
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err

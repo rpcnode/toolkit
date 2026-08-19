@@ -67,7 +67,7 @@ func appendHostLog(line string) {
 }
 
 // hostLog writes one audit line to /var/log/rpcnode.log.
-// Only discrete ops: update / provision / node start / snapshot / Java install / errors.
+// Only discrete ops: update / provision / node start / snapshot / Java install / download URL / errors.
 // ❌ Not process boot, listen, or other Restart=always chatter (that stays in <unit>.log).
 func hostLog(level, component, action, msg string) {
 	if hostLogNoisy(level, action, msg) {

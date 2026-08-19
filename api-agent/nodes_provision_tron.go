@@ -899,17 +899,27 @@ func tronAssetURLs(env string) (jarURL, confURL string) {
 func downloadFile(url, dest string) error {
 	url = strings.TrimSpace(url)
 	if url == "" {
-		return fmt.Errorf("empty url")
+		err := fmt.Errorf("empty url")
+		logDownloadFail("GET", url, err)
+		return err
 	}
+	logDownload("GET", url, "dest="+dest)
 	tmp := dest + ".tmp"
 	_ = os.Remove(tmp)
 	cmd := exec.Command("curl", "-fL", "--retry", "5", "--retry-delay", "2", "-o", tmp, url)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		_ = os.Remove(tmp)
-		return fmt.Errorf("%v: %s", err, strings.TrimSpace(string(out)))
+		err = fmt.Errorf("%v: %s", err, strings.TrimSpace(string(out)))
+		logDownloadFail("GET", url, err)
+		return err
 	}
-	return os.Rename(tmp, dest)
+	if err := os.Rename(tmp, dest); err != nil {
+		logDownloadFail("GET", url, err)
+		return err
+	}
+	logDownloadOK("GET", url, "dest="+dest)
+	return nil
 }
 
 func tronOutputDir(env, data string) string {
@@ -999,7 +1009,13 @@ if [[ "$URL" != *.tgz && "$URL" != *.tar.gz ]]; then
 fi
 cd "$DATA"
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) START $URL" >>"$LOG"
-wget -O - "$URL" 2>>"$LOG" | tar -xzf - >>"$LOG" 2>&1
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) INFO  [api-agent] download snapshot $URL  tron wget" >>/var/log/rpcnode.log
+if wget -O - "$URL" 2>>"$LOG" | tar -xzf - >>"$LOG" 2>&1; then
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) INFO  [api-agent] download snapshot ok $URL  tron wget" >>/var/log/rpcnode.log
+else
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ERROR [api-agent] download snapshot FAIL $URL  tron wget" >>/var/log/rpcnode.log
+  exit 1
+fi
 # Snapshot unit is root; java-tron is User=nodeop — chown BEFORE the ready marker
 # so pipeline start cannot race a root-owned LevelDB.
 if id -u nodeop >/dev/null 2>&1; then
@@ -1019,6 +1035,9 @@ func writeTronSnapshotScript(env string) (string, error) {
 	url := resolveSnapshotURLForOptions("tron", env, loadInstallOptions("tron", env))
 	if url == "" {
 		url = strings.TrimSpace(os.Getenv("TRON_SNAPSHOT_URL"))
+	}
+	if url != "" {
+		logDownload("snapshot", url, "tron/"+env+" wget")
 	}
 	data := filepath.Join("/data/tron", env)
 	marker := filepath.Join(data, ".snapshot-ready")

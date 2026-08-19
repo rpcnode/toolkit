@@ -500,6 +500,7 @@ func ensureAvalancheGoInstalled(optPath string) (string, error) {
 	url := avalancheReleaseTarballURL(ver)
 	name := filepath.Base(url)
 	tmp := filepath.Join(os.TempDir(), name)
+	logDownload("GET", url, "avalanche dest="+tmp)
 	destBin := filepath.Join(optPath, "bin")
 	if err := os.MkdirAll(destBin, 0o755); err != nil {
 		return "", fmt.Errorf("mkdir %s: %w", destBin, err)
@@ -537,6 +538,7 @@ rm -rf %q %q
 		extractDir, extractDir, extractDir, extractDir, extractDir,
 		destBin, destBin, destBin, extractDir, tmp))
 	out, err := cmd.CombinedOutput()
+	logDownloadDone("GET", url, "avalanche dest="+tmp, out, err)
 	if err != nil {
 		return "", fmt.Errorf("install avalanchego %s: %v (%s)", ver, err, strings.TrimSpace(string(out)))
 	}

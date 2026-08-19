@@ -386,6 +386,7 @@ func ensureZebradInstalled(optPath string) (string, error) {
 	url := preferVendoredArtifact("zcash", "mainnet", envOr("ZEBRA_TARBALL_URL",
 		fmt.Sprintf("https://github.com/ZcashFoundation/zebra/releases/download/v%s/%s", ver, name)))
 	tmp := filepath.Join(os.TempDir(), name)
+	logDownload("GET", url, "zcash dest="+tmp)
 	destBin := filepath.Join(optPath, "bin")
 	if err := os.MkdirAll(destBin, 0o755); err != nil {
 		return "", fmt.Errorf("mkdir %s: %w", destBin, err)
@@ -414,6 +415,7 @@ rm -rf %q %q
 		extractDir, extractDir, extractDir, extractDir, extractDir,
 		destBin, extractDir, tmp))
 	out, err := cmd.CombinedOutput()
+	logDownloadDone("GET", url, "zcash dest="+tmp, out, err)
 	if err != nil {
 		return "", fmt.Errorf("install zebrad %s: %v (%s)", ver, err, strings.TrimSpace(string(out)))
 	}

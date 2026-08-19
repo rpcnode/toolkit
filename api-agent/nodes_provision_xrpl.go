@@ -423,6 +423,7 @@ func ensureRippleAptRepo() error {
 		"deb [signed-by=/etc/apt/keyrings/ripple.gpg] https://repos.ripple.com/repos/rippled-deb %s stable\n",
 		codename,
 	)
+	logDownload("GET", "https://repos.ripple.com/repos/rippled-deb", "xrpl apt "+codename)
 	if err := os.WriteFile("/etc/apt/sources.list.d/ripple.list", []byte(listLine), 0o644); err != nil {
 		return err
 	}

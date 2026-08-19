@@ -471,6 +471,7 @@ func ensureGethInstalled() (string, error) {
 
 	// Best-effort install via Ethereum PPA (Ubuntu/Debian hosts).
 	if _, err := exec.LookPath("apt-get"); err == nil {
+		logDownload("GET", "ppa:ethereum/ethereum", "ethereum geth apt")
 		script := `set -e
 export DEBIAN_FRONTEND=noninteractive
 apt-get install -y software-properties-common
@@ -479,6 +480,7 @@ apt-get update
 apt-get install -y geth
 `
 		out, err := exec.Command("bash", "-lc", script).CombinedOutput()
+		logDownloadDone("GET", "ppa:ethereum/ethereum", "ethereum geth apt", out, err)
 		if err == nil {
 			if p, err := exec.LookPath("geth"); err == nil {
 				return p, nil

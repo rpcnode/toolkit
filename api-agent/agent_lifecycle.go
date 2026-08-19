@@ -632,14 +632,18 @@ func ensureAgentWatchdog() ([]string, error) {
 }
 
 func downloadBinaryFile(url, dest string) error {
+	logDownload("GET", url, "dest="+dest)
 	client := &http.Client{Timeout: 3 * time.Minute}
 	resp, err := client.Get(url)
 	if err != nil {
+		logDownloadFail("GET", url, err)
 		return fmt.Errorf("download %s: %w", url, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("download %s: HTTP %d", url, resp.StatusCode)
+		err := fmt.Errorf("download %s: HTTP %d", url, resp.StatusCode)
+		logDownloadFail("GET", url, err)
+		return err
 	}
 	f, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
 	if err != nil {
@@ -648,10 +652,13 @@ func downloadBinaryFile(url, dest string) error {
 	defer f.Close()
 	n, err := io.Copy(f, io.LimitReader(resp.Body, 128<<20))
 	if err != nil {
+		logDownloadFail("GET", url, err)
 		return err
 	}
 	if n < 1024 {
-		return fmt.Errorf("download %s: file too small (%d bytes)", url, n)
+		err := fmt.Errorf("download %s: file too small (%d bytes)", url, n)
+		logDownloadFail("GET", url, err)
+		return err
 	}
 	// Reject HTML error pages.
 	hdr := make([]byte, 16)
@@ -662,9 +669,12 @@ func downloadBinaryFile(url, dest string) error {
 		low := strings.ToLower(string(hdr))
 		if strings.Contains(low, "<!doctype") || strings.Contains(low, "<html") {
 			_ = os.Remove(dest)
-			return fmt.Errorf("download %s: got HTML, not a binary", url)
+			err := fmt.Errorf("download %s: got HTML, not a binary", url)
+			logDownloadFail("GET", url, err)
+			return err
 		}
 	}
+	logDownloadOK("GET", url, "dest="+dest)
 	return nil
 }
 

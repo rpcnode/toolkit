@@ -402,10 +402,13 @@ func ensureNitroMachines(optPath string) error {
 	if err := ensureDockerInstalled(); err != nil {
 		return err
 	}
+	logDownload("docker", nitroDockerImage, "arb machines")
 	pull := exec.Command("docker", "pull", nitroDockerImage)
 	if out, err := pull.CombinedOutput(); err != nil {
+		logDownloadDone("docker", nitroDockerImage, "", out, err)
 		return fmt.Errorf("docker pull nitro for machines: %v (%s)", err, strings.TrimSpace(string(out)))
 	}
+	logDownloadOK("docker", nitroDockerImage, "arb machines")
 	cidOut, err := exec.Command("docker", "create", nitroDockerImage).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("docker create nitro: %v (%s)", err, strings.TrimSpace(string(cidOut)))

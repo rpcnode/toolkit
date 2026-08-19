@@ -87,6 +87,9 @@ func provisionCardanoNodeEnv(req nodeProvisionRequest, prof networkPortProfile) 
 	if strings.TrimSpace(prof.SnapshotURL) != "" {
 		snapURL = strings.TrimSpace(prof.SnapshotURL)
 	}
+	if snapURL != "" {
+		logDownload("snapshot", snapURL, "cardano/"+env+" toolkit.env")
+	}
 	snapService := fmt.Sprintf("cardano-%s-snapshot", env)
 	snapLog := fmt.Sprintf("/var/log/cardano/%s-snapshot.log", env)
 	_ = os.MkdirAll(filepath.Dir(snapLog), 0o755)
@@ -388,6 +391,7 @@ func ensureCardanoNodeInstalled(optPath string) (string, error) {
 	url := preferVendoredArtifact("cardano", "mainnet",
 		fmt.Sprintf("https://github.com/IntersectMBO/cardano-node/releases/download/%s/%s", ver, name))
 	tmp := filepath.Join(os.TempDir(), name)
+	logDownload("GET", url, "cardano dest="+tmp)
 	extractDir := filepath.Join(os.TempDir(), "rpcnode-cardano-"+ver)
 	_ = os.RemoveAll(extractDir)
 	destBin := filepath.Join(optPath, "bin")
@@ -407,6 +411,7 @@ if [ -n "$CLI" ]; then install -m 755 "$CLI" %q/cardano-cli; fi
 rm -rf %q %q
 `, tmp, url, extractDir, tmp, extractDir, extractDir, extractDir, destBin, destBin, extractDir, tmp))
 	out, err := cmd.CombinedOutput()
+	logDownloadDone("GET", url, "cardano dest="+tmp, out, err)
 	if err != nil {
 		return "", fmt.Errorf("install cardano-node %s: %v (%s)", ver, err, strings.TrimSpace(string(out)))
 	}
@@ -439,6 +444,7 @@ func ensureOgmiosInstalled(optPath string) (string, error) {
 	name := fmt.Sprintf("ogmios-%s-%s.zip", ver, arch)
 	url := fmt.Sprintf("https://github.com/CardanoSolutions/ogmios/releases/download/%s/%s", ver, name)
 	tmp := filepath.Join(os.TempDir(), name)
+	logDownload("GET", url, "ogmios dest="+tmp)
 	extractDir := filepath.Join(os.TempDir(), "rpcnode-ogmios")
 	_ = os.RemoveAll(extractDir)
 	destBin := filepath.Join(optPath, "bin")
@@ -462,6 +468,7 @@ install -m 755 "$BIN" %q/ogmios
 rm -rf %q %q
 `, tmp, url, extractDir, tmp, extractDir, tmp, extractDir, extractDir, destBin, extractDir, tmp))
 	out, err := cmd.CombinedOutput()
+	logDownloadDone("GET", url, "ogmios dest="+tmp, out, err)
 	if err != nil {
 		return "", fmt.Errorf("install ogmios %s: %v (%s)", ver, err, strings.TrimSpace(string(out)))
 	}

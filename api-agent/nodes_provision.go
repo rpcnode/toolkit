@@ -2372,6 +2372,9 @@ func provisionNodeEnv(req nodeProvisionRequest) (map[string]any, error) {
 	opts := mergeInstallOptions(req.Network, req.Env, req.InstallOptions)
 	_ = writeInstallOptions(req.Network, req.Env, opts)
 	snapURL := resolveSnapshotURLForOptions(req.Network, req.Env, opts)
+	if snapURL != "" {
+		logDownload("snapshot", snapURL, req.Network+"/"+req.Env+" toolkit.env")
+	}
 	// Clients → Go RPC :public_port (sleep/maintenance) → FullNode :node_http (loopback).
 	// Node Agent API on :agent_port for panel/control.
 	envBody := fmt.Sprintf(`# managed by rpcnode provision %s

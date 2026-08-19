@@ -72,6 +72,9 @@ func (c *SnapshotController) writeSnapshotState(phase, detail, errMsg string) {
 
 func (c *SnapshotController) Start() error {
 	hostLogf("INFO", "system-agent", "snapshot", "begin %s/%s", c.cfg.Network, c.cfg.Env)
+	if u := strings.TrimSpace(c.cfg.SnapshotURL); u != "" {
+		logDownload("snapshot", u, c.cfg.Network+"/"+c.cfg.Env)
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

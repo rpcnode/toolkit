@@ -69,6 +69,7 @@ func ensureMithrilClientInstalled(optPath string) (string, error) {
 
 	url := preferVendoredArtifact("cardano", "mainnet", mithrilClientTarballURL())
 	tmp := filepath.Join(os.TempDir(), "mithril-"+mithrilClientVersion+".tgz")
+	logDownload("GET", url, "mithril dest="+tmp)
 	extractDir := filepath.Join(os.TempDir(), "rpcnode-mithril-"+mithrilClientVersion)
 	_ = os.RemoveAll(extractDir)
 	destBin := filepath.Join(optPath, "bin")
@@ -85,6 +86,7 @@ install -m 755 "$BIN" %q/mithril-client
 rm -rf %q %q
 `, tmp, url, extractDir, tmp, extractDir, extractDir, destBin, extractDir, tmp))
 	out, err := cmd.CombinedOutput()
+	logDownloadDone("GET", url, "mithril dest="+tmp, out, err)
 	if err != nil {
 		return "", fmt.Errorf("install mithril-client %s: %v (%s)", mithrilClientVersion, err, strings.TrimSpace(string(out)))
 	}
@@ -112,6 +114,9 @@ func ensureCardanoSnapshotUnit(prof networkPortProfile, clientBin string) (unitP
 	_ = os.MkdirAll(filepath.Join(opt, "bin"), 0o755)
 
 	scriptPath = filepath.Join(opt, "bin", "cardano-mithril-snapshot.sh")
+	if m.Aggregator != "" {
+		logDownload("snapshot", m.Aggregator, "cardano/"+env+" mithril")
+	}
 	script := fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
 ENV=%q
@@ -144,6 +149,7 @@ if [ ! -f "$MARKER" ]; then
   fi
 fi
 echo "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ) START mithril-client cardano-db download latest --include-ancillary" | tee -a "$LOG"
+echo "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ) INFO  [api-agent] download snapshot $AGG  cardano/$ENV mithril" >>/var/log/rpcnode.log
 set -o pipefail
 "$CLIENT" -vv cardano-db download latest \
   --include-ancillary \

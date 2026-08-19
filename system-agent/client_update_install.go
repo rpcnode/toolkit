@@ -114,18 +114,24 @@ func (c *ClientUpdateController) clientBinPath() string {
 
 func (c *ClientUpdateController) downloadVerified(url, dest string, mode os.FileMode, wantSHA string, onProg func(got, total int64)) error {
 	if url == "" {
-		return fmt.Errorf("empty artifact")
+		err := fmt.Errorf("empty artifact")
+		logDownloadFail("GET", url, err)
+		return err
 	}
+	logDownload("GET", url, "dest="+dest)
 	_ = ensureDir(filepath.Dir(dest))
 	tmp := dest + ".tmp"
 	client := &http.Client{Timeout: 30 * time.Minute}
 	resp, err := client.Get(url)
 	if err != nil {
+		logDownloadFail("GET", url, err)
 		return fmt.Errorf("download failed")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("download HTTP %d", resp.StatusCode)
+		err := fmt.Errorf("download HTTP %d", resp.StatusCode)
+		logDownloadFail("GET", url, err)
+		return err
 	}
 	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
 	if err != nil {
@@ -139,24 +145,29 @@ func (c *ClientUpdateController) downloadVerified(url, dest string, mode os.File
 	if _, err := io.Copy(w, resp.Body); err != nil {
 		_ = f.Close()
 		_ = os.Remove(tmp)
+		logDownloadFail("GET", url, err)
 		return fmt.Errorf("download failed")
 	}
 	_ = f.Close()
 	sum := hex.EncodeToString(h.Sum(nil))
 	if want := strings.ToLower(strings.TrimSpace(wantSHA)); want != "" && want != sum {
 		_ = os.Remove(tmp)
-		return fmt.Errorf("sha256 mismatch: got %s want %s", sum, want)
+		err := fmt.Errorf("sha256 mismatch: got %s want %s", sum, want)
+		logDownloadFail("GET", url, err)
+		return err
 	}
 	bak := dest + ".bak"
 	_ = os.Rename(dest, bak)
 	if err := os.Rename(tmp, dest); err != nil {
 		_ = os.Rename(bak, dest)
+		logDownloadFail("GET", url, err)
 		return err
 	}
 	_ = os.Chmod(dest, mode)
 	if onProg != nil && resp.ContentLength > 0 {
 		onProg(resp.ContentLength, resp.ContentLength)
 	}
+	logDownloadOK("GET", url, "dest="+dest)
 	return nil
 }
 

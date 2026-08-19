@@ -77,22 +77,29 @@ func fetchVendoredClientRelease(network, env string) (ClientRelease, error) {
 
 func fetchVendoredManifestURL(root, network, env string) (ClientRelease, error) {
 	manURL := fmt.Sprintf("%s/clients/%s/%s/manifest.json", strings.TrimRight(root, "/"), network, env)
+	logDownload("manifest", manURL, network+"/"+env)
 	client := &http.Client{Timeout: 20 * time.Second}
 	req, err := http.NewRequest(http.MethodGet, manURL, nil)
 	if err != nil {
+		logDownloadFail("manifest", manURL, err)
 		return ClientRelease{}, err
 	}
 	req.Header.Set("User-Agent", "rpcnode-system-agent")
 	resp, err := client.Do(req)
 	if err != nil {
+		logDownloadFail("manifest", manURL, err)
 		return ClientRelease{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return ClientRelease{}, fmt.Errorf("vendored catalog HTTP %d %s", resp.StatusCode, manURL)
+		err := fmt.Errorf("vendored catalog HTTP %d %s", resp.StatusCode, manURL)
+		logDownloadFail("manifest", manURL, err)
+		return ClientRelease{}, err
 	}
+	logDownloadOK("manifest", manURL, fmt.Sprintf("HTTP %d %s/%s", resp.StatusCode, network, env))
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 256<<10))
 	if err != nil {
+		logDownloadFail("manifest", manURL, err)
 		return ClientRelease{}, err
 	}
 	return parseVendoredManifest(network, env, root, raw)
@@ -138,13 +145,24 @@ func parseVendoredManifest(network, env, installBase string, raw []byte) (Client
 	}, nil
 }
 
+func rewriteDeadClientsCDNURL(u string) string {
+	const dead = "https://toolkit.rpcnode.dev/clients/"
+	const live = "https://toolkit.rpcnode.dev/install/clients/"
+	if strings.HasPrefix(u, dead) {
+		fixed := live + strings.TrimPrefix(u, dead)
+		logDownload("rewrite", u, "→ "+fixed)
+		return fixed
+	}
+	return u
+}
+
 func vendoredCDNFileURL(root, relPath string) string {
 	root = strings.TrimRight(root, "/")
 	relPath = strings.TrimPrefix(strings.TrimSpace(relPath), "/")
 	if root == "" || relPath == "" {
 		return ""
 	}
-	return root + "/clients/" + path.Clean(relPath)
+	return rewriteDeadClientsCDNURL(root + "/clients/" + path.Clean(relPath))
 }
 
 func vendoredConfURL(installBase, network, env string, files []vendoredFile) string {
@@ -194,14 +212,14 @@ func pickVendoredArtifact(root string, man vendoredManifest, arm bool) string {
 	}
 	if arm {
 		if u := strings.TrimSpace(man.ArtifactURLAarch64); u != "" && strings.Contains(u, "/clients/") {
-			return u
+			return rewriteDeadClientsCDNURL(u)
 		}
 	}
 	if u := strings.TrimSpace(man.ArtifactURL); u != "" && strings.Contains(u, "/clients/") {
-		return u
+		return rewriteDeadClientsCDNURL(u)
 	}
 	if chosen != nil && strings.Contains(chosen.URL, "/clients/") {
-		return strings.TrimSpace(chosen.URL)
+		return rewriteDeadClientsCDNURL(strings.TrimSpace(chosen.URL))
 	}
 	return ""
 }

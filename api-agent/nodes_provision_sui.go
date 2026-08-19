@@ -104,6 +104,7 @@ func provisionSuiNodeEnv(req nodeProvisionRequest, prof networkPortProfile) (map
 	if snapURL == "" {
 		snapURL = "formal-r2://" + normalizeEnv(env)
 	}
+	logDownload("snapshot", snapURL, "sui/"+env)
 	snapService := fmt.Sprintf("sui-%s-snapshot", normalizeEnv(env))
 	snapLog := fmt.Sprintf("/var/log/sui/%s-snapshot.log", normalizeEnv(env))
 	_ = os.MkdirAll(filepath.Dir(snapLog), 0o755)
@@ -576,6 +577,7 @@ func installSuiReleaseBinaries(optPath, env string) error {
 	url := preferVendoredArtifact("sui", env,
 		fmt.Sprintf("https://github.com/MystenLabs/sui/releases/download/%s/%s", tag, name))
 	tmp := filepath.Join(os.TempDir(), name)
+	logDownload("GET", url, "sui dest="+tmp)
 	destBin := filepath.Join(optPath, "bin")
 	if err := os.MkdirAll(destBin, 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", destBin, err)
@@ -612,6 +614,7 @@ rm -rf %q %q
 		extractDir, extractDir, extractDir, extractDir, extractDir,
 		destBin, destBin, extractDir, tmp))
 	out, err := cmd.CombinedOutput()
+	logDownloadDone("GET", url, "sui dest="+tmp, out, err)
 	if err != nil {
 		return fmt.Errorf("install sui release %s: %v (%s)", tag, err, strings.TrimSpace(string(out)))
 	}

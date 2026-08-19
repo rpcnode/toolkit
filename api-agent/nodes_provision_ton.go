@@ -402,6 +402,7 @@ func ensureTonWorkdirLink(data string) error {
 }
 
 func writeTonBootstrapScript(path, env, chain string, p2p, thaPort int, data, etc, logDir string) error {
+	logDownload("GET", "https://raw.githubusercontent.com/ton-blockchain/mytonctrl/master/scripts/install.sh", "ton/"+env+" install.sh")
 	body := fmt.Sprintf(`#!/bin/bash
 # RpcNode Toncoin bootstrap — MyTonCtrl liteserver (not archive).
 set -euo pipefail
@@ -472,7 +473,13 @@ apt-get install -y curl wget git ca-certificates python3-pip || true
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-curl -fsSL "$INSTALL_URL" -o "$TMP/install.sh"
+echo "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ) INFO  [api-agent] download GET $INSTALL_URL  ton/$ENV install.sh" >>/var/log/rpcnode.log
+if curl -fsSL "$INSTALL_URL" -o "$TMP/install.sh"; then
+  echo "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ) INFO  [api-agent] download GET ok $INSTALL_URL  ton/$ENV" >>/var/log/rpcnode.log
+else
+  echo "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ) ERROR [api-agent] download GET FAIL $INSTALL_URL  ton/$ENV" >>/var/log/rpcnode.log
+  exit 1
+fi
 chmod +x "$TMP/install.sh"
 
 export ARCHIVE_TTL STATE_TTL

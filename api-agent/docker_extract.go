@@ -48,10 +48,13 @@ func extractBinaryFromDockerImage(image, containerPath, dest string) error {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
 	}
+	logDownload("docker", image, "pull → "+dest)
 	pull := exec.Command("docker", "pull", image)
 	if out, err := pull.CombinedOutput(); err != nil {
+		logDownloadDone("docker", image, "", out, err)
 		return fmt.Errorf("docker pull %s: %v (%s)", image, err, strings.TrimSpace(string(out)))
 	}
+	logDownloadOK("docker", image, "pulled dest="+dest)
 	cidOut, err := exec.Command("docker", "create", image).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("docker create %s: %v (%s)", image, err, strings.TrimSpace(string(cidOut)))

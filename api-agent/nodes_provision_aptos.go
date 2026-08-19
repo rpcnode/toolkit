@@ -467,6 +467,7 @@ func ensureAptosNodeInstalled(optPath, env string) (string, error) {
 	url := preferVendoredArtifact("aptos", env,
 		fmt.Sprintf("https://github.com/aptos-labs/aptos-core/releases/download/%s/%s", tag, name))
 	tmp := filepath.Join(os.TempDir(), name)
+	logDownload("GET", url, "aptos dest="+tmp)
 	destBin := filepath.Join(optPath, "bin")
 	if err := os.MkdirAll(destBin, 0o755); err != nil {
 		return "", fmt.Errorf("mkdir %s: %w", destBin, err)
@@ -499,6 +500,7 @@ rm -rf %q %q
 		extractDir, extractDir, extractDir, extractDir, extractDir,
 		destBin, extractDir, tmp))
 	out, err := cmd.CombinedOutput()
+	logDownloadDone("GET", url, "aptos dest="+tmp, out, err)
 	if err != nil {
 		return "", fmt.Errorf("install aptos-node %s: %v (%s)", tag, err, strings.TrimSpace(string(out)))
 	}

@@ -503,6 +503,7 @@ func ensureCoreLikeInstalled(client coreLikeClient, optPath string) (string, err
 	url := preferVendoredArtifact(client.Network, "mainnet", client.DownloadURL(ver, arch))
 	name := filepath.Base(url)
 	tmp := filepath.Join(os.TempDir(), name)
+	logDownload("GET", url, client.Network+" dest="+tmp)
 	destBin := filepath.Join(optPath, "bin")
 	if err := os.MkdirAll(destBin, 0o755); err != nil {
 		return "", fmt.Errorf("mkdir %s: %w", destBin, err)
@@ -534,6 +535,7 @@ rm -rf %q %q
 		extractDir, archiveRoot, srcCLI, destBin, client.CLI,
 		extractDir, tmp))
 	out, err := cmd.CombinedOutput()
+	logDownloadDone("GET", url, client.Network+" dest="+tmp, out, err)
 	if err != nil {
 		return "", fmt.Errorf("install %s %s: %v (%s)", client.Daemon, ver, err, strings.TrimSpace(string(out)))
 	}

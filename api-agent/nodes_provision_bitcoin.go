@@ -649,6 +649,7 @@ func ensureBitcoindInstalled(optPath string) (string, error) {
 	url := preferVendoredArtifact("bitcoin", "mainnet",
 		fmt.Sprintf("https://bitcoincore.org/bin/bitcoin-core-%s/%s", ver, name))
 	tmp := filepath.Join(os.TempDir(), name)
+	logDownload("GET", url, "bitcoin dest="+tmp)
 	destBin := filepath.Join(optPath, "bin")
 	if err := os.MkdirAll(destBin, 0o755); err != nil {
 		return "", fmt.Errorf("mkdir %s: %w", destBin, err)
@@ -667,6 +668,7 @@ install -m 755 %q/bitcoin-%s/bin/bitcoin-cli %q/bitcoin-cli
 rm -rf %q %q
 `, tmp, url, extractDir, tmp, extractDir, extractDir, ver, destBin, extractDir, ver, destBin, extractDir, tmp))
 	out, err := cmd.CombinedOutput()
+	logDownloadDone("GET", url, "bitcoin dest="+tmp, out, err)
 	if err != nil {
 		return "", fmt.Errorf("install bitcoind %s: %v (%s)", ver, err, strings.TrimSpace(string(out)))
 	}
