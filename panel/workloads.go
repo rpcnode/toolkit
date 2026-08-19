@@ -775,22 +775,28 @@ func (s *Server) handleWorkloadCheckPorts(w http.ResponseWriter, r *http.Request
 	unlock := lockWorkloadCheckPorts(body.ServerID)
 	defer unlock()
 
-	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
-	defer cancel()
+	checkCtx, checkCancel := context.WithTimeout(r.Context(), 25*time.Second)
+	defer checkCancel()
 
-	status, agent, err := s.postTipJSON(ctx, srv, "/api/v1/nodes/check-ports", map[string]any{
+	status, agent, err := s.postTipJSON(checkCtx, srv, "/api/v1/nodes/check-ports", map[string]any{
 		"network": body.Network, "env": body.Env,
 	})
 	if err != nil {
+		errName := "agent_unreachable"
+		if strings.Contains(err.Error(), "deadline exceeded") || strings.Contains(strings.ToLower(err.Error()), "timeout") {
+			errName = "agent_timeout"
+		}
 		writeJSON(w, http.StatusBadGateway, map[string]any{
-			"ok": false, "error": "agent_unreachable", "message": err.Error(),
+			"ok": false, "error": errName, "message": err.Error(),
 		})
 		return
 	}
 	if agent == nil {
 		agent = map[string]any{}
 	}
-	s.attachOutboundReach(ctx, srv, body.Network, body.Env, agent)
+	reachCtx, reachCancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer reachCancel()
+	s.attachOutboundReach(reachCtx, srv, body.Network, body.Env, agent)
 	if status >= 300 || !truthy(agent["ok"]) {
 		code := status
 		if code < 400 {

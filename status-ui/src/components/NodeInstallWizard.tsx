@@ -188,11 +188,22 @@ async function waitAgentLifecycleAck(
 
 export type WizardStepId = 'ports' | 'install' | 'snapshot' | 'start' | 'done'
 
+function isCheckPortsTimeout(message?: string | null, error?: string | null): boolean {
+  const blob = `${message || ''} ${error || ''}`
+  return /agent_timeout|deadline exceeded|timed out|agent_unreachable/i.test(blob)
+}
+
 function formatPortBusy(check: {
   message?: string
   error?: string
   busy_ports?: { port?: number; role?: string; holder?: string }[]
 }): string {
+  if (isCheckPortsTimeout(check.message, check.error)) {
+    return (
+      check.message ||
+      'Tip agent timed out while checking ports. Retry Check ports — a busy first node must not block the second.'
+    )
+  }
   const busy = (check.busy_ports || [])
     .map((b) => {
       const who = b.holder === 'host_tip' ? 'host tip' : b.holder || 'foreign'
@@ -1604,10 +1615,13 @@ export function NodeInstallWizard({
               )}
 
               {portsError && !unsupported && (
-                <Alert color="red" title="Ports busy">
+                <Alert
+                  color="red"
+                  title={isCheckPortsTimeout(portsError) ? 'Check ports timed out' : 'Ports busy'}
+                >
                   <Stack gap={8}>
                     <Text size="sm">{portsError}</Text>
-                    {busyWhoisCmd ? (
+                    {busyWhoisCmd && !isCheckPortsTimeout(portsError) ? (
                       <>
                         <Text size="sm">
                           On the Server host (SSH) — program name + cmdline:

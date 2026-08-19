@@ -99,6 +99,7 @@ func stopProbeLocked() {
 }
 
 func startPortProbe(roles []catalogPortRole, tipPort int) (nonce string, ports []map[string]any) {
+	refreshListenSnap()
 	probeMu.Lock()
 	defer probeMu.Unlock()
 	stopProbeLocked()

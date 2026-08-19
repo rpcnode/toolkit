@@ -3,6 +3,22 @@
   "feed": "https://toolkit.rpcnode.dev/install/VERSIONS.json",
   "releases": [
     {
+      "version": "0.4.214",
+      "date": "2026-08-19",
+      "title": "Release 0.4.214",
+      "notes": [
+        "Shipped via update-remote-agent.sh --publish."
+      ]
+    },
+    {
+      "version": "0.4.213",
+      "date": "2026-08-20",
+      "title": "Check ports: no lsof hang on a busy host",
+      "notes": [
+        "Second node on a host with a live fullnode (Solana): check-ports no longer runs lsof after empty ss. One timed ss -lntp snapshot. Panel timeout is not shown as Ports busy."
+      ]
+    },
+    {
       "version": "0.4.212",
       "date": "2026-08-19",
       "title": "Release 0.4.212",

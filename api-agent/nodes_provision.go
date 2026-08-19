@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -1663,6 +1663,7 @@ func (s *Server) handleNodesCheckPorts(w http.ResponseWriter, r *http.Request) {
 	}
 	canon := canonicalPorts(req.Network, req.Env)
 	stopPortProbe()
+	refreshListenSnap()
 	checked, busy := buildCheckedPorts(req.Network, req.Env)
 	out := map[string]any{
 		"ok": true, "network": req.Network, "env": req.Env,
@@ -1882,38 +1883,6 @@ func portOwnedByEnv(port int, network, env string) bool {
 	return false
 }
 
-func portListenerPIDs(port int) []string {
-	if port <= 0 {
-		return nil
-	}
-	out := []string{}
-	seen := map[string]bool{}
-	add := func(pid string) {
-		pid = strings.TrimSpace(pid)
-		if pid == "" || pid == "0" || seen[pid] {
-			return
-		}
-		seen[pid] = true
-		out = append(out, pid)
-	}
-
-	// ss -lntp → users:(("bin",pid=123,fd=8))
-	ssOut := string(mustCmdOut("ss", "-H", "-lntp", fmt.Sprintf("sport = :%d", port)))
-	for _, m := range regexp.MustCompile(`pid=(\d+)`).FindAllStringSubmatch(ssOut, -1) {
-		if len(m) > 1 {
-			add(m[1])
-		}
-	}
-	if len(out) > 0 {
-		return out
-	}
-
-	lsofOut := string(mustCmdOut("lsof", "-nP", "-t", "-iTCP:"+strconv.Itoa(port), "-sTCP:LISTEN"))
-	for _, line := range strings.Split(lsofOut, "\n") {
-		add(line)
-	}
-	return out
-}
 
 func pidBelongsToEnv(pid, network, env string) bool {
 	blob := pidIdentityBlob(pid)
@@ -2114,28 +2083,6 @@ func isPopularPort(p int) bool {
 	default:
 		return false
 	}
-}
-
-// portIsListening — a process is bound LISTEN on port.
-// Do not use net.Listen: catalog public/agent ports overlap the kernel ephemeral
-// range, so an outbound TCP (healthz, overlay, panel) can make Listen fail while
-// ss -lntp is empty → false check-ports port_busy (arb sepolia :40094).
-func portIsListening(port int) bool {
-	if port <= 0 {
-		return false
-	}
-	if len(portListenerPIDs(port)) > 0 {
-		return true
-	}
-	ssOut := strings.TrimSpace(string(mustCmdOut("ss", "-H", "-ltn", fmt.Sprintf("sport = :%d", port))))
-	if ssOut == "" {
-		return false
-	}
-	low := strings.ToLower(ssOut)
-	if strings.Contains(low, "not found") || strings.Contains(low, "usage:") {
-		return false
-	}
-	return true
 }
 
 func portInUse(port int) bool {
@@ -2623,8 +2570,14 @@ func rewritePort(base string, port int) string {
 	return fmt.Sprintf("%s:%d", base, port)
 }
 
+func cmdOut(name string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), cmdOutTimeout)
+	defer cancel()
+	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+}
+
 func mustCmdOut(name string, args ...string) []byte {
-	out, _ := exec.Command(name, args...).CombinedOutput()
+	out, _ := cmdOut(name, args...)
 	return out
 }
 
