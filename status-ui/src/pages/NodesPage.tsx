@@ -57,6 +57,7 @@ import {
   deriveNodeLifecycle,
   splitStepHeadline,
   isForeignTronDiskError,
+  clientUpdateAllowed,
   nodeRestartAllowed,
   nodeStopAllowed,
   type NodeLifecycle,
@@ -1453,21 +1454,12 @@ function NodeCardView({
                 lineClamp={1}
                 title={clientLabel}
                 style={
-                  clientKnown &&
-                  phase !== 'updating' &&
-                  phase !== 'restarting' &&
-                  phase !== 'stopping'
+                  (clientKnown || phase === 'stopped') && clientUpdateAllowed(phase)
                     ? { cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3 }
                     : undefined
                 }
                 onClick={(e) => {
-                  if (
-                    !clientKnown ||
-                    phase === 'updating' ||
-                    phase === 'restarting' ||
-                    phase === 'stopping'
-                  )
-                    return
+                  if ((!clientKnown && phase !== 'stopped') || !clientUpdateAllowed(phase)) return
                   e.stopPropagation()
                   setClientOpen(true)
                 }}
@@ -1481,13 +1473,10 @@ function NodeCardView({
                 variant="light"
                 size="sm"
                 style={{
-                  cursor:
-                    phase === 'updating' || phase === 'restarting' || phase === 'stopping'
-                      ? 'default'
-                      : 'pointer',
+                  cursor: clientUpdateAllowed(phase) ? 'pointer' : 'default',
                 }}
                 onClick={(e) => {
-                  if (phase === 'updating' || phase === 'restarting' || phase === 'stopping') return
+                  if (!clientUpdateAllowed(phase)) return
                   e.stopPropagation()
                   setClientOpen(true)
                 }}
@@ -1500,9 +1489,9 @@ function NodeCardView({
                 color="orange"
                 variant="light"
                 size="sm"
-                style={{ cursor: phase === 'updating' ? 'default' : 'pointer' }}
+                style={{ cursor: clientUpdateAllowed(phase) ? 'pointer' : 'default' }}
                 onClick={(e) => {
-                  if (phase === 'updating') return
+                  if (!clientUpdateAllowed(phase)) return
                   e.stopPropagation()
                   setClientOpen(true)
                 }}
@@ -1715,12 +1704,11 @@ function NodeCardView({
         </Text>
         {!clientOutdated ? (
           <Text size="sm" c="dimmed">
-            Already on latest — useful to verify sleep → stop → replace → start → wake.
+            Already on latest — re-install only. Node stays stopped until Restart.
           </Text>
         ) : null}
         <Alert color="orange" variant="light" icon={<IconAlertTriangle size={16} />}>
-          Public Go RPC sleeps (503) while the fullnode is stopped, jar/binary is replaced, then
-          started again.
+          Node is stopped. Replace the client only — then Restart to start.
         </Alert>
         <Group justify="flex-end">
           <Button variant="default" disabled={clientBusy} onClick={() => setClientOpen(false)}>

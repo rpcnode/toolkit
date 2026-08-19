@@ -56,6 +56,41 @@ func (n *NodeRestartController) set(phase, detail string, pct float64, errMsg st
 	} else if phase == "idle" || phase == "restarting" || phase == "starting" || phase == "stopping" || phase == "stopped" {
 		n.st["last_error"] = ""
 	}
+	action := "node_restart"
+	if strings.EqualFold(fmt.Sprint(n.st["action"]), "stop") {
+		action = "node_stop"
+	}
+	level := "INFO"
+	if phase == "error" || strings.TrimSpace(errMsg) != "" {
+		level = "ERROR"
+	}
+	msg := detail
+	if strings.TrimSpace(errMsg) != "" {
+		msg = detail + " — " + errMsg
+	}
+	hostLogf(level, "system-agent", action,
+		"%s/%s phase=%s pct=%.0f %s", n.cfg.Network, n.cfg.Env, phase, pct, msg)
+}
+
+// markStopped — leave units down (after Stop or client update). Restart starts them.
+func (n *NodeRestartController) markStopped(detail string) {
+	if n == nil {
+		return
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.busy {
+		return
+	}
+	n.st["action"] = "stop"
+	n.st["phase"] = "stopped"
+	n.st["detail"] = strings.TrimSpace(detail)
+	if n.st["detail"] == "" {
+		n.st["detail"] = "fullnode stopped — Restart to start"
+	}
+	n.st["pct"] = 100
+	n.st["last_error"] = ""
+	n.st["updated_at"] = time.Now().UTC().Format(time.RFC3339)
 }
 
 func (n *NodeRestartController) nodeUnits() []string {
@@ -92,6 +127,8 @@ func (n *NodeRestartController) Restart() (map[string]any, error) {
 	n.st["units"] = strings.Join(units, ",")
 	st := n.snapshotLocked()
 	n.mu.Unlock()
+	hostLogf("INFO", "system-agent", "node_restart",
+		"%s/%s accepted — soft restart units=%s", n.cfg.Network, n.cfg.Env, strings.Join(units, ","))
 
 	go n.run(units)
 	return st, nil
@@ -123,6 +160,8 @@ func (n *NodeRestartController) Stop() (map[string]any, error) {
 	n.st["units"] = strings.Join(units, ",")
 	st := n.snapshotLocked()
 	n.mu.Unlock()
+	hostLogf("INFO", "system-agent", "node_stop",
+		"%s/%s accepted — soft stop units=%s", n.cfg.Network, n.cfg.Env, strings.Join(units, ","))
 
 	go n.runStop(units)
 	return st, nil

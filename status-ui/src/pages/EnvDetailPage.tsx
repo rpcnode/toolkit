@@ -64,6 +64,7 @@ import { buildHeaderChips } from '../lib/labels'
 import { NodeLifecycleDates } from '../components/NodeLifecycleDates'
 import {
   deriveNodeLifecycle,
+  clientUpdateAllowed,
   nodeRestartAllowed,
   nodeStopAllowed,
   resolveCurrentStep,
@@ -520,10 +521,7 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
                 !!status?.client_update?.update_available)
             const color = !ver ? 'gray.3' : outdated ? 'orange.4' : 'teal.4'
             const canUpdate =
-              !!ver &&
-              lifecycle.phase !== 'updating' &&
-              lifecycle.phase !== 'restarting' &&
-              lifecycle.phase !== 'stopping'
+              clientUpdateAllowed(lifecycle.phase) && (!!ver || !!latest)
             const openUpdate = canUpdate ? () => setClientOpen(true) : undefined
             return (
               <>
@@ -1010,12 +1008,11 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
           </Text>
           {!(workload?.client_update_available || status?.client_update?.update_available) ? (
             <Text size="sm" c="dimmed">
-              Already on latest — useful to verify sleep → stop → replace → start → wake.
+              Already on latest — re-install only. Node stays stopped until Restart.
             </Text>
           ) : null}
           <Alert color="orange" variant="light" icon={<IconAlertTriangle size={16} />}>
-            Public Go RPC sleeps (503) while the fullnode is stopped, client is replaced, then
-            started again.
+            Node is stopped. Replace the client only — then Restart to start.
           </Alert>
           <Group justify="flex-end">
             <Button variant="default" disabled={clientBusy} onClick={() => setClientOpen(false)}>

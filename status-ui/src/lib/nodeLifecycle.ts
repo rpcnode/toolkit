@@ -246,6 +246,11 @@ export function nodeRestartAllowed(
   return true
 }
 
+/** Client update only after Stop — apply replaces the binary, Restart starts it. */
+export function clientUpdateAllowed(phase?: string | null): boolean {
+  return (phase || '').toLowerCase() === 'stopped'
+}
+
 /** Soft-stop the chain unit. Restart afterwards to start it again. */
 export function nodeStopAllowed(
   workload?: { status?: string; agent_port?: number } | null,

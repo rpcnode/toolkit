@@ -152,7 +152,7 @@ func (s *Server) handleDevOpenAPI(w http.ResponseWriter, r *http.Request) {
 			{"method": "GET", "path": "/api/v1/client", "desc": "Chain client_version + client_update (local/latest/phase)"},
 			{"method": "GET", "path": "/api/v1/client/release", "desc": "Native client catalog: version + artifact_url (tron=GitHub GreatVoyage)"},
 			{"method": "POST", "path": "/api/v1/client/check", "desc": "Refresh latest (native catalog; CDN override if artifact_url set)"},
-			{"method": "POST", "path": "/api/v1/client/update", "desc": "Apply client update (Go RPC sleep → replace → start)", "body": true},
+			{"method": "POST", "path": "/api/v1/client/update", "desc": "Apply client update (node must already be Stopped; replace artifact; Restart to start)", "body": true},
 			{"method": "POST", "path": "/api/v1/node/restart", "desc": "Soft-restart fullnode (Go RPC sleep → systemctl stop→start / ExecStop → wake)"},
 			{"method": "POST", "path": "/api/v1/node/stop", "desc": "Soft-stop fullnode (Go RPC sleep → CLI/RPC then systemctl stop; stays down until Restart)"},
 			{"method": "GET", "path": "/api/v1/node/config", "desc": "Leaf chain config documents + field schema (per network)"},

@@ -16,12 +16,13 @@ import (
 )
 
 // ClientUpdateController — chain client (java-tron / geth / Agave / …) updates.
-// Separate from toolkit agent update. Apply MUST enable Go-proxy maintenance sleep.
+// Apply: sleep RPC → soft-stop → replace artifact. Does not start — Restart to start.
 type ClientUpdateController struct {
-	cfg  Config
-	ctrl *ControlState
-	mu   sync.Mutex
-	busy bool
+	cfg   Config
+	ctrl  *ControlState
+	nodes *NodeRestartController
+	mu    sync.Mutex
+	busy  bool
 }
 
 type clientManifest struct {
@@ -53,8 +54,8 @@ func (m clientManifest) shaForHost() string {
 	return strings.TrimSpace(m.SHA256)
 }
 
-func newClientUpdateController(cfg Config, ctrl *ControlState) *ClientUpdateController {
-	return &ClientUpdateController{cfg: cfg, ctrl: ctrl}
+func newClientUpdateController(cfg Config, ctrl *ControlState, nodes *NodeRestartController) *ClientUpdateController {
+	return &ClientUpdateController{cfg: cfg, ctrl: ctrl, nodes: nodes}
 }
 
 func (c *ClientUpdateController) statePath() string {
@@ -306,14 +307,19 @@ func (c *ClientUpdateController) Apply() (map[string]any, error) {
 	if c.busy {
 		st := c.load()
 		c.mu.Unlock()
+		hostLogf("WARN", "system-agent", "client_update",
+			"%s/%s already running", c.cfg.Network, c.cfg.Env)
 		return st, fmt.Errorf("client update already running")
 	}
 	if c.cfg.HostTip {
 		c.mu.Unlock()
+		hostLog("WARN", "system-agent", "client_update", "rejected — host tip has no chain client")
 		return nil, fmt.Errorf("host tip has no chain client — use per-node agent")
 	}
 	if len(cfgNodeUnits(c.cfg)) == 0 {
 		c.mu.Unlock()
+		hostLogf("ERROR", "system-agent", "client_update",
+			"%s/%s node unit unknown", c.cfg.Network, c.cfg.Env)
 		return nil, fmt.Errorf("node unit unknown")
 	}
 	c.busy = true
@@ -324,6 +330,8 @@ func (c *ClientUpdateController) Apply() (map[string]any, error) {
 	st["last_error"] = ""
 	c.save(st)
 	c.mu.Unlock()
+	hostLogf("INFO", "system-agent", "client_update",
+		"%s/%s accepted — starting client update", c.cfg.Network, c.cfg.Env)
 
 	go c.runApply()
 	return c.Snapshot(), nil
@@ -331,6 +339,10 @@ func (c *ClientUpdateController) Apply() (map[string]any, error) {
 
 func (c *ClientUpdateController) runApply() {
 	defer func() {
+		if rec := recover(); rec != nil {
+			hostLogf("ERROR", "system-agent", "client_update",
+				"%s/%s panic: %v", c.cfg.Network, c.cfg.Env, rec)
+		}
 		c.mu.Lock()
 		c.busy = false
 		c.mu.Unlock()
@@ -340,6 +352,16 @@ func (c *ClientUpdateController) runApply() {
 	}()
 
 	set := func(phase, detail string, pct float64, errMsg string) {
+		level := "INFO"
+		if phase == "error" || strings.TrimSpace(errMsg) != "" {
+			level = "ERROR"
+		}
+		msg := detail
+		if strings.TrimSpace(errMsg) != "" {
+			msg = detail + " — " + errMsg
+		}
+		hostLogf(level, "system-agent", "client_update",
+			"%s/%s phase=%s pct=%.0f %s", c.cfg.Network, c.cfg.Env, phase, pct, msg)
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		st := c.load()
@@ -352,6 +374,8 @@ func (c *ClientUpdateController) runApply() {
 		c.save(st)
 	}
 
+	hostLogf("INFO", "system-agent", "client_update",
+		"%s/%s fetching catalog", c.cfg.Network, c.cfg.Env)
 	latest, man, _, err := c.fetchChannel()
 	if err != nil {
 		set("error", "channel fetch failed", 0, err.Error())
@@ -363,31 +387,26 @@ func (c *ClientUpdateController) runApply() {
 		return
 	}
 	latest = normalizeClientVersion(latest)
+	hostLogf("INFO", "system-agent", "client_update",
+		"%s/%s catalog version=%s kind=%s", c.cfg.Network, c.cfg.Env, latest, kind)
 
 	units := cfgNodeUnits(c.cfg)
 	label := strings.Join(units, ", ")
 
-	// Order MUST be: sleep RPC → graceful stop → wait dead → replace client → start → wake.
+	if live := runningNodeUnits(c.cfg); len(live) > 0 {
+		set("error", "stop the node first (Stop), then update", 0, strings.Join(live, ", "))
+		return
+	}
+
 	if c.ctrl != nil {
 		_ = c.ctrl.SetMaintenanceEx(c.cfg, true, "client update "+latest+" — RPC paused", "client_update")
 	}
-	set("updating", "RPC sleep (maintenance)", 10, "")
-
-	set("updating", "soft-stopping "+label, 20, "")
-	if err := stopNodeUnits(c.cfg, cfgStopBudget(c.cfg.Network)); err != nil {
-		set("error", "fullnode did not stop: "+err.Error(), 25, err.Error())
-		if c.ctrl != nil {
-			_ = c.ctrl.SetMaintenanceEx(c.cfg, false, "", "")
-		}
-		return
-	}
-	set("updating", "fullnode stopped — installing "+latest, 40, "")
+	set("updating", "node already stopped — installing "+latest, 40, "")
 
 	if err := c.installArtifact(man); err != nil {
 		set("error", "install failed: "+err.Error(), 45, err.Error())
-		_ = startNodeUnits(c.cfg)
-		if c.ctrl != nil {
-			_ = c.ctrl.SetMaintenanceEx(c.cfg, false, "", "")
+		if c.nodes != nil {
+			c.nodes.markStopped("stopped after client update install error")
 		}
 		return
 	}
@@ -398,32 +417,22 @@ func (c *ClientUpdateController) runApply() {
 		}
 	}
 
-	set("starting", "starting "+label, 75, "")
-	if err := startNodeUnits(c.cfg); err != nil {
-		set("error", "start failed: "+err.Error(), 75, err.Error())
-		if c.ctrl != nil {
-			_ = c.ctrl.SetMaintenanceEx(c.cfg, false, "", "")
-		}
-		return
-	}
-
-	// 5) Brief wait then wake proxy.
-	time.Sleep(3 * time.Second)
-	if c.ctrl != nil {
-		_ = c.ctrl.SetMaintenanceEx(c.cfg, false, "", "")
-	}
-	set("idle", "updated to "+latest+" — node starting", 100, "")
+	set("idle", "updated to "+latest+" — stopped; Restart to start", 100, "")
 	c.mu.Lock()
 	st := c.load()
 	st["local"] = latest
 	st["latest"] = latest
 	st["update_available"] = false
 	st["phase"] = "idle"
-	st["detail"] = "updated to " + latest
+	st["detail"] = "updated to " + latest + " — stopped; Restart to start"
 	st["pct"] = 100
 	c.save(st)
 	c.mu.Unlock()
-	log.Printf("client_update: %s/%s → %s", c.cfg.Network, c.cfg.Env, latest)
+	if c.nodes != nil {
+		c.nodes.markStopped("updated to " + latest + " — Restart to start")
+	}
+	hostLogf("INFO", "system-agent", "client_update",
+		"%s/%s done → %s units=%s left stopped", c.cfg.Network, c.cfg.Env, latest, label)
 }
 
 // waitUnitStopped polls systemctl until the unit is inactive/failed/dead (or timeout).
