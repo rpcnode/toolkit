@@ -457,7 +457,9 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 	// Retry on start_error so missing conf / crash-loop can self-heal (agent writes conf).
 	wantStart := phase == "start" || phase == "error" ||
 		ns == "ready_to_start" || ns == "starting" || ns == "start_error"
-	if autoNode && !nodeActive && !snapBusy && !snapFailed && wantStart &&
+	if operatorNodeStopped(p.cfg) {
+		// Operator Stop wrote node-run.json — do not auto-start (pipeline / collect).
+	} else if autoNode && !nodeActive && !snapBusy && !snapFailed && wantStart &&
 		(!snapRequired || marker) && !removing {
 		if (isBitcoin || isSolana || isEthereum || isBSC || isL2 || isXRPL || isDoge || isCoreLike || isCardano || isStellar || isTon || isETC || isZcash || isSui || isAptos || isAvalanche) && !diskOK {
 			p.noteAttempt(prog, "disk_gate", "insufficient free disk for node start")
@@ -568,6 +570,9 @@ func keepHostTipUnits(forLeafUnit string) {
 }
 
 func (p *LifecyclePipeline) startNode() error {
+	if operatorNodeStopped(p.cfg) {
+		return fmt.Errorf("operator stopped — Start from panel")
+	}
 	unit := p.cfg.NodeService + ".service"
 	isBitcoin := strings.EqualFold(p.cfg.Network, "bitcoin")
 	isSolana := strings.EqualFold(p.cfg.Network, "solana")

@@ -36,12 +36,33 @@ func (n *NodeRestartController) Snapshot() map[string]any {
 }
 
 func (n *NodeRestartController) snapshotLocked() map[string]any {
+	if !n.busy {
+		n.hydrateFromFileLocked()
+	}
 	out := map[string]any{}
 	for k, v := range n.st {
 		out[k] = v
 	}
 	out["busy"] = n.busy
+	out["node_run"] = nodeRunSnapshot(n.cfg)
 	return out
+}
+
+func (n *NodeRestartController) hydrateFromFileLocked() {
+	switch loadNodeRun(n.cfg).Status {
+	case "stopped":
+		n.st["action"] = "stop"
+		n.st["phase"] = "stopped"
+		if strings.TrimSpace(fmt.Sprint(n.st["detail"])) == "" || fmt.Sprint(n.st["detail"]) == "<nil>" {
+			n.st["detail"] = "fullnode stopped — Start to start"
+		}
+	case "running":
+		ph := strings.ToLower(strings.TrimSpace(fmt.Sprint(n.st["phase"])))
+		if ph == "stopped" || ph == "stopping" {
+			n.st["phase"] = "idle"
+			n.st["action"] = "start"
+		}
+	}
 }
 
 func (n *NodeRestartController) set(phase, detail string, pct float64, errMsg string) {
@@ -94,6 +115,7 @@ func (n *NodeRestartController) markStopped(detail string) {
 	n.st["pct"] = 100
 	n.st["last_error"] = ""
 	n.st["updated_at"] = time.Now().UTC().Format(time.RFC3339)
+	_ = saveNodeRun(n.cfg, "stopped", "mark")
 }
 
 func (n *NodeRestartController) nodeUnits() []string {
@@ -218,6 +240,9 @@ func (n *NodeRestartController) run(units []string) {
 	if n.ctrl != nil {
 		_ = n.ctrl.SetMaintenanceEx(n.cfg, false, "", "")
 	}
+	if err := saveNodeRun(n.cfg, "running", "restart"); err != nil {
+		log.Printf("node_restart: node-run.json: %v", err)
+	}
 	n.set("idle", "soft-restarted — node starting", 100, "")
 	log.Printf("node_restart: %s/%s units=%s ok (soft stop→start)", n.cfg.Network, n.cfg.Env, label)
 }
@@ -243,6 +268,10 @@ func (n *NodeRestartController) runStop(units []string) {
 			_ = n.ctrl.SetMaintenanceEx(n.cfg, false, "", "")
 		}
 		log.Printf("node_stop failed: %s", err)
+		return
+	}
+	if err := saveNodeRun(n.cfg, "stopped", "stop"); err != nil {
+		n.set("error", "stopped but could not write node-run.json: "+err.Error(), 90, err.Error())
 		return
 	}
 	n.set("stopped", "fullnode stopped — Start to start", 100, "")
@@ -312,6 +341,10 @@ func (n *NodeRestartController) runStart(units []string) {
 		log.Printf("node_start failed: %s", err)
 		return
 	}
+	if err := saveNodeRun(n.cfg, "running", "start"); err != nil {
+		n.set("error", "started but could not write node-run.json: "+err.Error(), 90, err.Error())
+		return
+	}
 	time.Sleep(2 * time.Second)
 	if n.ctrl != nil {
 		_ = n.ctrl.SetMaintenanceEx(n.cfg, false, "", "")
@@ -364,6 +397,9 @@ func applyNodeRestartToStatus(st map[string]any, snap map[string]any) {
 		return
 	}
 	st["node_restart"] = snap
+	if nr, ok := snap["node_run"]; ok {
+		st["node_run"] = nr
+	}
 	phase := strings.ToLower(strings.TrimSpace(fmt.Sprint(snap["phase"])))
 	action := strings.ToLower(strings.TrimSpace(fmt.Sprint(snap["action"])))
 	detail := strings.TrimSpace(fmt.Sprint(snap["detail"]))

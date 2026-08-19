@@ -400,8 +400,8 @@ func (c *ClientUpdateController) runApply() {
 	units := cfgNodeUnits(c.cfg)
 	label := strings.Join(units, ", ")
 
-	if live := runningNodeUnits(c.cfg); len(live) > 0 {
-		set("error", "error", "Stop the node first, then update", 0, strings.Join(live, ", "))
+	if !operatorNodeStopped(c.cfg) {
+		set("error", "error", "Stop the node first, then update", 0, "node-run is not stopped")
 		return
 	}
 
