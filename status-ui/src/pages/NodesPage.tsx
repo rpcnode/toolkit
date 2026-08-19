@@ -1353,75 +1353,83 @@ function NodeCardView({
               <IconFileText size={14} />
             </ActionIcon>
           </Tooltip>
-          <Button
-            size="compact-xs"
-            variant="subtle"
-            color="gray"
-            leftSection={<IconRefresh size={12} />}
-            loading={restartBusy}
-            disabled={
-              isRemoving ||
-              !nodeRestartAllowed(
-                { status: model.status, agent_port: model.agentPort },
-                phase,
-              )
-            }
-            onClick={(e) => {
-              e.stopPropagation()
-              setRestartOpen(true)
-            }}
-          >
-            Restart
-          </Button>
-          {nodeStartAllowed({ status: model.status, agent_port: model.agentPort }, phase) ? (
-            <Button
-              size="compact-xs"
-              variant="subtle"
-              color="teal"
-              leftSection={<IconPlayerPlay size={12} />}
-              loading={startBusy}
-              disabled={isRemoving || startBusy}
-              onClick={(e) => {
-                e.stopPropagation()
-                setStartOpen(true)
-              }}
-            >
-              Start
-            </Button>
-          ) : (
-            <Button
-              size="compact-xs"
+          <Tooltip label="Restart">
+            <ActionIcon
+              size="sm"
               variant="subtle"
               color="gray"
-              leftSection={<IconPlayerStop size={12} />}
-              loading={stopBusy}
+              aria-label="Restart"
+              loading={restartBusy}
               disabled={
                 isRemoving ||
-                !nodeStopAllowed(
+                !nodeRestartAllowed(
                   { status: model.status, agent_port: model.agentPort },
                   phase,
                 )
               }
               onClick={(e) => {
                 e.stopPropagation()
-                setStopOpen(true)
+                setRestartOpen(true)
               }}
             >
-              Stop
-            </Button>
+              <IconRefresh size={14} />
+            </ActionIcon>
+          </Tooltip>
+          {nodeStartAllowed({ status: model.status, agent_port: model.agentPort }, phase) ? (
+            <Tooltip label="Start">
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                color="teal"
+                aria-label="Start"
+                loading={startBusy}
+                disabled={isRemoving || startBusy}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setStartOpen(true)
+                }}
+              >
+                <IconPlayerPlay size={14} />
+              </ActionIcon>
+            </Tooltip>
+          ) : (
+            <Tooltip label="Stop">
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                color="gray"
+                aria-label="Stop"
+                loading={stopBusy}
+                disabled={
+                  isRemoving ||
+                  !nodeStopAllowed(
+                    { status: model.status, agent_port: model.agentPort },
+                    phase,
+                  )
+                }
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setStopOpen(true)
+                }}
+              >
+                <IconPlayerStop size={14} />
+              </ActionIcon>
+            </Tooltip>
           )}
-          <Button
-            size="compact-xs"
-            variant="subtle"
-            color="red"
-            leftSection={<IconTrash size={12} />}
-            onClick={(e) => {
-              e.stopPropagation()
-              onRemove()
-            }}
-          >
-            Remove
-          </Button>
+          <Tooltip label="Remove">
+            <ActionIcon
+              size="sm"
+              variant="subtle"
+              color="red"
+              aria-label="Remove"
+              onClick={(e) => {
+                e.stopPropagation()
+                onRemove()
+              }}
+            >
+              <IconTrash size={14} />
+            </ActionIcon>
+          </Tooltip>
           <Badge
             color={isRemoving ? 'orange' : color}
             variant="light"
