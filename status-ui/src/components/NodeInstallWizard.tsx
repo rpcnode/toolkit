@@ -1061,11 +1061,12 @@ export function NodeInstallWizard({
       await onWorkloadUpdated?.()
       void onRefresh()
       notifications.show({ color: 'teal', message: 'Ports OK — installing' })
-      // One Install click: provision → snapshot/start. Modal stays until start ACK.
-      if (leaveTo === 'install' || leaveTo === 'snapshot') {
-        void beginInstall()
-      } else if (leaveTo === 'start' || leaveTo === 'done') {
+      // After provision the leaf current is often already `start` (install done,
+      // unit not up). Must still POST start — do not treat that as finished.
+      if (leaveTo === 'done' && nodeReadyForOps(acked)) {
         markInstallOk()
+      } else {
+        void beginInstall()
       }
     } catch (e) {
       const msg = String((e as Error).message || e)
