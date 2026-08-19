@@ -3,6 +3,22 @@
   "feed": "https://toolkit.rpcnode.dev/install/VERSIONS.json",
   "releases": [
     {
+      "version": "0.4.212",
+      "date": "2026-08-19",
+      "title": "Release 0.4.212",
+      "notes": [
+        "Shipped via update-remote-agent.sh --publish."
+      ]
+    },
+    {
+      "version": "0.4.211",
+      "date": "2026-08-19",
+      "title": "Host & node: free space per disk",
+      "notes": [
+        "Each disk tab shows free / total (largest FS on that disk) plus used %. LVM OS disk maps via /sys slaves."
+      ]
+    },
+    {
       "version": "0.4.210",
       "date": "2026-08-19",
       "title": "Release 0.4.210",

@@ -415,6 +415,10 @@ export type HostDiskIO = {
   read_mb_s?: number
   write_mb_s?: number
   util_pct?: number
+  free_gb?: number
+  total_gb?: number
+  used_pct?: number
+  mount?: string
 }
 
 export type HostDiskIOHistory = {

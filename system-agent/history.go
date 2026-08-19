@@ -235,12 +235,15 @@ func (h *MetricsHistory) readDiskRates() diskRates {
 		h.prevDisk = devs
 		h.prevDiskAt = now
 		h.havePrevDisk = true
-		return diskRates{Devices: diskDevicesPlaceholder(devs)}
+		rates := diskRates{Devices: diskDevicesPlaceholder(devs)}
+		attachDiskSpace(rates.Devices)
+		return rates
 	}
 	dt := now.Sub(h.prevDiskAt).Seconds()
 	rates := diskRatesFromDelta(h.prevDisk, devs, dt)
 	h.prevDisk = devs
 	h.prevDiskAt = now
+	attachDiskSpace(rates.Devices)
 	return rates
 }
 

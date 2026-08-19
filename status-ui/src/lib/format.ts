@@ -274,6 +274,14 @@ export function fmtBytesGiB(v: unknown): string {
   return formatStorageGiB(gib, gib >= 10 ? 1 : 2)
 }
 
+/** Compact free space for disk tabs: 2.9T / 421G. */
+export function fmtDiskFree(gb?: number): string {
+  if (gb == null || !Number.isFinite(gb) || gb < 0) return ''
+  if (gb >= 1024) return `${(gb / 1024).toFixed(1)}T`
+  if (gb >= 10) return `${gb.toFixed(0)}G`
+  return `${gb.toFixed(1)}G`
+}
+
 /** Format GiB value as GiB or TiB for compact UI labels. */
 export function formatStorageGiB(gb: number, digits = 0): string {
   if (!Number.isFinite(gb) || gb < 0) return '—'

@@ -24,6 +24,10 @@ type diskDevRate struct {
 	ReadMBs   float64 `json:"read_mb_s"`
 	WriteMBs  float64 `json:"write_mb_s"`
 	UtilPct   float64 `json:"util_pct"`
+	FreeGB    float64 `json:"free_gb,omitempty"`
+	TotalGB   float64 `json:"total_gb,omitempty"`
+	UsedPct   float64 `json:"used_pct,omitempty"`
+	Mount     string  `json:"mount,omitempty"`
 }
 
 type diskRates struct {
@@ -229,6 +233,10 @@ func diskRatesJSON(devs []diskDevRate) []map[string]any {
 			"read_mb_s":  round2(d.ReadMBs),
 			"write_mb_s": round2(d.WriteMBs),
 			"util_pct":   round2(d.UtilPct),
+			"free_gb":    round1(d.FreeGB),
+			"total_gb":   round1(d.TotalGB),
+			"used_pct":   round1(d.UsedPct),
+			"mount":      d.Mount,
 		})
 	}
 	return out

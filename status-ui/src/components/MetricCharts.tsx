@@ -3,7 +3,7 @@ import { Badge, Card, Grid, Group, Progress, SimpleGrid, Stack, Tabs, Text, Titl
 import { AreaChart } from '@mantine/charts'
 import { IconHelp } from '@tabler/icons-react'
 import type { HostDiskIO, HostDiskIOHistory, MetricsPayload, StatusPayload } from '../types'
-import { chartPairSeries, chartNetSeries, chartSeries, fmtBytesGiB, fmtDiskMBs, fmtIOPS, fmtMbps, num } from '../lib/format'
+import { chartPairSeries, chartNetSeries, chartSeries, formatStorageGiB, fmtBytesGiB, fmtDiskFree, fmtDiskMBs, fmtIOPS, fmtMbps, num } from '../lib/format'
 
 type RpcSnap = {
   rps_1m?: number
@@ -512,6 +512,14 @@ function DisksPanel({
   const readMBs = selected?.read_mb_s ?? host.readMBs
   const writeMBs = selected?.write_mb_s ?? host.writeMBs
   const utilPct = selected?.util_pct ?? host.utilPct
+  const allFree = items.reduce((s, d) => s + (d.free_gb || 0), 0)
+  const allTotal = items.reduce((s, d) => s + (d.total_gb || 0), 0)
+  const freeGB = selected?.free_gb ?? (allTotal > 0 ? allFree : undefined)
+  const totalGB = selected?.total_gb ?? (allTotal > 0 ? allTotal : undefined)
+  const usedPct =
+    selected?.used_pct ??
+    (allTotal > 0 ? ((allTotal - allFree) / allTotal) * 100 : undefined)
+  const mount = selected?.mount
   const label = selected?.name || (host.busy ? `hottest · ${host.busy}` : 'all disks')
 
   return (
@@ -526,6 +534,11 @@ function DisksPanel({
                   {num(host.utilPct, 1)}%
                 </Text>
               ) : null}
+              {allFree > 0 ? (
+                <Text span size="xs" c="dimmed" ml={6}>
+                  {fmtDiskFree(allFree)} free
+                </Text>
+              ) : null}
             </Tabs.Tab>
             {items.map((d) => (
               <Tabs.Tab key={d.name} value={d.name}>
@@ -538,6 +551,11 @@ function DisksPanel({
                 >
                   {d.util_pct == null || Number.isNaN(d.util_pct) ? '—' : `${num(d.util_pct, 1)}%`}
                 </Text>
+                {d.free_gb != null && d.free_gb > 0 ? (
+                  <Text span size="xs" c="dimmed" ml={6}>
+                    {fmtDiskFree(d.free_gb)} free
+                  </Text>
+                ) : null}
               </Tabs.Tab>
             ))}
           </Tabs.List>
@@ -551,6 +569,10 @@ function DisksPanel({
         writeIops={writeIops}
         readMBs={readMBs}
         writeMBs={writeMBs}
+        freeGB={freeGB}
+        totalGB={totalGB}
+        usedPct={usedPct}
+        mount={mount}
         nested
       />
 
@@ -597,6 +619,13 @@ function diskLoadColor(pct?: number): string {
   return 'teal'
 }
 
+function diskUsedLevel(pct?: number): Level {
+  if (pct == null || Number.isNaN(pct)) return undefined
+  if (pct >= 95) return 'critical'
+  if (pct >= 85) return 'warn'
+  return 'ok'
+}
+
 function DiskLoadBar({
   pct,
   busy,
@@ -604,6 +633,10 @@ function DiskLoadBar({
   writeIops,
   readMBs,
   writeMBs,
+  freeGB,
+  totalGB,
+  usedPct,
+  mount,
   nested,
 }: {
   pct?: number
@@ -612,6 +645,10 @@ function DiskLoadBar({
   writeIops?: number
   readMBs?: number
   writeMBs?: number
+  freeGB?: number
+  totalGB?: number
+  usedPct?: number
+  mount?: string
   nested?: boolean
 }) {
   const known = pct != null && !Number.isNaN(pct)
@@ -637,6 +674,17 @@ function DiskLoadBar({
           <Text size="xs" c="dimmed" className="mono">
             R {fmtIOPS(readIops)} · W {fmtIOPS(writeIops)} · {fmtDiskMBs(readMBs)} / {fmtDiskMBs(writeMBs)}
           </Text>
+          {freeGB != null && totalGB != null && totalGB > 0 ? (
+            <Text size="sm" fw={600} className="mono" c={levelColor(diskUsedLevel(usedPct))}>
+              {formatStorageGiB(freeGB, freeGB >= 1024 ? 1 : 0)} free
+              <Text span size="xs" c="dimmed" fw={500}>
+                {' '}
+                / {formatStorageGiB(totalGB, totalGB >= 1024 ? 1 : 0)}
+                {usedPct != null && !Number.isNaN(usedPct) ? ` · ${num(usedPct, 0)}% used` : ''}
+                {mount ? ` · ${mount}` : ''}
+              </Text>
+            </Text>
+          ) : null}
         </Group>
       </Group>
       <Progress
@@ -647,6 +695,15 @@ function DiskLoadBar({
         animated={known && bar >= 70}
         striped={known && bar >= 70}
       />
+      {usedPct != null && !Number.isNaN(usedPct) ? (
+        <Progress
+          value={Math.max(0, Math.min(100, usedPct))}
+          color={diskUsedLevel(usedPct) === 'critical' ? 'red' : diskUsedLevel(usedPct) === 'warn' ? 'yellow' : 'gray'}
+          size="sm"
+          radius="xl"
+          mt={6}
+        />
+      ) : null}
     </>
   )
   if (nested) return <div style={{ marginBottom: 12 }}>{inner}</div>
