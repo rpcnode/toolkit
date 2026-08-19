@@ -500,6 +500,7 @@ func collect(cfg Config) map[string]any {
 	// Snapshot unit extracts as root; java-tron is User=nodeop. Every collect
 	// repairs ownership so Update alone recovers LOCK Permission denied — no SSH.
 	ensureNodeopOwned(cfg.DataDir, cfg.Output, cfg.OptDir)
+	_, _ = ensureTronJSONRPCConf(cfg)
 
 	snapState := readJSONFile(cfg.SnapshotState)
 	pct := ""

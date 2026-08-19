@@ -2238,11 +2238,11 @@ export function needsInstallWizard(status: StatusPayload | null, workload: Workl
 
   // Transient ops overlays — keep Network UI (not setup rail).
   const nr = (status.node_restart?.phase || '').toLowerCase()
-  if (nr === 'restarting' || nr === 'starting') return false
+  if (nr === 'restarting' || nr === 'starting' || nr === 'stopping' || nr === 'stopped') return false
   const cu = (status.client_update?.phase || '').toLowerCase()
   if (cu === 'updating' || cu === 'starting') return false
   const ui = (status.ui_phase || '').toLowerCase()
-  if (ui === 'restarting' || ui === 'updating') return false
+  if (ui === 'restarting' || ui === 'updating' || ui === 'stopping' || ui === 'stopped') return false
 
   // Lifecycle completed once — stay in ops only when actually ready (not false Healthy).
   if (status.lifecycle?.complete && nodeReadyForOps(status)) return false

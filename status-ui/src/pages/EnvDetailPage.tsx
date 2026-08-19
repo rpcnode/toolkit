@@ -18,6 +18,7 @@ import {
   IconArrowLeft,
   IconCopy,
   IconFileText,
+  IconPlayerStop,
   IconRefresh,
   IconServer,
   IconSettings,
@@ -64,6 +65,7 @@ import { NodeLifecycleDates } from '../components/NodeLifecycleDates'
 import {
   deriveNodeLifecycle,
   nodeRestartAllowed,
+  nodeStopAllowed,
   resolveCurrentStep,
 } from '../lib/nodeLifecycle'
 import { isNodeUUID, navigate, nodeIdToEnv, nodeIdToNetwork } from '../lib/router'
@@ -188,6 +190,8 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
   const [removeTyped, setRemoveTyped] = useState('')
   const [restartOpen, setRestartOpen] = useState(false)
   const [restartBusy, setRestartBusy] = useState(false)
+  const [stopOpen, setStopOpen] = useState(false)
+  const [stopBusy, setStopBusy] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
   const [clientOpen, setClientOpen] = useState(false)
   const [clientBusy, setClientBusy] = useState(false)
@@ -224,6 +228,25 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
   const statusTargetReady =
     !!workloadId &&
     (!isNodeUUID(nodeId || '') || !!(workload?.network && workload?.env))
+
+  async function confirmNodeStop() {
+    if (!workloadId) return
+    setStopBusy(true)
+    try {
+      const res = await api.nodeStop({ node: workloadId })
+      if (!res.ok) throw new Error(res.error || 'stop failed')
+      notifications.show({
+        color: 'teal',
+        message: res.node_restart?.detail || 'Node stop started (RPC sleep)',
+      })
+      setStopOpen(false)
+      void tick()
+    } catch (err) {
+      notifications.show({ color: 'red', message: String((err as Error).message || err) })
+    } finally {
+      setStopBusy(false)
+    }
+  }
 
   async function confirmNodeRestart() {
     if (!workloadId) return
@@ -496,7 +519,11 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
               (!!workload?.client_update_available ||
                 !!status?.client_update?.update_available)
             const color = !ver ? 'gray.3' : outdated ? 'orange.4' : 'teal.4'
-            const canUpdate = !!ver && lifecycle.phase !== 'updating' && lifecycle.phase !== 'restarting'
+            const canUpdate =
+              !!ver &&
+              lifecycle.phase !== 'updating' &&
+              lifecycle.phase !== 'restarting' &&
+              lifecycle.phase !== 'stopping'
             const openUpdate = canUpdate ? () => setClientOpen(true) : undefined
             return (
               <>
@@ -608,11 +635,29 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
               loading={restartBusy}
               disabled={
                 !nodeRestartAllowed(workload, lifecycle.phase) ||
-                (status?.node_restart?.phase || '').toLowerCase() === 'restarting'
+                ['restarting', 'stopping'].includes(
+                  (status?.node_restart?.phase || '').toLowerCase(),
+                )
               }
               onClick={() => setRestartOpen(true)}
             >
               Restart
+            </Button>
+          )}
+          {workloadId && (
+            <Button
+              size="xs"
+              variant="light"
+              color="gray"
+              leftSection={<IconPlayerStop size={14} />}
+              loading={stopBusy}
+              disabled={
+                !nodeStopAllowed(workload, lifecycle.phase, status?.node_restart?.phase) ||
+                stopBusy
+              }
+              onClick={() => setStopOpen(true)}
+            >
+              Stop
             </Button>
           )}
           {workloadId && (
@@ -888,6 +933,40 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
               onClick={() => void confirmNodeRestart()}
             >
               Restart fullnode
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={stopOpen}
+        onClose={() => (!stopBusy ? setStopOpen(false) : undefined)}
+        title="Stop fullnode?"
+        centered
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            Soft-stop{' '}
+            <Text span fw={700}>
+              {network}/{env}
+            </Text>
+            . Same graceful stop as Restart (CLI / ExecStop / SIGTERM). Public Go RPC
+            sleeps (503) until you Restart.
+          </Text>
+          <Alert color="yellow" variant="light" icon={<IconAlertTriangle size={16} />}>
+            The unit stays down. Chain data is not wiped. Use Restart to start again.
+          </Alert>
+          <Group justify="flex-end">
+            <Button variant="default" disabled={stopBusy} onClick={() => setStopOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              color="yellow"
+              loading={stopBusy}
+              leftSection={<IconPlayerStop size={14} />}
+              onClick={() => void confirmNodeStop()}
+            >
+              Stop fullnode
             </Button>
           </Group>
         </Stack>

@@ -582,8 +582,8 @@
       "env" : "testnet",
       "network" : "sui",
       "source" : "MystenLabs/sui",
-      "tag" : "testnet-v1.77.2",
-      "version" : "testnet-v1.77.2"
+      "tag" : "testnet-v1.78.0",
+      "version" : "testnet-v1.78.0"
     },
     {
       "artifacts" : [
@@ -607,15 +607,15 @@
       "network" : "aptos",
       "notes" : "fullnode.yaml is agent-generated.",
       "source" : "aptos-labs/aptos-core",
-      "tag" : "aptos-node-v1.48.6-rc",
-      "version" : "aptos-node-v1.48.6-rc"
+      "tag" : "aptos-node-v1.48.7-hotfix-rc",
+      "version" : "aptos-node-v1.48.7-hotfix-rc"
     },
     {
       "artifacts" : [
         {
           "kind" : "tarball",
           "name" : "aptos-node-performance-ubuntu-22.04.tgz",
-          "url" : "https://github.com/aptos-labs/aptos-core/releases/download/aptos-node-v1.48.6-rc/aptos-node-performance-ubuntu-22.04.tgz"
+          "url" : "https://github.com/aptos-labs/aptos-core/releases/download/aptos-node-v1.48.7-hotfix-rc/aptos-node-performance-ubuntu-22.04.tgz"
         }
       ],
       "configs" : [
@@ -631,8 +631,8 @@
       "env" : "testnet",
       "network" : "aptos",
       "source" : "aptos-labs/aptos-core",
-      "tag" : "aptos-node-v1.48.6-rc",
-      "version" : "aptos-node-v1.48.6-rc"
+      "tag" : "aptos-node-v1.48.7-hotfix-rc",
+      "version" : "aptos-node-v1.48.7-hotfix-rc"
     },
     {
       "artifacts" : [

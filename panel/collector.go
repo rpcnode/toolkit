@@ -951,15 +951,25 @@ func summarizeStatus(nodeID, wlStatus string, raw []byte) store.NodeStatus {
 		}
 		if nr, _ := doc["node_restart"].(map[string]any); nr != nil && phase != "updating" {
 			np := strings.ToLower(strFieldMap(nr, "phase"))
-			if np == "restarting" || np == "starting" {
+			if np == "restarting" || np == "starting" || np == "stopping" || np == "stopped" {
 				phase = "restarting"
 				label = strFieldMap(nr, "detail")
-				if label == "" {
+				if np == "stopped" {
+					phase = "stopped"
+					if label == "" {
+						label = "Stopped"
+					}
+				} else if label == "" {
 					if np == "starting" {
 						label = "Starting after restart"
+					} else if np == "stopping" {
+						label = "Soft-stopping node"
+						phase = "stopping"
 					} else {
 						label = "Restarting node"
 					}
+				} else if np == "stopping" {
+					phase = "stopping"
 				}
 				detail = strFieldMap(nr, "detail")
 				if p := floatFieldMap(nr, "pct"); p > 0 {
@@ -969,7 +979,7 @@ func summarizeStatus(nodeID, wlStatus string, raw []byte) store.NodeStatus {
 		}
 
 		switch {
-		case phase == "updating" || phase == "restarting":
+		case phase == "updating" || phase == "restarting" || phase == "stopping" || phase == "stopped":
 			// keep client_update / node_restart mapping
 		case errText != "":
 			// already mapped from start-step / journal

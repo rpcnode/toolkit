@@ -242,7 +242,20 @@ export function nodeRestartAllowed(
   }
   if (Number(workload?.agent_port || 0) <= 0) return false
   const p = (phase || '').toLowerCase()
-  if (p === 'restarting' || p === 'updating') return false
+  if (p === 'restarting' || p === 'updating' || p === 'stopping') return false
+  return true
+}
+
+/** Soft-stop the chain unit. Restart afterwards to start it again. */
+export function nodeStopAllowed(
+  workload?: { status?: string; agent_port?: number } | null,
+  phase?: string | null,
+  nrPhase?: string | null,
+): boolean {
+  if (!nodeRestartAllowed(workload, phase)) return false
+  const p = (phase || '').toLowerCase()
+  const nr = (nrPhase || '').toLowerCase()
+  if (p === 'stopped' || p === 'stopping' || nr === 'stopped' || nr === 'stopping') return false
   return true
 }
 
@@ -333,6 +346,8 @@ export type NodePhase =
   | 'updating'
   | 'removing'
   | 'restarting'
+  | 'stopping'
+  | 'stopped'
   | 'syncing'
   | 'working'
   | 'error'
@@ -433,6 +448,8 @@ function mapAgentPhase(
   if (ns === 'ready_to_start') return 'setup'
   if (p === 'updating') return 'updating'
   if (p === 'restarting') return 'restarting'
+  if (p === 'stopping') return 'stopping'
+  if (p === 'stopped') return 'stopped'
   if (p === 'start' || ns === 'starting') return 'starting'
   if (p === 'run' || ns === 'syncing') return 'syncing'
   if (p === 'healthy' || ns === 'running') return 'working'
@@ -632,6 +649,27 @@ export function deriveNodeLifecycle(
       color: 'yellow',
       busy: true,
       progress: typeof cu?.pct === 'number' ? cu.pct : undefined,
+      height: height == null ? null : Number(height),
+    }
+  }
+  if (nrPhase === 'stopping') {
+    return {
+      phase: 'stopping',
+      label: 'Soft-stopping node',
+      detail: nr?.detail || 'Public RPC sleeping (503) during stop',
+      color: 'yellow',
+      busy: true,
+      progress: typeof nr?.pct === 'number' ? nr.pct : undefined,
+      height: height == null ? null : Number(height),
+    }
+  }
+  if (nrPhase === 'stopped') {
+    return {
+      phase: 'stopped',
+      label: 'Stopped',
+      detail: nr?.detail || 'Fullnode stopped — Restart to start',
+      color: 'gray',
+      busy: false,
       height: height == null ? null : Number(height),
     }
   }

@@ -3,6 +3,27 @@
   "feed": "https://toolkit.rpcnode.dev/install/VERSIONS.json",
   "releases": [
     {
+      "version": "0.4.189",
+      "date": "2026-08-19",
+      "title": "Soft-stop fullnode from the node page",
+      "panel": "0.1.33",
+      "notes": [
+        "Stop next to Restart: same graceful stop (CLI / ExecStop / SIGTERM), unit stays down until Restart.",
+        "Public Go RPC sleeps (503) while stopped. Chain data is not wiped."
+      ]
+    },
+    {
+      "version": "0.4.188",
+      "date": "2026-08-19",
+      "title": "Client update apply for all catalog networks",
+      "networks": ["tron", "bsc", "bitcoin", "ethereum"],
+      "notes": [
+        "Check already worked everywhere; Apply was hard-coded to TRON (and briefly BSC).",
+        "Apply is now the same pipeline on every leaf: soft-stop (CLI/RPC then systemctl), download the catalog artifact (jar / bin / tarball), start the same units.",
+        "Apt / docker_extract / empty artifact_url stay an honest error — there is nothing to replace."
+      ]
+    },
+    {
       "version": "0.4.187",
       "date": "2026-08-18",
       "title": "TON getVersion + install CDN host",

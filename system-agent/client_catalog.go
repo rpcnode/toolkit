@@ -20,6 +20,7 @@ type ClientRelease struct {
 	Version        string `json:"version"` // comparable (e.g. 4.8.2.1)
 	Tag            string `json:"tag,omitempty"`
 	ArtifactURL    string `json:"artifact_url"`
+	SHA256         string `json:"sha256,omitempty"`
 	ConfURL        string `json:"conf_url,omitempty"`
 	ArtifactKind   string `json:"artifact_kind"`
 	NeedsConfPatch bool   `json:"needs_conf_patch"`

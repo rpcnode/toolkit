@@ -90,6 +90,7 @@ Optional: `AGENT_API_TOKEN_REQUIRED=1` — require agent key for `/api/*`.
 | `GET` | `/api/v1/host/disks` | Host block devices + mounts (`lsblk`/`findmnt`); `?network=solana&env=` adds recommended JBOD layout |
 | `GET` | `/api/v1/updates` | Toolkit agent + chain client update availability (`needs_attention`) |
 | `POST` | `/api/v1/node/restart` | Soft-restart fullnode (RPC sleep → `systemctl stop`→`start` / ExecStop → wake) |
+| `POST` | `/api/v1/node/stop` | Soft-stop fullnode (RPC sleep → CLI/RPC then `systemctl stop`; stays down until Restart) |
 | `GET` | `/api/v1/node/config` | Leaf chain config documents + field schema (per network) |
 | `PUT` | `/api/v1/node/config` | Save config (`confirm=true`) then soft stop→start (`restart` default true) |
 | `GET` | `/api/v1/events?limit=50` | Last N alerts (newest first) |

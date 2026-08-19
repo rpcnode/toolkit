@@ -327,6 +327,7 @@ func serveInternal(cfg Config, snap *SnapshotController, ctrl *ControlState, tkU
 	mux.HandleFunc("/v1/client/check", clientUp.handleCheck)
 	mux.HandleFunc("/v1/client/update", clientUp.handleApply)
 	mux.HandleFunc("/v1/node/restart", nodeRestart.handleRestart)
+	mux.HandleFunc("/v1/node/stop", nodeRestart.handleStop)
 	mux.HandleFunc("/v1/node/config", nodeConfig.handleConfig)
 	mux.HandleFunc("/v1/events", notify.handleEvents)
 	mux.HandleFunc("/v1/webhooks", notify.handleWebhooks)

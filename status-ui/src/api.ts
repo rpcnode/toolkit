@@ -897,6 +897,13 @@ export const api = {
       node_restart?: { phase?: string; detail?: string; pct?: number; unit?: string; last_error?: string }
       error?: string
     }>(withAgentTarget('/api/v1/node/restart', asAgentTarget(target))),
+  nodeStop: (target?: string | AgentTarget) =>
+    postJSON<{
+      ok?: boolean
+      accepted?: boolean
+      node_restart?: { phase?: string; detail?: string; pct?: number; unit?: string; last_error?: string }
+      error?: string
+    }>(withAgentTarget('/api/v1/node/stop', asAgentTarget(target))),
 
   nodeConfig: (target?: string | AgentTarget) =>
     getJSON<NodeConfigResponse>(withAgentTarget('/api/v1/node/config', asAgentTarget(target))),

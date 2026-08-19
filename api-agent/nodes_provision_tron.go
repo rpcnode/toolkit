@@ -467,6 +467,7 @@ func ensureTronConfig(confPath, env string, nodeHTTP, p2p int) error {
 	t = patchTronMetricsPort(t, prof.Metrics)
 	// High-load day one: thousands concurrent via Go proxy → loopback FullNode.
 	t = patchTronHighLoadLimits(t)
+	t = patchTronJSONRPC(t, tronJSONRPCPort(env))
 	if normalizeEnv(env) == "nile" {
 		t = patchTronNileP2P(t)
 	}
@@ -696,6 +697,40 @@ rate.limiter = {
 }
 `, gqps, ipqps)
 		t = t + block
+	}
+
+	return t
+}
+
+// tronJSONRPCPort is the java-tron eth JSON-RPC listener (loopback).
+// Off ethereum :8545 so TRON+geth can share a host. DESIGN.md.
+func tronJSONRPCPort(env string) int {
+	switch normalizeEnv(env) {
+	case "nile":
+		return 18546
+	case "shasta":
+		return 18547
+	default:
+		return 18545
+	}
+}
+
+func patchTronJSONRPC(t string, port int) string {
+	if port <= 0 {
+		port = 18545
+	}
+
+	t = regexp.MustCompile(`(?m)^\s*#?\s*httpFullNodeEnable\s*=\s*(true|false)\s*$`).
+		ReplaceAllString(t, "    httpFullNodeEnable = true")
+	t = regexp.MustCompile(`(?m)^\s*#?\s*httpFullNodePort\s*=\s*\d+\s*$`).
+		ReplaceAllString(t, fmt.Sprintf("    httpFullNodePort = %d", port))
+
+	if !regexp.MustCompile(`(?m)^\s*httpFullNodeEnable\s*=\s*true\s*$`).MatchString(t) {
+		if strings.Contains(t, "jsonrpc {") {
+			t = strings.Replace(t, "jsonrpc {", fmt.Sprintf("jsonrpc {\n    httpFullNodeEnable = true\n    httpFullNodePort = %d", port), 1)
+		} else if strings.Contains(t, "node {") {
+			t = strings.Replace(t, "node {", fmt.Sprintf("node {\n  jsonrpc {\n    httpFullNodeEnable = true\n    httpFullNodePort = %d\n  }", port), 1)
+		}
 	}
 
 	return t

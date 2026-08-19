@@ -197,6 +197,8 @@ rate.limiter = {
 		"global.qps = 200000",
 		"global.ip.qps = 200000",
 		"apiNonBlocking = true",
+		"httpFullNodeEnable = true",
+		"httpFullNodePort = 18545",
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in:\n%s", want, s)

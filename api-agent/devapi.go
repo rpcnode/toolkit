@@ -105,6 +105,8 @@ func (s *Server) handleDevAPI(w http.ResponseWriter, r *http.Request) {
 		s.proxySystemAgentMethod(w, r, "/v1/client/update", http.MethodPost, nil, 30*time.Second)
 	case path == "/api/v1/node/restart":
 		s.proxySystemAgentMethod(w, r, "/v1/node/restart", http.MethodPost, nil, 60*time.Second)
+	case path == "/api/v1/node/stop":
+		s.proxySystemAgentMethod(w, r, "/v1/node/stop", http.MethodPost, nil, 60*time.Second)
 	case path == "/api/v1/node/config":
 		s.handleDevNodeConfig(w, r)
 	case path == "/api/v1/events":
@@ -152,6 +154,7 @@ func (s *Server) handleDevOpenAPI(w http.ResponseWriter, r *http.Request) {
 			{"method": "POST", "path": "/api/v1/client/check", "desc": "Refresh latest (native catalog; CDN override if artifact_url set)"},
 			{"method": "POST", "path": "/api/v1/client/update", "desc": "Apply client update (Go RPC sleep → replace → start)", "body": true},
 			{"method": "POST", "path": "/api/v1/node/restart", "desc": "Soft-restart fullnode (Go RPC sleep → systemctl stop→start / ExecStop → wake)"},
+			{"method": "POST", "path": "/api/v1/node/stop", "desc": "Soft-stop fullnode (Go RPC sleep → CLI/RPC then systemctl stop; stays down until Restart)"},
 			{"method": "GET", "path": "/api/v1/node/config", "desc": "Leaf chain config documents + field schema (per network)"},
 			{"method": "PUT", "path": "/api/v1/node/config", "desc": "Save config (confirm=true) then soft stop→start", "body": true},
 			{"method": "GET", "path": "/api/v1/events?limit=50", "desc": "Recent notification events (newest first)"},

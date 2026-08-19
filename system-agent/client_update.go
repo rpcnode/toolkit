@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -33,7 +31,7 @@ type clientManifest struct {
 	SHA256             string `json:"sha256"`
 	SHA256Aarch64      string `json:"sha256_aarch64"`
 	NeedsConfPatch     bool   `json:"needs_conf_patch"`
-	ArtifactKind       string `json:"artifact_kind"` // jar | binary | archive
+	ArtifactKind       string `json:"artifact_kind"` // jar | bin | tarball | zip | apt
 	Notes              string `json:"notes"`
 }
 
@@ -159,6 +157,7 @@ func (c *ClientUpdateController) fetchChannel() (ver string, man clientManifest,
 	man = clientManifest{
 		Version:        rel.Version,
 		ArtifactURL:    rel.ArtifactURL,
+		SHA256:         rel.SHA256,
 		NeedsConfPatch: rel.NeedsConfPatch,
 		ArtifactKind:   rel.ArtifactKind,
 		Notes:          rel.Notes,
@@ -313,14 +312,9 @@ func (c *ClientUpdateController) Apply() (map[string]any, error) {
 		c.mu.Unlock()
 		return nil, fmt.Errorf("host tip has no chain client — use per-node agent")
 	}
-	net := strings.ToLower(strings.TrimSpace(c.cfg.Network))
-	if net == "" {
-		net = "tron"
-	}
-	if net != "tron" {
-		// First ship: tron apply path; others check-only until per-network downloaders land.
+	if len(cfgNodeUnits(c.cfg)) == 0 {
 		c.mu.Unlock()
-		return nil, fmt.Errorf("client update apply not implemented for network %q yet (check works)", net)
+		return nil, fmt.Errorf("node unit unknown")
 	}
 	c.busy = true
 	st := c.load()
@@ -363,28 +357,24 @@ func (c *ClientUpdateController) runApply() {
 		set("error", "channel fetch failed", 0, err.Error())
 		return
 	}
-	if strings.TrimSpace(man.ArtifactURL) == "" {
-		set("error", "client catalog missing artifact_url for "+c.cfg.Network+"/"+c.cfg.Env, 0, "no artifact_url")
+	kind := guessArtifactKind(man.ArtifactKind, man.urlForHost())
+	if strings.TrimSpace(man.urlForHost()) == "" || kind == "apt" || kind == "docker_extract" {
+		set("error", "no downloadable client artifact for "+c.cfg.Network+"/"+c.cfg.Env+" (catalog is "+kind+" / empty url)", 0, "no artifact_url")
 		return
 	}
 	latest = normalizeClientVersion(latest)
 
-	// Order MUST be: sleep RPC → stop fullnode → wait dead → replace client → start → wake.
-	// Never download/replace while the node unit is still running.
+	units := cfgNodeUnits(c.cfg)
+	label := strings.Join(units, ", ")
+
+	// Order MUST be: sleep RPC → graceful stop → wait dead → replace client → start → wake.
 	if c.ctrl != nil {
 		_ = c.ctrl.SetMaintenanceEx(c.cfg, true, "client update "+latest+" — RPC paused", "client_update")
 	}
 	set("updating", "RPC sleep (maintenance)", 10, "")
 
-	unit := strings.TrimSuffix(c.cfg.NodeService, ".service")
-	if unit == "" {
-		np := LookupNetworkProfile(c.cfg.Network, c.cfg.Env)
-		unit = strings.TrimSuffix(np.ServiceUnit(), ".service")
-	}
-
-	set("updating", "stopping fullnode "+unit, 20, "")
-	_ = exec.Command("systemctl", "stop", unit).Run()
-	if err := waitUnitStopped(unit, 90*time.Second); err != nil {
+	set("updating", "soft-stopping "+label, 20, "")
+	if err := stopNodeUnits(c.cfg, cfgStopBudget(c.cfg.Network)); err != nil {
 		set("error", "fullnode did not stop: "+err.Error(), 25, err.Error())
 		if c.ctrl != nil {
 			_ = c.ctrl.SetMaintenanceEx(c.cfg, false, "", "")
@@ -395,7 +385,7 @@ func (c *ClientUpdateController) runApply() {
 
 	if err := c.installArtifact(man); err != nil {
 		set("error", "install failed: "+err.Error(), 45, err.Error())
-		_ = exec.Command("systemctl", "start", unit).Run()
+		_ = startNodeUnits(c.cfg)
 		if c.ctrl != nil {
 			_ = c.ctrl.SetMaintenanceEx(c.cfg, false, "", "")
 		}
@@ -405,14 +395,12 @@ func (c *ClientUpdateController) runApply() {
 		set("updating", "patching node conf for new client", 60, "")
 		if err := c.patchTronConfIfNeeded(); err != nil {
 			log.Printf("client_update conf patch: %v", err)
-			// non-fatal — continue start
 		}
 	}
 
-	// 4) Start node.
-	set("starting", "starting "+unit, 75, "")
-	if out, err := exec.Command("systemctl", "start", unit).CombinedOutput(); err != nil {
-		set("error", "start failed: "+err.Error()+" — "+strings.TrimSpace(string(out)), 75, err.Error())
+	set("starting", "starting "+label, 75, "")
+	if err := startNodeUnits(c.cfg); err != nil {
+		set("error", "start failed: "+err.Error(), 75, err.Error())
 		if c.ctrl != nil {
 			_ = c.ctrl.SetMaintenanceEx(c.cfg, false, "", "")
 		}
@@ -463,23 +451,31 @@ func waitUnitStopped(unit string, timeout time.Duration) error {
 }
 
 func (c *ClientUpdateController) installArtifact(man clientManifest) error {
-	net := strings.ToLower(strings.TrimSpace(c.cfg.Network))
-	if net == "" {
-		net = "tron"
-	}
-	switch net {
-	case "tron":
-		return c.installTronJar(man)
+	url := man.urlForHost()
+	kind := guessArtifactKind(man.ArtifactKind, url)
+	switch kind {
+	case "apt", "docker_extract":
+		return fmt.Errorf("client is %s-managed — no artifact to replace", kind)
+	case "jar":
+		return c.downloadVerified(url, c.clientJarPath(), 0644, man.shaForHost())
+	case "tarball", "zip":
+		return c.installFromArchive(man)
 	default:
-		return fmt.Errorf("install not implemented for %s", net)
+		dest := c.clientBinPath()
+		if err := c.downloadVerified(url, dest, 0755, man.shaForHost()); err != nil {
+			return err
+		}
+		c.refreshClientLinks(dest)
+		return nil
 	}
 }
 
 func (c *ClientUpdateController) tronJarPath() string {
+	opt := c.optDir()
 	candidates := []string{
-		filepath.Join(c.cfg.OptDir, "FullNode.jar"),
-		filepath.Join(c.cfg.OptDir, "java-tron.jar"),
-		filepath.Join(c.cfg.OptDir, "FullNode", "FullNode.jar"),
+		filepath.Join(opt, "FullNode.jar"),
+		filepath.Join(opt, "java-tron.jar"),
+		filepath.Join(opt, "FullNode", "FullNode.jar"),
 	}
 	for _, p := range candidates {
 		if fileExists(p) {
@@ -487,51 +483,10 @@ func (c *ClientUpdateController) tronJarPath() string {
 		}
 	}
 	// Default install location even if missing (first write).
-	return filepath.Join(c.cfg.OptDir, "FullNode.jar")
-}
-
-func (c *ClientUpdateController) installTronJar(man clientManifest) error {
-	dest := c.tronJarPath()
-	_ = ensureDir(filepath.Dir(dest))
-	tmp := dest + ".tmp"
-	client := &http.Client{Timeout: 30 * time.Minute}
-	resp, err := client.Get(man.urlForHost())
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		return fmt.Errorf("download HTTP %d", resp.StatusCode)
-	}
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	h := sha256.New()
-	w := io.MultiWriter(f, h)
-	if _, err := io.Copy(w, resp.Body); err != nil {
-		_ = f.Close()
-		_ = os.Remove(tmp)
-		return err
-	}
-	_ = f.Close()
-	sum := hex.EncodeToString(h.Sum(nil))
-	if want := strings.ToLower(man.shaForHost()); want != "" && want != sum {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("sha256 mismatch: got %s want %s", sum, want)
-	}
-	bak := dest + ".bak"
-	_ = os.Rename(dest, bak)
-	if err := os.Rename(tmp, dest); err != nil {
-		_ = os.Rename(bak, dest)
-		return err
-	}
-	return nil
+	return filepath.Join(opt, "FullNode.jar")
 }
 
 func (c *ClientUpdateController) patchTronConfIfNeeded() error {
-	// Soft touch: ensure high-load knobs stay present after jar swap.
-	// Full conf rewrite is network DESIGN territory — keep additive.
 	conf := filepath.Join(c.cfg.EtcDir, "config.conf")
 	if !fileExists(conf) {
 		conf = filepath.Join(c.cfg.EtcDir, "main_net_config.conf")
@@ -539,8 +494,15 @@ func (c *ClientUpdateController) patchTronConfIfNeeded() error {
 	if !fileExists(conf) {
 		return fmt.Errorf("tron conf not found under %s", c.cfg.EtcDir)
 	}
-	// Marker only — real knobs already baked at provision; log for operators.
-	log.Printf("client_update: tron conf present at %s (needs_conf_patch noted; knobs from provision retained)", conf)
+
+	changed, err := ensureTronJSONRPCConfFile(conf, c.cfg.Env)
+	if err != nil {
+		return err
+	}
+	if changed {
+		log.Printf("client_update: enabled jsonrpc in %s (restart java-tron to listen)", conf)
+	}
+
 	return nil
 }
 

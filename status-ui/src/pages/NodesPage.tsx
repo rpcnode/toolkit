@@ -23,6 +23,7 @@ import {
   IconArrowRight,
   IconAlertTriangle,
   IconTrash,
+  IconPlayerStop,
   IconRefresh,
   IconFileText,
   IconList,
@@ -57,6 +58,7 @@ import {
   splitStepHeadline,
   isForeignTronDiskError,
   nodeRestartAllowed,
+  nodeStopAllowed,
   type NodeLifecycle,
 } from '../lib/nodeLifecycle'
 import { formatClientVersion } from '../lib/format'
@@ -236,7 +238,10 @@ function lifecycleFromDB(w: Workload): NodeLifecycle {
           ? 'teal'
           : phase === 'error'
             ? 'red'
-            : phase === 'installing' || phase === 'updating' || phase === 'restarting'
+            : phase === 'installing' ||
+                phase === 'updating' ||
+                phase === 'restarting' ||
+                phase === 'stopping'
               ? 'yellow'
               : phase === 'syncing'
                 ? 'cyan'
@@ -244,7 +249,10 @@ function lifecycleFromDB(w: Workload): NodeLifecycle {
       busy:
         phase === 'working'
           ? false
-          : !!w.lifecycle_busy || phase === 'updating' || phase === 'restarting',
+          : !!w.lifecycle_busy ||
+            phase === 'updating' ||
+            phase === 'restarting' ||
+            phase === 'stopping',
       // Collector stores lifecycle.pct (sync) in snapshot_progress for all networks.
       progress: w.snapshot_progress ?? undefined,
       height: w.height ?? null,
@@ -287,6 +295,8 @@ const READINESS_RANK: Record<string, number> = {
   installing: 2,
   updating: 3,
   restarting: 4,
+  stopping: 4,
+  stopped: 7,
   starting: 5,
   syncing: 6,
   error: 7,
@@ -1176,6 +1186,8 @@ function NodeCardView({
   const [clientOpen, setClientOpen] = useState(false)
   const [restartBusy, setRestartBusy] = useState(false)
   const [restartOpen, setRestartOpen] = useState(false)
+  const [stopBusy, setStopBusy] = useState(false)
+  const [stopOpen, setStopOpen] = useState(false)
   const [logsOpen, setLogsOpen] = useState(false)
   const [logsStatus, setLogsStatus] = useState<StatusPayload | null>(null)
   const [logsLoading, setLogsLoading] = useState(false)
@@ -1214,6 +1226,23 @@ function NodeCardView({
       notifications.show({ color: 'red', message: String((err as Error).message || err) })
     } finally {
       setClientBusy(false)
+    }
+  }
+
+  async function confirmNodeStop() {
+    setStopBusy(true)
+    try {
+      const res = await api.nodeStop({ node: id })
+      if (!res.ok) throw new Error(res.error || 'stop failed')
+      notifications.show({
+        color: 'teal',
+        message: res.node_restart?.detail || 'Node stop started (RPC sleep)',
+      })
+      setStopOpen(false)
+    } catch (err) {
+      notifications.show({ color: 'red', message: String((err as Error).message || err) })
+    } finally {
+      setStopBusy(false)
     }
   }
 
@@ -1294,6 +1323,26 @@ function NodeCardView({
             }}
           >
             Restart
+          </Button>
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            color="gray"
+            leftSection={<IconPlayerStop size={12} />}
+            loading={stopBusy}
+            disabled={
+              isRemoving ||
+              !nodeStopAllowed(
+                { status: model.status, agent_port: model.agentPort },
+                phase,
+              )
+            }
+            onClick={(e) => {
+              e.stopPropagation()
+              setStopOpen(true)
+            }}
+          >
+            Stop
           </Button>
           <Button
             size="compact-xs"
@@ -1404,12 +1453,21 @@ function NodeCardView({
                 lineClamp={1}
                 title={clientLabel}
                 style={
-                  clientKnown && phase !== 'updating' && phase !== 'restarting'
+                  clientKnown &&
+                  phase !== 'updating' &&
+                  phase !== 'restarting' &&
+                  phase !== 'stopping'
                     ? { cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3 }
                     : undefined
                 }
                 onClick={(e) => {
-                  if (!clientKnown || phase === 'updating' || phase === 'restarting') return
+                  if (
+                    !clientKnown ||
+                    phase === 'updating' ||
+                    phase === 'restarting' ||
+                    phase === 'stopping'
+                  )
+                    return
                   e.stopPropagation()
                   setClientOpen(true)
                 }}
@@ -1423,10 +1481,13 @@ function NodeCardView({
                 variant="light"
                 size="sm"
                 style={{
-                  cursor: phase === 'updating' || phase === 'restarting' ? 'default' : 'pointer',
+                  cursor:
+                    phase === 'updating' || phase === 'restarting' || phase === 'stopping'
+                      ? 'default'
+                      : 'pointer',
                 }}
                 onClick={(e) => {
-                  if (phase === 'updating' || phase === 'restarting') return
+                  if (phase === 'updating' || phase === 'restarting' || phase === 'stopping') return
                   e.stopPropagation()
                   setClientOpen(true)
                 }}
@@ -1458,6 +1519,16 @@ function NodeCardView({
           {phase === 'restarting' ? (
             <Text size="xs" c="yellow.4" mt={4}>
               Restarting… public RPC sleeping (503)
+            </Text>
+          ) : null}
+          {phase === 'stopping' ? (
+            <Text size="xs" c="yellow.4" mt={4}>
+              Stopping… public RPC sleeping (503)
+            </Text>
+          ) : null}
+          {phase === 'stopped' ? (
+            <Text size="xs" c="dimmed" mt={4}>
+              Stopped — Restart to start
             </Text>
           ) : null}
         </div>
@@ -1575,6 +1646,40 @@ function NodeCardView({
             onClick={() => void confirmNodeRestart()}
           >
             Restart fullnode
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+
+    <Modal
+      opened={stopOpen}
+      onClose={() => (!stopBusy ? setStopOpen(false) : undefined)}
+      title="Stop fullnode?"
+      centered
+      onClick={(e) => e.stopPropagation()}
+    >
+      <Stack gap="md">
+        <Text size="sm">
+          Soft-stop{' '}
+          <Text span fw={700}>
+            {network}/{env}
+          </Text>
+          . Same graceful stop as Restart. Public Go RPC sleeps (503) until you Restart.
+        </Text>
+        <Alert color="yellow" variant="light" icon={<IconAlertTriangle size={16} />}>
+          The unit stays down. Chain data is not wiped.
+        </Alert>
+        <Group justify="flex-end">
+          <Button variant="default" disabled={stopBusy} onClick={() => setStopOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            color="yellow"
+            loading={stopBusy}
+            leftSection={<IconPlayerStop size={14} />}
+            onClick={() => void confirmNodeStop()}
+          >
+            Stop fullnode
           </Button>
         </Group>
       </Stack>

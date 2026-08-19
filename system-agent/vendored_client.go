@@ -15,6 +15,7 @@ type vendoredManifest struct {
 	Tag                string `json:"tag"`
 	ArtifactURL        string `json:"artifact_url"`
 	ArtifactURLAarch64 string `json:"artifact_url_aarch64"`
+	SHA256             string `json:"sha256"`
 	ConfURL            string `json:"conf_url"`
 	ArtifactKind       string `json:"artifact_kind"`
 	NeedsConfPatch     bool   `json:"needs_conf_patch"`
@@ -77,6 +78,7 @@ func parseVendoredManifest(network, env, installBase string, raw []byte) (Client
 		Version:        normalizeClientVersion(firstNonEmptyStr(man.Version, man.Tag)),
 		Tag:            strings.TrimSpace(man.Tag),
 		ArtifactURL:    jar,
+		SHA256:         strings.TrimSpace(man.SHA256),
 		ConfURL:        conf,
 		ArtifactKind:   kind,
 		NeedsConfPatch: man.NeedsConfPatch,
