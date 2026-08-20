@@ -3,11 +3,54 @@
   "feed": "https://toolkit.rpcnode.dev/install/VERSIONS.json",
   "releases": [
     {
-      "version": "0.4.214",
-      "date": "2026-08-19",
-      "title": "Release 0.4.214",
+      "version": "0.4.219",
+      "date": "2026-08-20",
+      "title": "Release 0.4.219",
       "notes": [
         "Shipped via update-remote-agent.sh --publish."
+      ]
+    },
+    {
+      "version": "0.4.218",
+      "date": "2026-08-20",
+      "title": "Node Debug compiles + all-network parsers",
+      "notes": [
+        "Fix api-agent build: node_debug.go imports net/http.",
+        "Node page bug icon → tip GET /api/v1/nodes/debug. Host apt/disk/audit + per-network units, missing conf, known log signals, tails. Read-only — no heal / apt-get / ufw / shell."
+      ]
+    },
+    {
+      "version": "0.4.217",
+      "date": "2026-08-20",
+      "title": "Release 0.4.217",
+      "notes": [
+        "Shipped via update-remote-agent.sh --publish."
+      ]
+    },
+    {
+      "version": "0.4.216",
+      "date": "2026-08-20",
+      "title": "Node Debug: host + network errors in the panel",
+      "notes": [
+        "Node page bug icon → tip GET /api/v1/nodes/debug. Host: leftover apt, disk, audit. Per network: units, conf missing, known log signals (TON apt/install.sh, XRPL UNL/NuDB, TRON LOCK, Solana, Cardano Mithril, Core conf, EVM/L2 snapshot, Stellar, Sui/Aptos/Avalanche) + log tails.",
+        "Read-only. No apt-get, no ufw, no remote shell, no heal from the button."
+      ]
+    },
+    {
+      "version": "0.4.215",
+      "date": "2026-08-20",
+      "title": "TON bootstrap: broken apt repo ≠ lock",
+      "notes": [
+        "install.sh exit 100 from a 404 apt source (ookla speedtest on noble) is not dpkg busy — disable the list and stop the 8h restart loop.",
+        "Bootstrap UI prefers aria2 dump % over a stale install.sh attempt/exit in the last 80 log lines."
+      ]
+    },
+    {
+      "version": "0.4.214",
+      "date": "2026-08-20",
+      "title": "Check ports: no lsof hang on a busy host",
+      "notes": [
+        "Second node on a host with a live fullnode (Solana): check-ports no longer runs lsof after empty ss. One timed ss -lntp snapshot. Panel timeout is not shown as Ports busy."
       ]
     },
     {

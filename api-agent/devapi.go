@@ -173,6 +173,7 @@ func (s *Server) handleDevOpenAPI(w http.ResponseWriter, r *http.Request) {
 			{"method": "POST", "path": "/api/v1/nodes/provision", "desc": "Create env dirs + systemd api-agent for env", "body": true},
 			{"method": "POST", "path": "/api/v1/nodes/start", "desc": "Start node unit after install/snapshot ready", "body": true},
 			{"method": "POST", "path": "/api/v1/nodes/remove", "desc": "Remove order: (1) stop node+Go RPC proxy (2) async wipe files (3) remove per-node agents. Tip host Server never stopped. ACK after phase 1.", "body": true},
+			{"method": "GET", "path": "/api/v1/nodes/debug", "desc": "Read-only host+network diagnose (apt leftovers, units, parsed errors, log tails). ?network=&env=. No heal / no apt-get / no shell"},
 			{"method": "POST", "path": "/api/v1/networks/{network}/envs/{env}/remove", "desc": "Network-scoped remove {delete_files}; phase-1 stop ACK then async wipe; tip untouched", "body": true},
 			{"method": "POST", "path": "/api/v1/networks/{network}/envs/{env}/start", "desc": "Network-scoped start", "body": true},
 			{"method": "POST", "path": "/api/v1/networks/{network}/envs/{env}/provision", "desc": "Network-scoped provision", "body": true},

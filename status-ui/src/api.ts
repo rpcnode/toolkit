@@ -308,6 +308,47 @@ export type ServerLogsResponse = {
   message?: string
 }
 
+/** Tip GET /api/v1/nodes/debug via panel (read-only host + network diagnose). */
+export type NodeDebugFinding = {
+  severity?: 'error' | 'warn' | 'info' | 'ok' | string
+  scope?: 'host' | 'network' | string
+  code?: string
+  title?: string
+  detail?: string
+  hint?: string
+}
+
+export type NodeDebugLog = {
+  id?: string
+  label?: string
+  path?: string
+  lines?: string[]
+  note?: string
+}
+
+export type NodeDebugUnit = {
+  name?: string
+  active?: string
+  sub?: string
+  result?: string
+  nrestarts?: number
+}
+
+export type NodeDebugReport = {
+  ok?: boolean
+  network?: string
+  env?: string
+  collected_at?: string
+  error_count?: number
+  warn_count?: number
+  findings?: NodeDebugFinding[]
+  units?: NodeDebugUnit[]
+  procs?: string[]
+  logs?: NodeDebugLog[]
+  error?: string
+  message?: string
+}
+
 export type ClientUpdateInfo = {
   local?: string
   latest?: string
@@ -614,6 +655,21 @@ export const api = {
       network?: string
       env?: string
     }
+    if (!res.ok) {
+      return { ...data, ok: false }
+    }
+    return data
+  },
+  workloadsDebug: async (opts: { server_id: string; network: string; env: string }) => {
+    const q = new URLSearchParams()
+    q.set('server_id', opts.server_id)
+    q.set('network', opts.network)
+    q.set('env', opts.env)
+    const res = await fetch(`/api/workloads/debug?${q.toString()}`, {
+      credentials: 'include',
+      cache: 'no-store',
+    })
+    const data = (await res.json().catch(() => ({}))) as NodeDebugReport
     if (!res.ok) {
       return { ...data, ok: false }
     }

@@ -16,6 +16,7 @@ import {
 import {
   IconAlertTriangle,
   IconArrowLeft,
+  IconBug,
   IconCopy,
   IconFileText,
   IconPlayerPlay,
@@ -39,6 +40,7 @@ import {
   showAgentLogsPanel,
 } from '../components/AgentLogsPanel'
 import { ServerLogsModal } from '../components/ServerLogsModal'
+import { NodeDebugModal } from '../components/NodeDebugModal'
 import {
   SyncStatusCard,
   showSyncStatusCard,
@@ -204,6 +206,7 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
   const [clientBusy, setClientBusy] = useState(false)
   const [clientStarted, setClientStarted] = useState(false)
   const [logsOpen, setLogsOpen] = useState(false)
+  const [debugOpen, setDebugOpen] = useState(false)
   // Never default network=tron — that briefly forwarded TRON disk/snapshot_error
   // onto BSC/bitcoin leaf agents before workload loaded.
   const network =
@@ -641,6 +644,19 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
               <IconFileText size={16} />
             </ActionIcon>
           </Tooltip>
+          {workload?.server_id && network && env ? (
+            <Tooltip label="Debug — host and network errors">
+              <ActionIcon
+                size="md"
+                variant="light"
+                color="gray"
+                aria-label="Debug"
+                onClick={() => setDebugOpen(true)}
+              >
+                <IconBug size={16} />
+              </ActionIcon>
+            </Tooltip>
+          ) : null}
           {workloadId && (
             <Button
               size="xs"
@@ -921,6 +937,17 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
             void tick()
             void reloadWorkload({ soft: true })
           }}
+        />
+      ) : null}
+
+      {workload?.server_id && network && env ? (
+        <NodeDebugModal
+          opened={debugOpen}
+          onClose={() => setDebugOpen(false)}
+          serverId={workload.server_id}
+          network={network}
+          env={env}
+          title={`Debug · ${workload.name || `${network}/${env}`}`}
         />
       ) : null}
 

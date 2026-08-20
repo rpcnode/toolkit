@@ -105,6 +105,8 @@ func (s *Server) handleNodesV1(w http.ResponseWriter, r *http.Request) {
 		s.handleNodesStart(w, r)
 	case path == "/api/v1/nodes/remove" && r.Method == http.MethodPost:
 		s.handleNodesRemove(w, r)
+	case path == "/api/v1/nodes/debug" && r.Method == http.MethodGet:
+		s.handleNodesDebug(w, r)
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not_found"})
 	}

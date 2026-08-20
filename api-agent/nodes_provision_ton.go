@@ -220,6 +220,7 @@ EnvironmentFile=-%s
 ExecStart=%s
 TimeoutStartSec=0
 Restart=on-failure
+RestartPreventExitStatus=2
 RestartSec=60
 Nice=10
 LimitNOFILE=1048576
@@ -449,6 +450,38 @@ wait_apt_lock() {
   done
 }
 
+# apt-get update exit 100 is also "repo has no Release file" (ookla speedtest 404
+# on noble). That is not a dpkg lock — do not retry for hours.
+disable_broken_apt_release_sources() {
+  local err urc f host
+  set +e
+  err="$(apt-get update -y 2>&1)"
+  urc=$?
+  set -e
+  printf '%%s\n' "$err"
+  if [[ $urc -eq 0 ]] || ! printf '%%s\n' "$err" | grep -qi 'does not have a Release file'; then
+    return 0
+  fi
+  echo "disabling apt lists that 404 (no Release file)"
+  for f in /etc/apt/sources.list.d/*.list; do
+    [[ -f "$f" ]] || continue
+    if printf '%%s\n' "$err" | grep -qiE 'ookla|speedtest-cli' && grep -qiE 'ookla|speedtest-cli' "$f"; then
+      echo "disable $f"
+      mv -f "$f" "${f}.rpcnode-disabled"
+      continue
+    fi
+    while IFS= read -r host; do
+      [[ -n "$host" ]] || continue
+      if grep -q "$host" "$f"; then
+        echo "disable $f (host $host)"
+        mv -f "$f" "${f}.rpcnode-disabled"
+        break
+      fi
+    done < <(printf '%%s\n' "$err" | grep -E '^Err:[0-9]+' | grep -oE 'https://[^/]+' | sed 's|https://||' | sort -u)
+  done
+  apt-get update -y || true
+}
+
 mkdir -p "$DATA" "$ETC" "$LOG_DIR"
 exec >>"$LOG" 2>&1
 echo "[$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)] ton bootstrap start env=$ENV chain=$CHAIN"
@@ -467,7 +500,7 @@ export DEBIAN_FRONTEND=noninteractive
 export HOME="${HOME:-/root}"
 export USER="${USER:-root}"
 wait_apt_lock
-apt-get update -y || true
+disable_broken_apt_release_sources
 wait_apt_lock
 apt-get install -y curl wget git ca-certificates python3-pip || true
 
@@ -498,8 +531,19 @@ while (( attempt <= 5 )); do
   if [[ $rc -eq 0 ]]; then
     break
   fi
-  if [[ $rc -eq 100 ]] || grep -q 'Could not get lock /var/lib/dpkg' "$LOG" 2>/dev/null; then
-    echo "apt/dpkg busy — retry in 60s (attempt $attempt/5)"
+  if grep -qi 'does not have a Release file' "$LOG" 2>/dev/null; then
+    echo "apt repo 404 (no Release file) — not a dpkg lock"
+    disable_broken_apt_release_sources
+    if [[ "${HEALED_APT:-0}" -eq 0 ]]; then
+      HEALED_APT=1
+      attempt=$((attempt + 1))
+      continue
+    fi
+    echo "apt still broken after disabling 404 sources — exit 2 (no restart loop)"
+    exit 2
+  fi
+  if grep -qiE 'Could not get lock /var/lib/dpkg|Unable to acquire the dpkg frontend lock' "$LOG" 2>/dev/null; then
+    echo "apt/dpkg lock — retry in 60s (attempt $attempt/5)"
     sleep 60
     attempt=$((attempt + 1))
     continue

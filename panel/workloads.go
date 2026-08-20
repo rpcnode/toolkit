@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,6 +42,8 @@ func (s *Server) handleWorkloadsAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleWorkloadPortHolder(w, r)
 	case path == "/api/workloads/host-disks" && r.Method == http.MethodGet:
 		s.handleWorkloadHostDisks(w, r)
+	case path == "/api/workloads/debug" && r.Method == http.MethodGet:
+		s.handleWorkloadDebug(w, r)
 	case path == "/api/workloads/provision" && r.Method == http.MethodPost:
 		s.handleWorkloadProvision(w, r)
 	case path == "/api/workloads/start" && r.Method == http.MethodPost:
@@ -738,6 +741,63 @@ func (s *Server) handleWorkloadHostDisks(w http.ResponseWriter, r *http.Request)
 		agent["ok"] = false
 		if _, has := agent["error"]; !has {
 			agent["error"] = "host_disks_failed"
+		}
+		writeJSON(w, resp.StatusCode, agent)
+		return
+	}
+	if agent == nil {
+		agent = map[string]any{"ok": true}
+	}
+	writeJSON(w, http.StatusOK, agent)
+}
+
+// handleWorkloadDebug — tip GET /api/v1/nodes/debug?network=&env= (read-only).
+func (s *Server) handleWorkloadDebug(w http.ResponseWriter, r *http.Request) {
+	serverID := strings.TrimSpace(r.URL.Query().Get("server_id"))
+	network := strings.TrimSpace(r.URL.Query().Get("network"))
+	env := strings.TrimSpace(r.URL.Query().Get("env"))
+	if serverID == "" || network == "" || env == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"ok": false, "error": "server_network_env_required",
+		})
+		return
+	}
+	srv, ok := s.registry.Get(serverID)
+	if !ok || srv.AgentURL == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "server_not_found"})
+		return
+	}
+	q := url.Values{}
+	q.Set("network", network)
+	q.Set("env", env)
+	tipURL := strings.TrimRight(srv.AgentURL, "/") + "/api/v1/nodes/debug?" + q.Encode()
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, tipURL, nil)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	if srv.AgentKey != "" {
+		req.Header.Set("Authorization", "Bearer "+srv.AgentKey)
+		req.Header.Set("X-Api-Token", srv.AgentKey)
+	}
+	resp, err := s.client.Do(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{
+			"ok": false, "error": "agent_unreachable", "message": err.Error(),
+		})
+		return
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	var agent map[string]any
+	_ = json.Unmarshal(raw, &agent)
+	if resp.StatusCode >= 300 {
+		if agent == nil {
+			agent = map[string]any{}
+		}
+		agent["ok"] = false
+		if _, has := agent["error"]; !has {
+			agent["error"] = "debug_failed"
 		}
 		writeJSON(w, resp.StatusCode, agent)
 		return

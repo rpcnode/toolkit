@@ -1160,6 +1160,14 @@ func tonBootstrapPhaseDetail(cfg Config) string {
 	if tonBootstrapDone(cfg) && !tonBootstrapActive(cfg) {
 		return ""
 	}
+	// Dump % first. install.sh -d writes aria2 into the same log; a later
+	// "install.sh attempt/exit" in the last 80 lines used to hide real %.
+	if pct, detail := tonBootstrapDumpProgress(cfg); pct > 0 {
+		if detail != "" {
+			return fmt.Sprintf("MyTonCtrl dump %d%% · %s", pct, detail)
+		}
+		return fmt.Sprintf("MyTonCtrl dump %d%%", pct)
+	}
 	logPath := filepath.Join("/var/log/ton", cfg.Env, "bootstrap.log")
 	b, err := os.ReadFile(logPath)
 	if err == nil {
@@ -1185,8 +1193,6 @@ func tonBootstrapPhaseDetail(cfg Config) string {
 				return "MyTonCtrl bootstrap · verifying dump checksum"
 			case strings.Contains(low, "verification finished") || strings.Contains(low, "download complete"):
 				return "MyTonCtrl bootstrap · dump downloaded · extracting"
-			case strings.Contains(low, "install.sh attempt") || strings.Contains(low, "install.sh exit"):
-				return "MyTonCtrl bootstrap · running install.sh"
 			case strings.Contains(low, "mytoninstaller"):
 				return "MyTonCtrl bootstrap · mytoninstaller"
 			case strings.Contains(low, "bootstrap start"):
@@ -1194,11 +1200,8 @@ func tonBootstrapPhaseDetail(cfg Config) string {
 			}
 		}
 	}
-	if pct, detail := tonBootstrapDumpProgress(cfg); pct > 0 {
-		if detail != "" {
-			return fmt.Sprintf("MyTonCtrl dump %d%% · %s", pct, detail)
-		}
-		return fmt.Sprintf("MyTonCtrl dump %d%%", pct)
+	if tonBootstrapActive(cfg) {
+		return "MyTonCtrl bootstrap · running install.sh"
 	}
 	return ""
 }
