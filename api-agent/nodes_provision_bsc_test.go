@@ -53,6 +53,42 @@ func TestBscGethCacheCappedOnSmallRAM(t *testing.T) {
 	}
 }
 
+func TestRenderBSCSnapshotScript_OfficialFetch(t *testing.T) {
+	s := renderBSCSnapshotScript(
+		"mainnet", "/data/bsc/mainnet", "/data/bsc/mainnet/snapshots", "/opt/bsc/mainnet",
+		"/data/bsc/mainnet/.snapshot-ready", "/data/bsc/mainnet/.snapshot-state.json",
+		"/var/log/bsc/mainnet-snapshot.log", "pruned", "mainnet-geth-pbss",
+	)
+	for _, need := range []string{
+		"fetch-snapshot.sh",
+		" -p",
+		"--auto-delete",
+		"/data/bsc/mainnet/.snapshot-ready",
+		"rm -rf \"$DATA/geth\"",
+		"geth/chaindata",
+		"geth/chaindata/ancient/chain",
+		"bnb-chain/bsc-snapshots",
+		"aria2",
+		"lz4",
+		"SNAPSHOT_DIAG",
+		"snapdiag",
+		".snapshot-keep",
+		"pin_keep",
+	} {
+		if !strings.Contains(s, need) {
+			t.Fatalf("script missing %q:\n%s", need, s)
+		}
+	}
+	full := renderBSCSnapshotScript(
+		"mainnet", "/data/bsc/mainnet", "/data/bsc/mainnet/snapshots", "/opt/bsc/mainnet",
+		"/data/bsc/mainnet/.snapshot-ready", "/data/bsc/mainnet/.snapshot-state.json",
+		"/var/log/bsc/mainnet-snapshot.log", "full", "mainnet-geth-pbss",
+	)
+	if strings.Contains(full, " -p") {
+		t.Fatal("full flavor must not pass -p (pruneancient)")
+	}
+}
+
 func TestLookupBSCNetwork(t *testing.T) {
 	tn := lookupBSCNetwork("testnet")
 	if tn.ChainID != "97" || tn.WatchSlug != "bsc-testnet" || tn.ZipAsset != "testnet.zip" {

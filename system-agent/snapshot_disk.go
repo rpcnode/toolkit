@@ -42,7 +42,7 @@ func snapshotExtractMult(network string) float64 {
 	n := strings.EqualFold
 	name := strings.TrimSpace(network)
 	// Mithril writes files then moves db/ — not a second tarball copy.
-	if n(name, "tron") || n(name, "cardano") {
+	if n(name, "tron") || n(name, "cardano") || n(name, "bsc") {
 		return snapDiskStreamExtractMult
 	}
 	return snapDiskExtractMult
@@ -73,6 +73,9 @@ func requiredSnapshotFreeBytes(archiveBytes int64, network string) int64 {
 
 func defaultSnapshotArchiveBytes(network, env string) int64 {
 	np := LookupNetworkProfile(network, env)
+	if strings.EqualFold(strings.TrimSpace(network), "bsc") {
+		return bscSnapshotArchiveGiB(Config{Network: network, Env: env}) * bytesPerGiB
+	}
 	if strings.EqualFold(strings.TrimSpace(network), "cardano") {
 		// Aggregator is not a tarball — HEAD size is useless. Official latest
 		// cardano-db is ~150–180 GiB on mainnet; testnets much smaller.
@@ -114,7 +117,8 @@ func probeSnapshotContentLength(url string) (int64, string) {
 	// Mithril aggregator / formal-r2 are not a single archive file.
 	low := strings.ToLower(url)
 	if strings.Contains(low, "mithril.network") || strings.Contains(low, "/aggregator") ||
-		strings.HasPrefix(low, "formal-r2://") {
+		strings.HasPrefix(low, "formal-r2://") ||
+		strings.Contains(low, "bsc-snapshots") {
 		return 0, ""
 	}
 

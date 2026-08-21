@@ -78,6 +78,9 @@ func (c *SnapshotController) Start() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if strings.EqualFold(c.cfg.Network, "bsc") && recoverBSCSnapshotMarker(c.cfg) {
+		return fmt.Errorf("snapshot already ready (%s)", c.cfg.SnapshotMarker)
+	}
 	if fileExists(c.cfg.SnapshotMarker) {
 		return fmt.Errorf("snapshot already ready (%s)", c.cfg.SnapshotMarker)
 	}
@@ -85,8 +88,17 @@ func (c *SnapshotController) Start() error {
 	// oneshot units stay "activating" for the whole download (Sui formal / long TRON).
 	if unitState == "active" || unitState == "activating" || wgetRunning(c.cfg) ||
 		(strings.EqualFold(c.cfg.Network, "sui") && suiToolSnapshotRunning(c.cfg)) ||
-		(strings.EqualFold(c.cfg.Network, "cardano") && cardanoMithrilSnapshotRunning(c.cfg)) {
+		(strings.EqualFold(c.cfg.Network, "cardano") && cardanoMithrilSnapshotRunning(c.cfg)) ||
+		(strings.EqualFold(c.cfg.Network, "bsc") && bscOfficialSnapshotRunning(c.cfg)) {
 		return fmt.Errorf("snapshot already running")
+	}
+	if strings.EqualFold(c.cfg.Network, "bsc") {
+		bscSnapDiag(c.cfg, fmt.Sprintf("Start() before ensure unit=%s marker=%v ancient=%v running=%v",
+			unitState, fileExists(c.cfg.SnapshotMarker), bscOfficialExtractPresent(c.cfg.DataDir), bscOfficialSnapshotRunning(c.cfg)))
+		_ = ensureBSCSnapshotUnit(c.cfg)
+		prepareBSCSnapshotDatadir(c.cfg)
+		bscSnapDiag(c.cfg, fmt.Sprintf("Start() after prepare unit=%s marker=%v ancient=%v",
+			systemctlActive(c.cfg.SnapshotService), fileExists(c.cfg.SnapshotMarker), bscOfficialExtractPresent(c.cfg.DataDir)))
 	}
 	// Pre-start disk gate: free ≥ archive×mult + margin (TRON streams → ×1.0).
 	if err := checkSnapshotDiskSpace(c.cfg); err != nil {
@@ -97,6 +109,9 @@ func (c *SnapshotController) Start() error {
 		return err
 	}
 	unit := c.cfg.SnapshotService + ".service"
+	if strings.EqualFold(c.cfg.Network, "bsc") {
+		_ = exec.Command("systemctl", "reset-failed", unit).Run()
+	}
 	// --no-block: oneshot formal downloads (Sui) can run for hours; do not stall Start()/pipeline.
 	cmd := exec.Command("systemctl", "start", "--no-block", unit)
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -104,7 +119,8 @@ func (c *SnapshotController) Start() error {
 		st := systemctlActive(c.cfg.SnapshotService)
 		if st == "active" || st == "activating" ||
 			(strings.EqualFold(c.cfg.Network, "sui") && suiToolSnapshotRunning(c.cfg)) ||
-			(strings.EqualFold(c.cfg.Network, "cardano") && cardanoMithrilSnapshotRunning(c.cfg)) {
+			(strings.EqualFold(c.cfg.Network, "cardano") && cardanoMithrilSnapshotRunning(c.cfg)) ||
+			(strings.EqualFold(c.cfg.Network, "bsc") && bscOfficialSnapshotRunning(c.cfg)) {
 			c.writeSnapshotState("download", "started via API", "")
 			return nil
 		}
@@ -139,6 +155,9 @@ func (c *SnapshotController) Stop() error {
 	_ = exec.Command("systemctl", "stop", unit).Run()
 	// Best-effort: stop wget for THIS env only (shared archive basename across envs).
 	stopEnvSnapshotWget(c.cfg)
+	if strings.EqualFold(c.cfg.Network, "bsc") {
+		stopBSCSnapshotTools(c.cfg)
+	}
 	log.Printf("snapshot STOP requested")
 	c.writeSnapshotState("idle", "stopped via API", "")
 	return nil
@@ -172,6 +191,9 @@ func (c *SnapshotController) GuardDiskDuringDownload() {
 		unit := c.cfg.SnapshotService + ".service"
 		_ = exec.Command("systemctl", "stop", unit).Run()
 		stopEnvSnapshotWget(c.cfg)
+		if strings.EqualFold(c.cfg.Network, "bsc") {
+			stopBSCSnapshotTools(c.cfg)
+		}
 		c.writeSnapshotState("error", msg, msg)
 	}
 }
@@ -184,6 +206,9 @@ func snapshotUnitOrToolRunning(cfg Config) bool {
 		return true
 	}
 	if strings.EqualFold(cfg.Network, "cardano") && cardanoMithrilSnapshotRunning(cfg) {
+		return true
+	}
+	if strings.EqualFold(cfg.Network, "bsc") && bscOfficialSnapshotRunning(cfg) {
 		return true
 	}
 	return false

@@ -51,11 +51,12 @@ import {
   agentLifecycleStepAcked,
   nodeReadyForOps,
   snapshotBlockMessage,
+  snapReady,
   statusHonestlySynced,
   resolveCurrentStep,
   wizardStepFromAgentLifecycle,
 } from '../lib/nodeLifecycle'
-import { isXrplNetwork, supportsIbdStep, supportsSnapshotStep } from '../lib/network'
+import { isBscNetwork, isXrplNetwork, supportsIbdStep, supportsSnapshotStep } from '../lib/network'
 import { agentLogLines } from './AgentLogsPanel'
 import { DiskLayoutPanel } from './DiskLayoutPanel'
 import { HostDiskInsights } from './HostDiskInsights'
@@ -303,10 +304,6 @@ function stillSyncingInWizard(status: StatusPayload | null): boolean {
   return phase === 'run' || ns === 'syncing' || cur === 'run' || cur === 'ibd'
 }
 
-function snapReady(status: StatusPayload | null): boolean {
-  return !!status?.snapshot?.ready
-}
-
 function snapRunning(status: StatusPayload | null): boolean {
   const snap = status?.snapshot
   if (!snap) return false
@@ -395,7 +392,8 @@ export function NodeInstallWizard({
     (currentStep?.pct != null ? pct(currentStep.pct as number | string) : null)
   const syncingInWizard = stillSyncingInWizard(status)
 
-  const allowSnap = supportsSnapshotStep(status, workload?.network)
+  const allowSnap =
+    supportsSnapshotStep(status, workload?.network) || isBscNetwork(workload?.network)
   const steps = wizardSteps(allowSnap)
   const unitHint =
     (workload?.network || status?.lifecycle?.profile?.network || 'node').toLowerCase() +
@@ -1176,6 +1174,15 @@ export function NodeInstallWizard({
         if (!started.ok) {
           throw new Error(started.message || started.error || 'start failed')
         }
+        if ((started.action || started.agent?.action) === 'snapshot') {
+          pushLog('Start deferred — official snapshot running')
+          agentAckedStep.current = 'snapshot'
+          setUiStep('snapshot')
+          await setWlStatus('snapshot_running')
+          await onRefresh()
+          await onWorkloadUpdated?.()
+          return
+        }
         pushLog('Agent API ACK: start ok — waiting lifecycle…')
         const afterStart = await waitAgentLifecycleAck(agentTarget, 'start', {
           timeoutMs: 90_000,
@@ -1349,6 +1356,27 @@ export function NodeInstallWizard({
           await onWorkloadUpdated?.()
         } catch (e) {
           const msg = String((e as Error).message || e)
+          if (/snapshot_required|snapshot is required/i.test(msg)) {
+            pushLog('Start blocked — requesting official snapshot…')
+            try {
+              await api.snapshotStart(agentTarget)
+              agentAckedStep.current = 'snapshot'
+              setUiStep('snapshot')
+              await setWlStatus('snapshot_running')
+              nodeStartSent.current = false
+              await onRefresh()
+              await onWorkloadUpdated?.()
+              return
+            } catch (snapErr) {
+              const snapMsg = String((snapErr as Error).message || snapErr)
+              setError(snapMsg)
+              pushLog(`Snapshot start failed: ${snapMsg}`)
+              markInstallFail(snapMsg)
+              setRunning(false)
+              await onWorkloadUpdated?.()
+              return
+            }
+          }
           setError(msg)
           pushLog(`Start failed: ${msg}`)
           markInstallFail(msg)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -31,7 +32,11 @@ func maybeAppendTonProgressLog(cfg Config, syncing bool, info tonRPCInfo) {
 		line = fmt.Sprintf("%s seqno=%d tha=1 syncing=%d%s\n",
 			ts, info.Seqno, boolInt(syncing), pct)
 	case info.DumpPct > 0 && syncing:
-		line = fmt.Sprintf("%s dump_pct=%d tha=0 syncing=1%s\n", ts, info.DumpPct, pct)
+		extra := ""
+		if d := strings.TrimSpace(info.DumpDetail); d != "" {
+			extra = " " + d
+		}
+		line = fmt.Sprintf("%s dump_pct=%d tha=0%s syncing=1%s\n", ts, info.DumpPct, extra, pct)
 	default:
 		if !syncing {
 			return

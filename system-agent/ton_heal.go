@@ -21,6 +21,12 @@ var (
 
 const tonValidatorUnitFile = "/etc/systemd/system/validator.service"
 
+// Engine asks 1.5M; hard + kernel ceiling with headroom (4M / 8M).
+const (
+	tonValidatorNofile = 4194304
+	tonNrOpen          = 8388608
+)
+
 // tonCelldbCacheBytes — liteserver dump-apply RAM cap.
 // Default MyTonCtrl 1G is fine on small hosts; huge cache / preload-all OOMs
 // validator-engine right after dump (seqno stays 0).
@@ -108,6 +114,7 @@ func healTonValidatorMemoryCache(cache int64) (bool, error) {
 	// live mainnet validator (working set ≫ celldb cache). 85% of the host
 	// is the product cap; the OOM fix is celldb 1G + no preload-all.
 	_ = writeTonValidatorMemoryDropin("85%")
+	_ = ensureTonValidatorNofile()
 	anyChanged := false
 	for _, path := range tonValidatorUnitPaths() {
 		raw, err := os.ReadFile(path)
@@ -130,6 +137,36 @@ func healTonValidatorMemoryCache(cache int64) (bool, error) {
 		_ = exec.Command("systemctl", "daemon-reload").Run()
 	}
 	return anyChanged, nil
+}
+
+// validator-engine change_maximize_rlimit(nofile, 1572864).
+// Stock Ubuntu fs.nr_open=1048576 + LimitNOFILE=1048576 → PosixError EPERM setrlimit.
+// Headroom: 4M NOFILE / 8M nr_open. Drop-in + sysctl only — ❌ do not recycle mid-apply.
+func ensureTonValidatorNofile() error {
+	dir := "/etc/systemd/system/validator.service.d"
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(dir, "rpcnode-nofile.conf")
+	body := fmt.Sprintf("[Service]\nLimitNOFILE=%d\n", tonValidatorNofile)
+	prev, _ := os.ReadFile(path)
+	needReload := string(prev) != body
+	if needReload {
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			return err
+		}
+	}
+	_ = os.MkdirAll("/etc/sysctl.d", 0o755)
+	sysPath := "/etc/sysctl.d/99-rpcnode-ton.conf"
+	sysBody := fmt.Sprintf("fs.nr_open = %d\n", tonNrOpen)
+	if prev, _ := os.ReadFile(sysPath); string(prev) != sysBody {
+		_ = os.WriteFile(sysPath, []byte(sysBody), 0o644)
+	}
+	_ = exec.Command("sysctl", "-w", fmt.Sprintf("fs.nr_open=%d", tonNrOpen)).Run()
+	if needReload {
+		_ = exec.Command("systemctl", "daemon-reload").Run()
+	}
+	return nil
 }
 
 func writeTonValidatorMemoryDropin(memMax string) error {

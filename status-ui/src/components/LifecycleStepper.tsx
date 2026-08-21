@@ -234,14 +234,21 @@ export function LifecycleStepper({
   const active =
     steps.find((s) => s.active || s.status === 'active') ||
     (displayCurrent ? steps.find((s) => s.id === displayCurrent.id) : undefined)
+  const snapLive =
+    !!status?.snapshot?.wget_running ||
+    !!status?.snapshot?.busy ||
+    (status?.snapshot?.phase || '').toLowerCase() === 'download' ||
+    (status?.snapshot?.phase || '').toLowerCase() === 'extract' ||
+    (status?.snapshot?.phase || '').toLowerCase() === 'extracting'
   const showSnapProgress =
-    allowSnap &&
+    (allowSnap || snapLive) &&
     (lc?.phase || '').toLowerCase() !== 'working' &&
     (lc?.node_status || '').toLowerCase() !== 'online' &&
     !lc?.complete &&
     (active?.id === 'snapshot' ||
       displayCurrent?.id === 'snapshot' ||
-      lc?.phase === 'snapshot')
+      lc?.phase === 'snapshot' ||
+      snapLive)
   const curId = (displayCurrent?.id || active?.id || lc?.current || '').toLowerCase()
   const phaseLow = (lc?.phase || '').toLowerCase()
   const nodeStatusLow = (lc?.node_status || '').toLowerCase()
@@ -313,7 +320,8 @@ export function LifecycleStepper({
       'Loading…'
   const detail = displayCurrent?.detail || lc?.detail || active?.detail || ''
   if (progress <= 0) {
-    const fromDetail = parseSyncPctFromDetail(detail)
+    const fromDetail =
+      parseSyncPctFromDetail(detail) ?? parseSyncPctFromDetail(status?.snapshot?.detail)
     if (fromDetail != null && fromDetail > 0) {
       progress = fromDetail
     }

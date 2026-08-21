@@ -25,6 +25,9 @@ func hostPackagesForNetwork(network string) []string {
 		extra = []string{"openjdk-8-jre-headless"}
 	case "ton":
 		extra = []string{"git", "python3-pip"}
+	case "bsc":
+		// Official fetch-snapshot.sh: aria2c parts + tar -I lz4.
+		extra = []string{"aria2", "lz4"}
 	case "solana":
 		// bzip2 = CLI tarball. Rest = Anza v3+ source build (tarball has no agave-validator).
 		extra = []string{

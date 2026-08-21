@@ -338,6 +338,15 @@ export function nodeReadyForOps(status: StatusPayload | null | undefined): boole
   return false
 }
 
+/** Leaf official snapshot ACK — tip host_tip has enabled=false / ready=true. */
+export function snapReady(status: StatusPayload | null | undefined): boolean {
+  const snap = status?.snapshot
+  if (!snap || !status) return false
+  if (status.host_tip) return false
+  if (snap.enabled === false) return false
+  return !!snap.ready
+}
+
 export function wizardStepFromAgentLifecycle(
   status: StatusPayload | null | undefined,
   allowSnapshot: boolean,
@@ -361,7 +370,10 @@ export function wizardStepFromAgentLifecycle(
   if (id === 'ports') return 'ports'
   if (id === 'install') return 'install'
   if (id === 'snapshot') return allowSnapshot ? 'snapshot' : 'start'
-  if (id === 'start' || id === 'ibd') return 'start'
+  if (id === 'start' || id === 'ibd') {
+    if (allowSnapshot && !snapReady(status) && !status.snapshot?.failed) return 'snapshot'
+    return 'start'
+  }
   // run / healthy: keep left-rail Start until node is actually ready for ops.
   if (id === 'run' || id === 'healthy') return nodeReadyForOps(status) ? 'done' : 'start'
   return null

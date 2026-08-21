@@ -33,3 +33,13 @@ func TestRobinhoodSnapshotIgnoresExplicitDisable(t *testing.T) {
 		t.Fatalf("robinhood profile with ENABLED=0: %+v want Include+Required+Auto", p)
 	}
 }
+
+func TestBSCSnapshotIgnoresExplicitDisable(t *testing.T) {
+	t.Setenv("TRON_SNAPSHOT_ENABLED", "0")
+	p := resolveLifecycleProfile(nodeLifecycleInput{
+		Network: "bsc", Env: "mainnet",
+	})
+	if !p.IncludeSnapshot || !p.SnapshotRequired || !p.AutoSnapshot {
+		t.Fatalf("bsc profile with ENABLED=0: %+v want Include+Required+Auto", p)
+	}
+}

@@ -177,24 +177,15 @@ func loadConfig() Config {
 		defP2P = 0
 		defAgent = 0
 	}
-	// Bitcoin/Solana profile: upstream always from catalog (ignore stale env).
+	// Non-TRON catalog owns JSON-RPC (stale TRON_NODE_HTTP_PORT=18090 on leaf/host).
 	upPort := mustAtoi(envOr("TRON_NODE_HTTP_PORT", strconv.Itoa(defHTTP)), defHTTP)
+	if p := prof.CatalogUpstreamHTTP(); p > 0 {
+		upPort = p
+	}
 	if !hostTip && strings.EqualFold(network, "xrpl") {
 		if n := mustAtoi(envOr("TRON_XRPLD_HTTP_PORT", "0"), 0); n > 0 {
 			upPort = n
-		} else if prof.DefaultNodeHTTP > 0 {
-			upPort = prof.DefaultNodeHTTP
 		}
-	}
-	if !hostTip && (strings.EqualFold(network, "bitcoin") || strings.EqualFold(network, "solana") ||
-		strings.EqualFold(network, "ethereum") || strings.EqualFold(network, "bsc") ||
-		strings.EqualFold(network, "hyperliquid") || strings.EqualFold(network, "arb") ||
-		strings.EqualFold(network, "robinhood") ||
-		strings.EqualFold(network, "optimism") ||
-		strings.EqualFold(network, "base") ||
-		strings.EqualFold(network, "etc") ||
-		strings.EqualFold(network, "ton")) && prof.DefaultNodeHTTP > 0 {
-		upPort = prof.DefaultNodeHTTP
 	}
 	svcPrefix := prof.ServicePrefix
 	if svcPrefix == "" {

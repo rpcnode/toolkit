@@ -55,6 +55,8 @@ export type InstanceInfo = {
 export type SnapshotInfo = {
   enabled?: boolean
   ready?: boolean
+  required?: boolean
+  busy?: boolean
   pct?: string | number
   /** Alias used by panel proxy/collector (same meaning as pct). */
   progress_pct?: string | number

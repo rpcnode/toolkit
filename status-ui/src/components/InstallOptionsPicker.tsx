@@ -72,6 +72,25 @@ export function parseInstallOptionGroups(raw: unknown): InstallOptionGroup[] {
   return out
 }
 
+export const BSC_SNAPSHOT_OPTIONS: InstallOptionGroup = {
+  id: 'snapshot',
+  label: 'Snapshot',
+  hint: 'Official bnb-chain/bsc-snapshots (geth PBSS). Genesis full sync of 100M+ blocks is not practical.',
+  default: 'pruned',
+  choices: [
+    {
+      id: 'pruned',
+      title: 'Pruned · pruneancient',
+      hint: 'Official pruneancient (~1.7 TB mainnet / ~180 GB testnet). Matches gcmode=full + 2 TB plan. Default.',
+    },
+    {
+      id: 'full',
+      title: 'Full history',
+      hint: 'Official full ancient (~6.6 TB mainnet / ~440 GB testnet). Needs ~8 TB free. Not the 2 TB product disk.',
+    },
+  ],
+}
+
 export const XRPL_HISTORY_OPTIONS: InstallOptionGroup = {
   id: 'xrpl_history',
   label: 'History to install',
@@ -90,6 +109,9 @@ export function fallbackInstallGroups(network?: string, env?: string): InstallOp
   const e = (env || '').toLowerCase()
   if (net === 'tron' && e === 'mainnet') {
     return [TRON_MAINNET_SNAPSHOT_OPTIONS]
+  }
+  if (net === 'bsc' && (e === 'mainnet' || e === 'testnet')) {
+    return [BSC_SNAPSHOT_OPTIONS]
   }
   if (net === 'xrpl' && (e === 'mainnet' || e === 'testnet')) {
     return [XRPL_HISTORY_OPTIONS]

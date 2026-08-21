@@ -33,6 +33,20 @@ func TestInstallOptions_NileHasNone(t *testing.T) {
 	}
 }
 
+func TestInstallOptions_BSCPrunedDefault(t *testing.T) {
+	if len(installOptionGroups("bsc", "mainnet")) != 1 {
+		t.Fatal("bsc mainnet must show official snapshot picker")
+	}
+	opts := mergeInstallOptions("bsc", "mainnet", nil)
+	if opts["snapshot"] != "pruned" {
+		t.Fatalf("want pruned default, got %v", opts)
+	}
+	opts = mergeInstallOptions("bsc", "testnet", map[string]string{"snapshot": "full"})
+	if opts["snapshot"] != "full" {
+		t.Fatalf("want full, got %v", opts)
+	}
+}
+
 func TestInstallOptions_XRPLWeeksDefault(t *testing.T) {
 	opts := mergeInstallOptions("xrpl", "mainnet", nil)
 	if opts["xrpl_history"] != "weeks" {

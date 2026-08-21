@@ -109,10 +109,13 @@ func resolveLifecycleProfile(in nodeLifecycleInput) networkLifecycleProfile {
 	switch np.SnapshotPolicy {
 	case SnapshotRequired:
 		// Required policy: include unless explicitly disabled (still show in-flight).
-		// Robinhood Orbit MUST keep Snapshot even if an old provision left
-		// TRON_SNAPSHOT_ENABLED=0 — otherwise UI loses nitro download % forever.
-		robinhoodForce := strings.EqualFold(np.Network, "robinhood")
-		off := explicitOff && !robinhoodForce
+		// Old provision left TRON_SNAPSHOT_ENABLED=0 on robinhood / sui / cardano / bsc
+		// — must not drop Snapshot or auto-start (UI loses download % / genesis IBD forever).
+		staleOffIgnore := strings.EqualFold(np.Network, "robinhood") ||
+			strings.EqualFold(np.Network, "sui") ||
+			strings.EqualFold(np.Network, "cardano") ||
+			strings.EqualFold(np.Network, "bsc")
+		off := explicitOff && !staleOffIgnore
 		p.IncludeSnapshot = wantsSnapshot && (!off || inFlight)
 		p.SnapshotRequired = !off
 		p.AutoSnapshot = np.AutoSnapshot && !off

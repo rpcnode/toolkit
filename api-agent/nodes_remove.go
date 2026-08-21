@@ -1058,7 +1058,10 @@ func nodeUnitsForRemove(network, env string) []string {
 			fmt.Sprintf("ethereum-lighthouse-%s.service", env),
 		}
 	case "bsc":
-		return []string{fmt.Sprintf("bsc-%s.service", env)}
+		return []string{
+			fmt.Sprintf("bsc-%s.service", env),
+			fmt.Sprintf("bsc-%s-snapshot.service", env),
+		}
 	case "hyperliquid":
 		return []string{fmt.Sprintf("hyperliquid-%s.service", env)}
 	case "arb":
@@ -1323,7 +1326,7 @@ func killNodeProcesses(network, env string) {
 		)).Run()
 	case "bsc":
 		_ = exec.Command("bash", "-lc", fmt.Sprintf(
-			`pgrep -af 'geth' | grep -E %q | awk '{print $1}' | while read p; do kill "$p" 2>/dev/null; sleep 0.2; kill -9 "$p" 2>/dev/null; done`,
+			`pgrep -af 'geth|aria2c|fetch-snapshot' | grep -E %q | awk '{print $1}' | while read p; do kill "$p" 2>/dev/null; sleep 0.2; kill -9 "$p" 2>/dev/null; done`,
 			pathGrep,
 		)).Run()
 	case "hyperliquid":

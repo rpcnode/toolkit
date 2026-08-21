@@ -28,8 +28,9 @@ type tonRPCInfo struct {
 	Error         string
 	Synced        bool
 	VerifyPct     float64 // 0..1; only set when honest
-	DumpPct       int     // MyTonCtrl dump install % (0 = unknown)
-	CatchupStalled bool // oos not shrinking, or growing while seqno moves (slower than tip)
+	DumpPct        int     // MyTonCtrl dump install % (0 = unknown)
+	DumpDetail     string  // checksum / extract / compile / apply — not just size
+	CatchupStalled bool    // oos not shrinking, or growing while seqno moves (slower than tip)
 }
 
 var (
@@ -68,6 +69,8 @@ func collectTon(cfg Config) map[string]any {
 	}
 	prof := LookupNetworkProfile(network, cfg.Env)
 
+	_ = ensureTonValidatorNofile()
+
 	bootDone := tonBootstrapDone(cfg)
 	bootActive := tonBootstrapActive(cfg)
 	procOK := tonValidatorRunning()
@@ -81,6 +84,19 @@ func collectTon(cfg Config) map[string]any {
 	}
 
 	dumpPct, dumpDetail := tonBootstrapDumpProgress(cfg)
+	// After 100% the log still has «extracting» / Verification finished.
+	// Newer compile / installer / validator lines must win — else UI sits
+	// on "extracting dump" for hours while install.sh has already moved on.
+	if dumpPct >= 100 && procOK && !bootDone {
+		dumpDetail = tonJoinDumpDetail(dumpDetail, "validator applying state")
+	} else if dumpPct >= 100 {
+		if live := tonDumpExtractProcess(); live != "" {
+			dumpDetail = tonJoinDumpDetail(sizeOnlyDumpDetail(dumpDetail), "extracting dump · "+live)
+		}
+	}
+	if dumpPct >= 100 {
+		dumpDetail = tonDumpDetailWithElapsed(cfg, dumpDetail)
+	}
 	// install.sh floods bootstrap.log with compile noise after aria2 lines scroll
 	// out of the tail window — keep last honest dump % while bootstrap is alive.
 	if dumpPct > 0 {
@@ -107,9 +123,11 @@ func collectTon(cfg Config) map[string]any {
 
 	var info tonRPCInfo
 	info.DumpPct = dumpPct
+	info.DumpDetail = dumpDetail
 	if thaOpen {
 		info = probeTonHTTPAPI(cfg)
 		info.DumpPct = dumpPct
+		info.DumpDetail = dumpDetail
 	}
 	// getstats / MyTonCtrl oos works before THA — also try once validator or
 	// bootstrap.done (DESIGN: primary sync signal before THA).
@@ -1016,11 +1034,22 @@ func saveTonDumpProgress(cfg Config, pct int, detail string) {
 	}
 	path := tonDumpProgressPath(cfg)
 	_ = ensureDir(filepath.Dir(path))
-	_ = writeJSONFile(path, map[string]any{
+	doc := map[string]any{
 		"pct":        pct,
 		"detail":     detail,
 		"updated_at": time.Now().UTC().Format(time.RFC3339),
-	})
+	}
+	if pct >= 100 {
+		if prev := readJSONFile(path); prev != nil {
+			if s, ok := prev["hundred_since"].(string); ok && strings.TrimSpace(s) != "" {
+				doc["hundred_since"] = s
+			}
+		}
+		if _, ok := doc["hundred_since"]; !ok {
+			doc["hundred_since"] = time.Now().UTC().Format(time.RFC3339)
+		}
+	}
+	_ = writeJSONFile(path, doc)
 }
 
 func loadTonDumpProgress(cfg Config) (pct int, detail string) {
@@ -1081,11 +1110,15 @@ func tonBootstrapDumpProgress(cfg Config) (pct int, detail string) {
 		}
 		low := strings.ToLower(ln)
 		if postDump == "" {
-			switch {
-			case strings.Contains(low, "verification finished") || strings.Contains(low, "download complete"):
-				postDump = "verifying/extracting dump"
-			case strings.Contains(low, "extract") && (strings.Contains(low, "dump") || strings.Contains(low, ".tar") || strings.Contains(low, "lz")):
-				postDump = "extracting dump"
+			if p := tonNewerThanExtractPhase(low); p != "" {
+				postDump = p
+			} else {
+				switch {
+				case strings.Contains(low, "verification finished") || strings.Contains(low, "download complete"):
+					postDump = "verifying/extracting dump"
+				case strings.Contains(low, "extract") && (strings.Contains(low, "dump") || strings.Contains(low, ".tar") || strings.Contains(low, "lz")):
+					postDump = "extracting dump"
+				}
 			}
 		}
 		if checkPct <= 0 {
@@ -1123,10 +1156,10 @@ func tonBootstrapDumpProgress(cfg Config) (pct int, detail string) {
 		}
 	}
 
-	// After download hits 100%, aria2/mytoninstaller still checksum (~minutes for ~200GiB)
-	// then extract — keep bar at 100 but surface the real phase (not opaque dump 100% / tha=0).
+	// After download hits 100%, checksum → extract (~hours, no %) → compile / apply.
+	// Prefer a newer phase over a stale «extracting» still sitting in the 4000-line window.
 	if dumpPct >= 100 {
-		if checkPct > 0 && checkPct < 100 && postDump == "" {
+		if checkPct > 0 && checkPct < 100 && !tonPhaseAfterExtract(postDump) {
 			d := fmt.Sprintf("checksum %d%%", checkPct)
 			if checkSize != "" {
 				d += " · " + checkSize
@@ -1152,6 +1185,120 @@ func tonBootstrapDumpProgress(cfg Config) (pct int, detail string) {
 		return dumpPct, dumpDetail
 	}
 	return 0, ""
+}
+
+func tonNewerThanExtractPhase(low string) string {
+	low = strings.ToLower(strings.TrimSpace(low))
+	switch {
+	case strings.Contains(low, "bootstrap marker") || strings.Contains(low, "bootstrap finished"):
+		return "finishing"
+	case strings.Contains(low, "enable tha") || strings.Contains(low, "ton_http_api") ||
+		strings.Contains(low, "ton-http-api"):
+		return "enabling THA"
+	case strings.Contains(low, "systemctl start validator") || strings.Contains(low, "started validator"):
+		return "starting validator"
+	case strings.Contains(low, "cmake") || strings.Contains(low, "compiling") ||
+		strings.Contains(low, "building") || strings.HasPrefix(low, "make[") ||
+		strings.Contains(low, "make -j"):
+		return "compiling"
+	case strings.Contains(low, "mytoninstaller"):
+		return "mytoninstaller"
+	default:
+		return ""
+	}
+}
+
+func tonPhaseAfterExtract(phase string) bool {
+	switch strings.ToLower(strings.TrimSpace(phase)) {
+	case "compiling", "mytoninstaller", "starting validator", "enabling tha", "finishing",
+		"validator applying state":
+		return true
+	default:
+		return false
+	}
+}
+
+func tonDumpExtractProcess() string {
+	out, err := exec.Command("bash", "-lc",
+		`pgrep -af 'tar |lz4|plzip|pixz|unzstd|zstd -d' 2>/dev/null | grep -vE 'pgrep|grep' | grep -iE 'ton-work|dump-cache|bootstrap|ton/' | head -1`).CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	ln := strings.TrimSpace(string(out))
+	if ln == "" {
+		return ""
+	}
+	low := strings.ToLower(ln)
+	switch {
+	case strings.Contains(low, "lz4"):
+		return "lz4"
+	case strings.Contains(low, "plzip"):
+		return "plzip"
+	case strings.Contains(low, "zstd"):
+		return "zstd"
+	case strings.Contains(low, "tar"):
+		return "tar"
+	default:
+		return "extract"
+	}
+}
+
+func tonJoinDumpDetail(size, phase string) string {
+	size = strings.TrimSpace(size)
+	phase = strings.TrimSpace(phase)
+	if size == "" {
+		return phase
+	}
+	if phase == "" {
+		return size
+	}
+	if strings.Contains(strings.ToLower(size), strings.ToLower(phase)) {
+		return size
+	}
+	// Drop a stale extract label when a later phase is known.
+	if tonPhaseAfterExtract(phase) {
+		size = sizeOnlyDumpDetail(size)
+	}
+	if size == "" {
+		return phase
+	}
+	return size + " · " + phase
+}
+
+func sizeOnlyDumpDetail(detail string) string {
+	detail = strings.TrimSpace(detail)
+	if i := strings.Index(detail, " · "); i > 0 {
+		head := detail[:i]
+		if strings.Contains(head, "/") && strings.Contains(strings.ToLower(head), "gib") {
+			return head
+		}
+	}
+	if strings.Contains(detail, "/") && strings.Contains(strings.ToLower(detail), "gib") &&
+		!strings.Contains(strings.ToLower(detail), "extract") {
+		return detail
+	}
+	return detail
+}
+
+func tonDumpDetailWithElapsed(cfg Config, detail string) string {
+	doc := readJSONFile(tonDumpProgressPath(cfg))
+	if doc == nil {
+		return detail
+	}
+	s, _ := doc["hundred_since"].(string)
+	t, err := time.Parse(time.RFC3339, strings.TrimSpace(s))
+	if err != nil || t.IsZero() {
+		return detail
+	}
+	elapsed := time.Since(t).Truncate(time.Minute)
+	if elapsed < time.Minute {
+		return detail
+	}
+	tag := elapsed.String()
+	if strings.Contains(detail, tag) {
+		return detail
+	}
+	return strings.TrimSpace(detail + " · " + tag)
 }
 
 // tonBootstrapPhaseDetail — honest bootstrap phase for UI when THA/validator not up yet.

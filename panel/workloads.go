@@ -496,9 +496,14 @@ func (s *Server) handleWorkloadStart(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	wl.Status = "starting"
+	action, _ := agent["action"].(string)
+	if strings.EqualFold(action, "snapshot") {
+		wl.Status = "snapshot_running"
+	} else {
+		wl.Status = "starting"
+	}
 	wl = s.workloads.Upsert(wl)
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "item": wl, "agent": agent})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "item": wl, "agent": agent, "action": action})
 }
 
 func (s *Server) handleWorkloadStatus(w http.ResponseWriter, r *http.Request) {

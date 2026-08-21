@@ -440,6 +440,15 @@ func parseTonBootstrapFindings(text string) []nodeDebugFinding {
 			})
 		}
 	}
+	if strings.Contains(low, "failed setrlimit") ||
+		(strings.Contains(low, "setrlimit") && strings.Contains(low, "not permitted")) {
+		out = append(out, nodeDebugFinding{
+			Severity: "warn", Scope: "network", Code: "ton_setrlimit",
+			Title:  "validator-engine setrlimit NOFILE denied",
+			Detail: lastLineContaining(text, []string{"setrlimit"}),
+			Hint:   "Engine wants 1.5M fds. Agent sets LimitNOFILE=4M and fs.nr_open=8M. Do not Restart during dump apply.",
+		})
+	}
 	if strings.Contains(low, "home not set") {
 		out = append(out, nodeDebugFinding{
 			Severity: "error", Scope: "network", Code: "ton_home_unset",

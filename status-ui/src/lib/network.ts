@@ -50,7 +50,6 @@ export function isNoSnapshotNetwork(network?: string | null): boolean {
     isBitcoinNetwork(network) ||
     isSolanaNetwork(network) ||
     isEthereumNetwork(network) ||
-    isBscNetwork(network) ||
     n === 'hyperliquid' ||
     n === 'arb' ||
     n === 'robinhood' ||

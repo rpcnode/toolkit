@@ -22,7 +22,7 @@ XRPL history — группа `xrpl_history` в том же каталоге (UI
 | **zcash** | mainnet, testnet | never | нет | Zebra full, не prune | `zebrad.toml` |
 | **ethereum** | mainnet, sepolia, hoodi | never | нет | Geth `--syncmode snap --gcmode full` + Lighthouse checkpoint | geth/lighthouse unit+toml |
 | **etc** | mainnet, mordor | never | нет | Core-Geth **archive** | conf/flags |
-| **bsc** | mainnet, testnet | never | нет | bsc-geth full / `gcmode=full` (не archive default) | conf |
+| **bsc** | mainnet, testnet | **Required** | **`snapshot`:** **pruned** · full | Official `bnb-chain/bsc-snapshots` (`fetch-snapshot.sh`). Default pruneancient ~1.7 TB. Full ~6.6 TB | flavor **не** сменить без wipe+reinstall |
 | **arb** | mainnet, sepolia | never (nitro `--init.latest=pruned` на start) | нет | Official pruned init, не lite/archive | nitro flags / L1 RPC |
 | **optimism** | mainnet, sepolia | never | нет | op-geth + op-node, non-archive | op-geth/op-node |
 | **base** | mainnet, sepolia | never | нет | base-reth, no prune args | reth/consensus |
@@ -70,5 +70,9 @@ Disk layout (JBOD) — отдельный persist (`disk_layout_json`), не `in
 
 | Date | Note |
 |---|---|
+| 2026-08-21 | **BSC keep extract** (0.4.240): `.snapshot-keep` so a failed oneshot after extract does not wipe / block start. |
+| 2026-08-21 | **BSC SNAPSHOT_DIAG** (0.4.239): snapshot log + journal lines to trace rewrite/wipe after extract. |
+| 2026-08-20 | **BSC snapshot %** (0.4.228): бар из aria2 journal (`1,347GiB/1,742GiB(77%)`), не state `pct:0`. |
+| 2026-08-20 | **BSC official snapshot** ExtraStep + picker `pruned` (default, pruneancient) / `full`. Genesis IBD не продукт. |
 | 2026-08-18 | **Cardano Mithril** Snapshot ExtraStep (один path `latest`, без picker). XRPL `xrpl_history` в `installOptionGroups()`. |
 | 2026-08-18 | Каталог всех 23 сетей: что уже выбирается (TRON snap / XRPL history), где gaps (Aptos restore, TON archive, EVM archive). |

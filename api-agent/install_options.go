@@ -32,6 +32,34 @@ func boolPtr(v bool) *bool { return &v }
 func installOptionGroups(network, env string) []InstallOptionGroup {
 	network = normalizeNetwork(network)
 	env = normalizeEnv(env)
+	if network == "bsc" && (env == "mainnet" || env == "testnet") {
+		prunedHint := "Official pruneancient (~1.7 TB mainnet / ~180 GB testnet). Matches gcmode=full + 2 TB plan. Default. BSC ≥ v1.7.2."
+		fullHint := "Official full ancient (~6.6 TB mainnet / ~440 GB testnet). Needs ~8 TB free (or ~7 TB with auto-delete). Not the 2 TB product disk."
+		if env == "testnet" {
+			prunedHint = "Official pruneancient (~180 GB). Default. BSC ≥ v1.7.2."
+			fullHint = "Official full ancient (~440 GB). Larger than the 400 GiB testnet disk hint."
+		}
+		return []InstallOptionGroup{{
+			ID:      "snapshot",
+			Label:   "Snapshot",
+			Hint:    "Official bnb-chain/bsc-snapshots (geth PBSS). Genesis full sync of 100M+ blocks is not practical.",
+			Default: "pruned",
+			Choices: []InstallOptionChoice{
+				{
+					ID:          "pruned",
+					Title:       "Pruned · pruneancient",
+					Hint:        prunedHint,
+					SnapshotURL: "https://github.com/bnb-chain/bsc-snapshots",
+				},
+				{
+					ID:          "full",
+					Title:       "Full history",
+					Hint:        fullHint,
+					SnapshotURL: "https://github.com/bnb-chain/bsc-snapshots",
+				},
+			},
+		}}
+	}
 	if network == "xrpl" && (env == "mainnet" || env == "testnet") {
 		return []InstallOptionGroup{{
 			ID:      "xrpl_history",

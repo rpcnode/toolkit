@@ -69,10 +69,15 @@ export function resolveSyncProgressPct(status?: StatusPayload | null): number | 
   const cur = (status?.lifecycle?.current || status?.lifecycle?.current_step_id || '').toLowerCase()
   const snapBusy =
     !!status?.snapshot?.wget_running ||
+    !!status?.snapshot?.busy ||
     phase === 'snapshot' ||
     cur === 'snapshot' ||
     (status?.node_status || '').toLowerCase().includes('snapshot')
-  if (snapBusy && snapPct != null) return snapPct
+  if (snapBusy) {
+    if (snapPct != null && snapPct > 0) return snapPct
+    // Do not fall through to leftover IBD % while the ExtraStep is live.
+    if (snapPct != null) return snapPct
+  }
   // XRPL: always compute from complete_ledgers — agent used to floor <0.1% to 0.1.
   if (isXrplNetwork(resolveNetwork(status))) {
     const win = parseXrplComplete(sync?.complete_ledgers) || parseXrplComplete(sync?.detail)
@@ -134,6 +139,19 @@ export function showSyncStatusCard(
     return true
   }
   if ((sync?.log_tail?.length || 0) > 0 && !status.connect?.ready) return true
+  // Official snapshot ExtraStep (BSC / TRON / Sui / …) — bar from snapshot.pct / busy.
+  const snap = status.snapshot
+  if (
+    snap?.busy ||
+    snap?.wget_running ||
+    snap?.pct != null ||
+    (snap?.required === true && snap?.ready === false) ||
+    cur === 'snapshot' ||
+    phase === 'snapshot' ||
+    ns.includes('snapshot')
+  ) {
+    return true
+  }
   // Sync-capable profiles (HL / BTC / eth / …) even before first pct sample.
   if (supportsIbdStep(status, networkHint) || isBitcoinStatus(status, networkHint)) return true
   // No-snapshot chains (HL, doge, …): show bar whenever we have status.

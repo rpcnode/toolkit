@@ -19,6 +19,14 @@ func TestParseAptLogFindingsReleaseFile(t *testing.T) {
 	}
 }
 
+func TestParseTonSetrlimitFinding(t *testing.T) {
+	text := "[validator-engine.cpp:5669]\t[PosixError : Operation not permitted : 1 : failed setrlimit()]"
+	got := parseTonBootstrapFindings(text)
+	if len(got) == 0 || got[0].Code != "ton_setrlimit" {
+		t.Fatalf("want ton_setrlimit, got %+v", got)
+	}
+}
+
 func TestParseTonBootstrapFindingsReleaseVsLock(t *testing.T) {
 	text := "install.sh attempt=3 exit=100\n" +
 		"E: The repository 'https://packagecloud.io/ookla/speedtest-cli/ubuntu noble Release' does not have a Release file.\n" +
@@ -104,5 +112,19 @@ func TestDebugLogSpecsCoverCatalog(t *testing.T) {
 		if debugProcPattern(net) == "" {
 			t.Fatalf("%s empty proc pattern", net)
 		}
+	}
+}
+
+func TestParseEVMDebugFindings_IgnoresSnapshotAncientListing(t *testing.T) {
+	text := "Extraction complete and removed: mainnet-geth-pbss-base-113615622.tar.lz4\n" +
+		"server/data-seed/geth/chaindata/ancient/chain/headers.meta\n" +
+		"[#94ae1a 166GiB/1,742GiB(9%) CN:14 DL:341MiB ETA:1h18m52s]\n"
+	if got := parseEVMDebugFindings("bsc", text); len(got) != 0 {
+		t.Fatalf("snapshot journal must not be evm_datadir, got %+v", got)
+	}
+	real := "Fatal: Failed to open database: datadir already used by another process"
+	got := parseEVMDebugFindings("bsc", real)
+	if len(got) == 0 || got[0].Code != "evm_datadir" {
+		t.Fatalf("want evm_datadir, got %+v", got)
 	}
 }

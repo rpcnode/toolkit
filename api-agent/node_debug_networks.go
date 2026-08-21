@@ -21,6 +21,7 @@ func debugNetworkFindings(network, env string, units []nodeDebugUnit) []nodeDebu
 	switch network {
 	case "ton":
 		out = append(out, debugTonFindings(env, units)...)
+		out = append(out, parseTonBootstrapFindings(debugNetworkText(network, env))...)
 	case "xrpl":
 		out = append(out, parseXRPLDebugFindings(debugNetworkText(network, env))...)
 	case "tron":
@@ -118,6 +119,10 @@ func debugLogSpecs(network, env string) []debugLogSpec {
 		addUnit("lighthouse", "Lighthouse", fmt.Sprintf("ethereum-lighthouse-%s.service", env), "")
 	case "bsc", "etc":
 		addUnit("node", "Node", prof.ServiceUnit, "")
+		if network == "bsc" {
+			addFile("snapshot", "Snapshot", fmt.Sprintf("/var/log/bsc/%s-snapshot.log", env), "", true)
+			addUnit("snap-unit", "Snapshot unit", fmt.Sprintf("bsc-%s-snapshot.service", env), "")
+		}
 	case "arb", "robinhood":
 		addFile("snapshot", "Snapshot", fmt.Sprintf("/var/log/%s/%s-snapshot.log", network, env), "", true)
 		addUnit("node", "Nitro", prof.ServiceUnit, "")
@@ -220,7 +225,7 @@ func debugProcPattern(network string) string {
 	case "ethereum":
 		return base + `|geth|lighthouse`
 	case "bsc":
-		return base + `|geth|bnbchain`
+		return base + `|geth|bnbchain|fetch-snapshot`
 	case "etc":
 		return base + `|core-geth|geth`
 	case "arb", "robinhood":
@@ -566,15 +571,26 @@ func parseEVMDebugFindings(network, text string) []nodeDebugFinding {
 		return nil
 	}
 	low := strings.ToLower(text)
-	if (strings.Contains(low, "ancient") && strings.Contains(low, "error")) ||
-		strings.Contains(low, "datadir already used") {
-		return []nodeDebugFinding{{
-			Severity: "error", Scope: "network", Code: "evm_datadir",
-			Title:  network + " datadir error",
-			Detail: lastLineContaining(text, []string{"ancient", "datadir"}),
-		}}
+	// Official snapshot journal lists …/ancient/… paths + aria2 — not a geth datadir fault.
+	if strings.Contains(low, "extraction complete") ||
+		strings.Contains(low, "fetch-snapshot") ||
+		strings.Contains(low, "bsc-official-snapshot") ||
+		(strings.Contains(low, "[#") && strings.Contains(low, "gib")) {
+		return nil
 	}
-	return nil
+	real := strings.Contains(low, "datadir already used") ||
+		strings.Contains(low, "failed to open database") ||
+		strings.Contains(low, "cannot open ancient") ||
+		(strings.Contains(low, "ancient store") && strings.Contains(low, "error")) ||
+		(strings.Contains(low, "freezer") && (strings.Contains(low, "corrupt") || strings.Contains(low, "error")))
+	if !real {
+		return nil
+	}
+	return []nodeDebugFinding{{
+		Severity: "error", Scope: "network", Code: "evm_datadir",
+		Title:  network + " datadir error",
+		Detail: lastLineContaining(text, []string{"ancient", "datadir", "database", "freezer"}),
+	}}
 }
 
 func parseL2DebugFindings(network, text string) []nodeDebugFinding {

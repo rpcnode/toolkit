@@ -131,6 +131,9 @@ func TestLookupDefaultsAndFallback(t *testing.T) {
 	if sol.HasExtra(StepSnapshot) {
 		t.Fatal("solana must not list snapshot extra")
 	}
+	if sol.AdvertiseIBD() || sol.LifecycleCapabilities()["ibd"] {
+		t.Fatal("solana SkipIBD: AdvertiseIBD must be false")
+	}
 	if sol.DefaultPublicPort != 39490 || sol.DefaultAgentPort != 39590 || sol.DefaultNodeHTTP != 8899 {
 		t.Fatalf("solana mainnet ports: %+v", sol)
 	}
@@ -157,8 +160,11 @@ func TestLookupDefaultsAndFallback(t *testing.T) {
 	}
 
 	bsc := LookupNetworkProfile("bsc", "mainnet")
-	if bsc.SnapshotPolicy != SnapshotNever || bsc.HasExtra(StepSnapshot) {
-		t.Fatalf("bsc must be full-sync only (no TRON snapshot): %+v", bsc)
+	if bsc.SnapshotPolicy != SnapshotRequired || !bsc.HasExtra(StepSnapshot) {
+		t.Fatalf("bsc must require official snapshot ExtraStep: %+v", bsc)
+	}
+	if !bsc.AutoSnapshot || bsc.DefaultSnapshotURL == "" {
+		t.Fatalf("bsc must auto-start official snapshot: %+v", bsc)
 	}
 	if bsc.DefaultPublicPort != 39890 || bsc.DefaultAgentPort != 39990 || bsc.DefaultNodeHTTP != 8575 {
 		t.Fatalf("bsc mainnet ports: %+v", bsc)
@@ -167,7 +173,7 @@ func TestLookupDefaultsAndFallback(t *testing.T) {
 		t.Fatal("bsc/ethereum mainnet ports collide")
 	}
 	bscCaps := bsc.LifecycleCapabilities()
-	if bscCaps["snapshot"] || !bscCaps["ibd"] {
+	if !bscCaps["snapshot"] || !bscCaps["ibd"] {
 		t.Fatalf("bsc capabilities=%v", bscCaps)
 	}
 	if bsc.ServiceUnit() != "bsc-mainnet.service" {
@@ -255,5 +261,30 @@ func TestAllNetworkProfilesSortedUnique(t *testing.T) {
 			t.Fatalf("not sorted: %q after %q", p.ID, prev)
 		}
 		prev = p.ID
+	}
+}
+
+func TestCatalogUpstreamHTTP(t *testing.T) {
+	stellar := LookupNetworkProfile("stellar", "mainnet")
+	if got := stellar.CatalogUpstreamHTTP(); got != 8000 {
+		t.Fatalf("stellar CatalogUpstreamHTTP=%d want 8000", got)
+	}
+	tron := LookupNetworkProfile("tron", "mainnet")
+	if !tron.PreferEnvUpstream {
+		t.Fatal("tron profile must PreferEnvUpstream (return 0)")
+	}
+	if got := tron.CatalogUpstreamHTTP(); got != 0 {
+		t.Fatalf("tron CatalogUpstreamHTTP=%d want 0 (keep env)", got)
+	}
+	empty := NetworkProfile{}
+	if got := empty.CatalogUpstreamHTTP(); got != 0 {
+		t.Fatalf("empty CatalogUpstreamHTTP=%d want 0", got)
+	}
+	upPort := 18090
+	if p := stellar.CatalogUpstreamHTTP(); p > 0 {
+		upPort = p
+	}
+	if upPort != 8000 {
+		t.Fatalf("stellar stale env not overridden: upPort=%d", upPort)
 	}
 }

@@ -25,6 +25,15 @@ func TestHostPackagesForNetwork_SolanaNeedsBzip2(t *testing.T) {
 	}
 }
 
+func TestHostPackagesForNetwork_BSCNeedsAria2Lz4(t *testing.T) {
+	joined := strings.Join(hostPackagesForNetwork("bsc"), " ")
+	for _, need := range []string{"aria2", "lz4"} {
+		if !strings.Contains(joined, need) {
+			t.Fatalf("bsc official snapshot needs %s, got %s", need, joined)
+		}
+	}
+}
+
 func TestHostPackagesForNetwork_UnknownStillGetsCommon(t *testing.T) {
 	pkgs := hostPackagesForNetwork("bitcoin")
 	if len(pkgs) < 3 {

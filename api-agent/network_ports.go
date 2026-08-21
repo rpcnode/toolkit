@@ -36,6 +36,29 @@ type networkPortProfile struct {
 	DataPath    string
 	ServiceUnit string   // bitcoin-mainnet.service / tron-mainnet.service
 	ExtraSteps  []string // after install, before start — must match system-agent ExtraSteps
+	// PreferEnvUpstream: CatalogUpstreamHTTP returns 0 — keep TRON_NODE_HTTP_PORT (legacy remap).
+	PreferEnvUpstream bool
+	// SkipIBD: capabilities.ibd=false (Solana slots, not Bitcoin/EVM IBD).
+	SkipIBD bool
+}
+
+// CatalogUpstreamHTTP — catalog JSON-RPC, or 0 when the profile prefers env (TRON remap).
+func (p networkPortProfile) CatalogUpstreamHTTP() int {
+	if p.PreferEnvUpstream || p.NodeHTTP <= 0 {
+		return 0
+	}
+	return p.NodeHTTP
+}
+
+// AdvertiseIBD — catch-up / IBD UI. TRON (PreferEnvUpstream) and Solana (SkipIBD) return false.
+func (p networkPortProfile) AdvertiseIBD() bool {
+	if p.PreferEnvUpstream || p.SkipIBD || strings.TrimSpace(p.Network) == "" {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(p.Env), "regtest") {
+		return false
+	}
+	return true
 }
 
 // isCanonicalPerNodeAgentPort — leaf Agent API ports (never host tip :38990).
@@ -72,35 +95,7 @@ func lifecycleCapabilities(network, env string) map[string]bool {
 			break
 		}
 	}
-	// Snapshot-then-catch-up (robinhood) keeps ibd=true so Sync UI stays after snapshot.
-	ibdCore := strings.EqualFold(p.Network, "bitcoin") ||
-		strings.EqualFold(p.Network, "doge") ||
-		strings.EqualFold(p.Network, "ltc") ||
-		strings.EqualFold(p.Network, "dash") ||
-		strings.EqualFold(p.Network, "bch") ||
-		strings.EqualFold(p.Network, "cardano") ||
-		strings.EqualFold(p.Network, "ethereum") ||
-		strings.EqualFold(p.Network, "bsc") ||
-		strings.EqualFold(p.Network, "hyperliquid") ||
-		strings.EqualFold(p.Network, "arb") ||
-		strings.EqualFold(p.Network, "robinhood") ||
-		strings.EqualFold(p.Network, "optimism") ||
-		strings.EqualFold(p.Network, "base") ||
-		strings.EqualFold(p.Network, "xrpl") ||
-		strings.EqualFold(p.Network, "stellar") ||
-		strings.EqualFold(p.Network, "ton") ||
-		strings.EqualFold(p.Network, "etc") ||
-		strings.EqualFold(p.Network, "zcash") ||
-		strings.EqualFold(p.Network, "sui") ||
-		strings.EqualFold(p.Network, "aptos") ||
-		strings.EqualFold(p.Network, "avalanche")
-	// Snapshot-then-catch-up keeps ibd=true so Sync UI stays after Snapshot (Robinhood / Sui).
-	ibd := ibdCore && (!snap || strings.EqualFold(p.Network, "robinhood") || strings.EqualFold(p.Network, "sui"))
-	// Regtest is local — do not advertise IBD sync UI.
-	if ibd && strings.EqualFold(strings.TrimSpace(env), "regtest") {
-		ibd = false
-	}
-	// Solana catch-up is not Bitcoin/Ethereum IBD — keep capabilities.ibd false for solana.
+	ibd := p.AdvertiseIBD()
 	return map[string]bool{
 		"snapshot":         snap,
 		"ibd":              ibd,
@@ -215,16 +210,19 @@ func builtinPortProfiles() []networkPortProfile {
 	const nileSnap = "https://snapshots.nileex.io/backup20260809/FullNode_output-directory.tgz"
 	return []networkPortProfile{
 		{Network: "tron", Env: "mainnet", Public: 39090, Agent: 39190, NodeHTTP: 18090, P2P: 18888,
+			PreferEnvUpstream: true,
 			SolHTTP: 18190, PBFTHTTP: 18191, GRPC: 50051, GRPCSol: 50061, GRPCPbft: 50071, Metrics: 9527,
 			SnapshotURL: mainSnap, DiskHintGiB: 1024,
 			ServiceUnit: "tron-mainnet.service", ExtraSteps: tronSnap,
 			OptPath: "/opt/tron/mainnet", EtcPath: "/etc/tron/mainnet", DataPath: "/data/tron/mainnet"},
 		{Network: "tron", Env: "nile", Public: 39091, Agent: 39191, NodeHTTP: 18091, P2P: 18889,
+			PreferEnvUpstream: true,
 			SolHTTP: 18290, PBFTHTTP: 18291, GRPC: 50151, GRPCSol: 50161, GRPCPbft: 50171, Metrics: 9528,
 			SnapshotURL: nileSnap, DiskHintGiB: 256,
 			ServiceUnit: "tron-nile.service", ExtraSteps: tronSnap,
 			OptPath: "/opt/tron/nile", EtcPath: "/etc/tron/nile", DataPath: "/data/tron/nile"},
 		{Network: "tron", Env: "shasta", Public: 39092, Agent: 39192, NodeHTTP: 18092, P2P: 18890,
+			PreferEnvUpstream: true,
 			SolHTTP: 18390, PBFTHTTP: 18391, GRPC: 50251, GRPCSol: 50261, GRPCPbft: 50271, Metrics: 9529,
 			DiskHintGiB: 256,
 			ServiceUnit: "tron-shasta.service", ExtraSteps: tronSnap,
@@ -251,18 +249,21 @@ func builtinPortProfiles() []networkPortProfile {
 			OptPath:     "/opt/bitcoin/regtest", EtcPath: "/etc/bitcoin/regtest", DataPath: "/data/bitcoin/regtest"},
 		// Solana — non-overlapping with TRON/Bitcoin (DESIGN §5). ExtraSteps empty = no snapshot.
 		{Network: "solana", Env: "mainnet", Public: 39490, Agent: 39590, NodeHTTP: 8899, P2P: 8000,
-			ChainFlag: "mainnet-beta", WatchSlug: "solana", DiskHintGiB: 2048,
+			SkipIBD: true, ChainFlag: "mainnet-beta", WatchSlug: "solana", DiskHintGiB: 2048,
 			ServiceUnit: "solana-mainnet.service",
 			OptPath:     "/opt/solana/mainnet", EtcPath: "/etc/solana/mainnet", DataPath: "/data/solana/mainnet"},
 		{Network: "solana", Env: "testnet", Public: 39491, Agent: 39591, NodeHTTP: 8891, P2P: 8100,
+			SkipIBD: true,
 			ChainFlag: "testnet", WatchSlug: "solana-testnet", DiskHintGiB: 1024,
 			ServiceUnit: "solana-testnet.service",
 			OptPath:     "/opt/solana/testnet", EtcPath: "/etc/solana/testnet", DataPath: "/data/solana/testnet"},
 		{Network: "solana", Env: "devnet", Public: 39492, Agent: 39592, NodeHTTP: 8893, P2P: 8200,
+			SkipIBD: true,
 			ChainFlag: "devnet", WatchSlug: "solana-devnet", DiskHintGiB: 512,
 			ServiceUnit: "solana-devnet.service",
 			OptPath:     "/opt/solana/devnet", EtcPath: "/etc/solana/devnet", DataPath: "/data/solana/devnet"},
 		{Network: "solana", Env: "localnet", Public: 39493, Agent: 39593, NodeHTTP: 18899, P2P: 0,
+			SkipIBD: true,
 			ChainFlag: "localnet", WatchSlug: "solana-localnet", DiskHintGiB: 8,
 			ServiceUnit: "solana-localnet.service",
 			OptPath:     "/opt/solana/localnet", EtcPath: "/etc/solana/localnet", DataPath: "/data/solana/localnet"},
@@ -287,11 +288,13 @@ func builtinPortProfiles() []networkPortProfile {
 		// BSC — bnb-chain/bsc geth fork (Parlia). Non-overlapping with ethereum 3969x/3979x / 8545–8547 / 30303+.
 		{Network: "bsc", Env: "mainnet", Public: 39890, Agent: 39990, NodeHTTP: 8575, P2P: 30311,
 			ChainFlag: "56", WatchSlug: "bsc", DiskHintGiB: 2048,
-			ServiceUnit: "bsc-mainnet.service",
+			SnapshotURL: "https://github.com/bnb-chain/bsc-snapshots",
+			ServiceUnit: "bsc-mainnet.service", ExtraSteps: []string{"snapshot"},
 			OptPath:     "/opt/bsc/mainnet", EtcPath: "/etc/bsc/mainnet", DataPath: "/data/bsc/mainnet"},
 		{Network: "bsc", Env: "testnet", Public: 39891, Agent: 39991, NodeHTTP: 8576, P2P: 30312,
 			ChainFlag: "97", WatchSlug: "bsc-testnet", DiskHintGiB: 400,
-			ServiceUnit: "bsc-testnet.service",
+			SnapshotURL: "https://github.com/bnb-chain/bsc-snapshots",
+			ServiceUnit: "bsc-testnet.service", ExtraSteps: []string{"snapshot"},
 			OptPath:     "/opt/bsc/testnet", EtcPath: "/etc/bsc/testnet", DataPath: "/data/bsc/testnet"},
 		// Hyperliquid — hl-visor non-validator. Gossip 4001–4002; NodeHTTP=3001 (EVM at /evm).
 		{Network: "hyperliquid", Env: "mainnet", Public: 40090, Agent: 40190, NodeHTTP: 3001, P2P: 4001,

@@ -61,6 +61,12 @@ func provisionBSCNodeEnv(req nodeProvisionRequest, prof networkPortProfile) (map
 	}
 	steps = append(steps, "datadir_init="+data)
 
+	snapUnitPath, snapScript, err := ensureBSCSnapshotUnit(prof, snapDir)
+	if err != nil {
+		return nil, fmt.Errorf("bsc snapshot unit: %w", err)
+	}
+	steps = append(steps, "snapshot_unit="+snapUnitPath, "snapshot_script="+snapScript)
+
 	rpcBinDir := envOr("RPCNODE_BIN_DIR", "/opt/rpcnode/bin")
 	toolkitDir := envOr("TOOLKIT_DIR", "/opt/rpcnode/toolkit")
 	token := envOr("AGENT_API_TOKEN", envOr("TRON_API_TOKEN", ""))
@@ -88,7 +94,12 @@ TRON_AGENT_STATE=%s/agent-state.json
 TRON_INSTANCE_FILE=%s/INSTANCE.json
 TRON_REGISTRY_FILE=/etc/rpcnode/instances.d/bsc-%s.json
 TRON_SERVICE=bsc-%s
-TRON_SNAPSHOT_ENABLED=0
+TRON_SNAPSHOT_ENABLED=1
+TRON_SNAPSHOT_URL=%s
+TRON_SNAPSHOT_SERVICE=bsc-%s-snapshot
+TRON_SNAPSHOT_LOG=/var/log/bsc/%s-snapshot.log
+TRON_SNAPSHOT_MARKER=%s/.snapshot-ready
+TRON_SNAPSHOT_STATE=%s/.snapshot-state.json
 TOOLKIT_DIR=%s
 AGENT_API_TOKEN=%s
 `,
@@ -98,6 +109,7 @@ AGENT_API_TOKEN=%s
 		req.NodeHTTPPort, req.P2PPort,
 		sysListen, sysListen, stateDir,
 		opt, etc, data, stateDir, stateDir, env, env,
+		bscSnapshotsRepo, env, env, data, data,
 		toolkitDir, token,
 	)
 
@@ -204,7 +216,7 @@ WantedBy=multi-user.target
 		"data_dir":       data,
 		"etc_dir":        etc,
 		"opt_dir":        opt,
-		"units":          []string{nodeUnitName, apiUnitName, sysUnitName},
+		"units":          []string{nodeUnitName, apiUnitName, sysUnitName, fmt.Sprintf("bsc-%s-snapshot.service", env)},
 		"created_at":     time.Now().UTC().Format(time.RFC3339),
 		"hostname":       hostnameOrEmpty(),
 	}
@@ -242,12 +254,12 @@ WantedBy=multi-user.target
 		"agent_url":      agentURL,
 		"etc_dir":        etc,
 		"data_dir":       data,
-		"units":          []string{nodeUnitName, apiUnitName, sysUnitName},
+		"units":          []string{nodeUnitName, apiUnitName, sysUnitName, fmt.Sprintf("bsc-%s-snapshot.service", env)},
 		"units_started":  false,
 		"status":         "provisioned",
-		"snapshot":       false,
-		"lifecycle":      "ports→install→start→run(full sync)",
-		"message":        "bsc per-node agents written; unit activation scheduled (Server agent left running)",
+		"snapshot":       true,
+		"lifecycle":      "ports→install→snapshot(official)→start→run",
+		"message":        "bsc per-node agents written; official snapshot unit ready (Server agent left running)",
 		"steps":          steps,
 		"register_file":  "/etc/rpcnode/register.txt",
 		"ports_file":     filepath.Join("/etc/rpcnode/nodes", "bsc-"+env+".json"),

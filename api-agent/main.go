@@ -114,15 +114,10 @@ func loadConfig() Config {
 	if upHost == "0.0.0.0" || upHost == "::" || upHost == "[::]" {
 		upHost = "127.0.0.1"
 	}
-	// Upstream from network profile when TRON_NETWORK=bitcoin|solana|ethereum|bsc — profile wins over stale env.
+	// Non-TRON catalog owns JSON-RPC (stale TRON_NODE_HTTP_PORT=18090 on leaf/host).
 	upPort := mustAtoi(envOr("TRON_NODE_HTTP_PORT", strconv.Itoa(defHTTP)), defHTTP)
-	if (network == "bitcoin" || network == "solana" || network == "ethereum" || network == "bsc" ||
-		network == "hyperliquid" || network == "arb" || network == "robinhood" || network == "optimism" ||
-		network == "base" ||
-		network == "xrpl" || network == "doge" || network == "ltc" || network == "dash" ||
-		network == "bch" || network == "cardano" || network == "ton" || network == "etc" ||
-		network == "zcash" || network == "sui" || network == "aptos" || network == "avalanche") && prof.NodeHTTP > 0 {
-		upPort = prof.NodeHTTP
+	if p := prof.CatalogUpstreamHTTP(); p > 0 {
+		upPort = p
 	}
 	stateNet := network
 	if stateNet == "" {

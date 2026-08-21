@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// collectBSC — bnb-chain/bsc geth fork lifecycle (Parlia, no separate CL / no TRON snapshot).
+// collectBSC — bnb-chain/bsc geth fork lifecycle (Parlia, official snapshot then eth_syncing).
 func collectBSC(cfg Config) map[string]any {
 	network := cfg.Network
 	if network == "" {
@@ -75,9 +75,85 @@ func collectBSC(cfg Config) map[string]any {
 
 	diskOK, freeGiB, needGiB, diskDetail := bscDiskGateOK(cfg)
 
+	// Official bsc-snapshots ExtraStep — ignore stale TRON_SNAPSHOT_ENABLED=0.
+	wantsSnap := prof.HasExtra(StepSnapshot) || prof.SnapshotPolicy != SnapshotNever
+	snapEnabled := wantsSnap
+	if snapEnabled && strings.TrimSpace(cfg.SnapshotURL) == "" {
+		cfg.SnapshotURL = prof.DefaultSnapshotURL
+	}
+	if snapEnabled {
+		_ = recoverBSCSnapshotMarker(cfg)
+	}
+	snapMarker := fileExists(cfg.SnapshotMarker)
+	snapState := readJSONFile(cfg.SnapshotState)
+	snapPhase, _ := snapState["phase"].(string)
+	snapDetail, _ := snapState["detail"].(string)
+	snapErr, _ := snapState["error"].(string)
+	snapUnitState := systemctlActive(cfg.SnapshotService)
+	snapUnitActive := snapUnitState == "active" || snapUnitState == "activating"
+	snapUnitFailed := systemctlFailed(cfg.SnapshotService)
+	toolRunning := bscOfficialSnapshotRunning(cfg)
+	snapPct, snapPctOK := bscOfficialSnapshotPct(cfg)
+	liveAria := snapEnabled && !snapMarker && snapPctOK && snapPct > 0
+	if snapEnabled && !snapMarker && (snapUnitActive || toolRunning || liveAria) {
+		snapPhase = "download"
+		if d := bscAria2ProgressDetail(strings.Join(bscSnapshotProgressTexts(cfg), "\n")); d != "" {
+			snapDetail = "Official snapshot · " + d
+		} else if snapDetail == "" {
+			snapDetail = "Official snapshot · bnb-chain/bsc-snapshots"
+		}
+	}
+	// Busy = oneshot / aria2 live, or journal already has a download %.
+	// Do not treat "no marker" alone as busy (that skipped Start()).
+	snapBusy := snapEnabled && !snapMarker && !strings.EqualFold(snapPhase, "error") &&
+		(snapUnitActive || toolRunning || liveAria)
+	if snapBusy && (snapUnitActive || toolRunning) {
+		stale := strings.EqualFold(snapPhase, "error") ||
+			strings.Contains(strings.ToLower(snapErr), "tronctl") ||
+			strings.Contains(strings.ToLower(snapErr), "rpcnodectl")
+		if stale {
+			snapErr = ""
+			snapPhase = "download"
+			if snapDetail == "" {
+				snapDetail = "Official snapshot · bnb-chain/bsc-snapshots"
+			}
+		}
+	}
+	// Stale .snapshot-state.json error after a dead oneshot must not block retry.
+	staleSnapErr := !snapUnitFailed && !toolRunning && !snapUnitActive
+	if staleSnapErr && (strings.EqualFold(snapPhase, "error") || snapErr != "") {
+		snapErr = ""
+		snapPhase = "idle"
+	}
+	snapFailed := snapEnabled && !snapMarker && !snapBusy &&
+		(snapUnitFailed || strings.EqualFold(snapPhase, "error") || snapErr != "")
+	if snapMarker {
+		snapPct = 100
+		snapPctOK = true
+	} else if snapBusy && !snapPctOK {
+		snapPct = 0
+		snapPctOK = true
+	}
+	if snapBusy && snapPctOK {
+		verifyPct = snapPct
+	}
+
 	logTail := bscSyncLogTail(cfg, 80)
+	if snapBusy || snapFailed {
+		if snip := journalUnitSnippet(cfg.SnapshotService, 80); snip != "" {
+			logTail = strings.Split(snip, "\n")
+		} else if p := strings.TrimSpace(cfg.SnapshotLog); p != "" {
+			if b, err := os.ReadFile(p); err == nil && len(b) > 0 {
+				lines := strings.Split(strings.ReplaceAll(string(b), "\r", "\n"), "\n")
+				if len(lines) > 80 {
+					lines = lines[len(lines)-80:]
+				}
+				logTail = lines
+			}
+		}
+	}
 	warmupDetail := ""
-	if nodeActive && !rpcOK && !startBad {
+	if nodeActive && !rpcOK && !startBad && !snapBusy {
 		warmupDetail = "bsc-geth warming up · waiting for JSON-RPC"
 	}
 
@@ -92,13 +168,23 @@ func collectBSC(cfg Config) map[string]any {
 		AgentPortOpen:  agentPortOpen,
 		InstRegistered: instRegistered,
 		APIUp:          apiUp,
-		SnapEnabled:    false,
-		NodeActive:     nodeActive && !startBad,
+		SnapEnabled:    snapEnabled,
+		Marker:         snapMarker,
+		SnapBusy:       snapBusy,
+		SnapFailed:     snapFailed,
+		SnapPhase:      snapPhase,
+		SnapDetail:     snapDetail,
+		SnapErr:        snapErr,
+		Pct:            map[bool]string{true: fmt.Sprintf("%.1f", snapPct), false: ""}[snapBusy && snapPctOK],
+		NodeActive:     nodeActive && !startBad && !snapBusy,
 		StartError:     startErr,
 		WarmupDetail:   warmupDetail,
 		RPCOK:          rpcOK,
-		IBD:            syncing,
+		IBD:            syncing && (!snapEnabled || snapMarker),
 		Progress:       prog,
+	}
+	if snapBusy && snapPctOK {
+		lcIn.VerifyPct = snapPct / 100
 	}
 	if rpcOK {
 		lcIn.Height = rpc.Block
@@ -108,7 +194,9 @@ func collectBSC(cfg Config) map[string]any {
 				lcIn.Height = rpc.CurrentBlock
 			}
 		}
-		lcIn.VerifyPct = verifyPct / 100
+		if !snapBusy {
+			lcIn.VerifyPct = verifyPct / 100
+		}
 	}
 	if rpc.Peers >= 0 {
 		lcIn.Peers = int(rpc.Peers)
@@ -127,7 +215,16 @@ func collectBSC(cfg Config) map[string]any {
 
 	chainTitle := "Full sync"
 	chainDetail := "Waiting for eth_syncing"
-	if !rpcOK && warmupDetail != "" {
+	if snapBusy {
+		chainTitle = "Official snapshot"
+		chainDetail = firstNonEmptyStr(snapDetail, "bnb-chain/bsc-snapshots")
+		if snapPctOK {
+			chainDetail = fmt.Sprintf("%s · %.1f%%", chainDetail, snapPct)
+		}
+	} else if snapFailed {
+		chainTitle = "Official snapshot"
+		chainDetail = firstNonEmptyStr(snapErr, snapDetail, "snapshot failed")
+	} else if !rpcOK && warmupDetail != "" {
 		chainDetail = warmupDetail
 	} else if rpcOK && syncing {
 		if rpc.HighestBlock > 0 {
@@ -159,14 +256,17 @@ func collectBSC(cfg Config) map[string]any {
 			"detail": "INSTANCE.json + /etc/rpcnode/instances.d"},
 		{"id": "disk", "title": "Disk floor", "done": diskOK,
 			"detail": diskDetail, "active": !diskOK && apiUp},
-		{"id": "geth", "title": "BSC geth running", "done": procOK && !startBad,
-			"detail": "bsc-geth process/systemd", "active": apiUp && !procOK},
-		{"id": "rpc", "title": "RPC responding", "done": rpcOK,
-			"detail": "eth_blockNumber", "active": nodeActive && !rpcOK},
-		{"id": "sync", "title": chainTitle, "done": rpcOK && !syncing,
+		{"id": "snapshot", "title": "Official snapshot", "done": !snapEnabled || snapMarker,
+			"detail": firstNonEmptyStr(snapDetail, "bnb-chain/bsc-snapshots fetch-snapshot.sh"),
+			"active": snapBusy, "pct": map[bool]any{true: snapPct, false: nil}[snapBusy && snapPctOK]},
+		{"id": "geth", "title": "BSC geth running", "done": procOK && !startBad && !snapBusy,
+			"detail": "bsc-geth process/systemd", "active": apiUp && !procOK && !snapBusy},
+		{"id": "rpc", "title": "RPC responding", "done": rpcOK && !snapBusy,
+			"detail": "eth_blockNumber", "active": nodeActive && !rpcOK && !snapBusy},
+		{"id": "sync", "title": chainTitle, "done": rpcOK && !syncing && (!snapEnabled || snapMarker),
 			"detail": chainDetail,
-			"active": rpcOK && syncing,
-			"pct":    map[bool]any{true: verifyPct, false: nil}[rpcOK && syncing]},
+			"active": (rpcOK && syncing && !snapBusy) || snapBusy,
+			"pct":    map[bool]any{true: verifyPct, false: nil}[(rpcOK && syncing && !snapBusy) || (snapBusy && snapPctOK)]},
 		{"id": "api", "title": "API agent up", "done": apiUp,
 			"detail": fmt.Sprintf(":%d /healthz", apiProbePort)},
 	}
@@ -183,6 +283,9 @@ func collectBSC(cfg Config) map[string]any {
 	case uiPhase == "install" || uiPhase == "setup" || uiPhase == "ports":
 		health = "setup"
 		degraded = true
+	case snapBusy || snapFailed:
+		health = "degraded"
+		degraded = true
 	case uiPhase == "start" || uiPhase == "run" || syncing:
 		health = "degraded"
 		degraded = true
@@ -191,7 +294,7 @@ func collectBSC(cfg Config) map[string]any {
 		degraded = true
 	}
 
-	nodeReady := nodeActive && rpcOK && !syncing && !startBad
+	nodeReady := nodeActive && rpcOK && !syncing && !startBad && (!snapEnabled || snapMarker) && !snapBusy
 	agentActivity := "idle"
 	agentStatus := "ok"
 	agentLastErr := ""
@@ -200,6 +303,13 @@ func collectBSC(cfg Config) map[string]any {
 		agentActivity = "node_start_failed"
 		agentStatus = "error"
 		agentLastErr = startErr
+	case snapFailed:
+		agentActivity = "snapshot_failed"
+		agentStatus = "error"
+		agentLastErr = firstNonEmptyStr(snapErr, snapDetail)
+	case snapBusy:
+		agentActivity = "snapshot"
+		agentStatus = "degraded"
 	case !diskOK && apiUp && !nodeActive:
 		agentActivity = "disk_gate"
 		agentStatus = "degraded"
@@ -290,12 +400,18 @@ func collectBSC(cfg Config) map[string]any {
 			"ok": diskOK, "free_gib": freeGiB, "need_gib": needGiB, "detail": diskDetail,
 		},
 		"snapshot": map[string]any{
-			"enabled": false, "ready": true, "phase": "idle", "required": false,
+			"enabled": snapEnabled, "ready": !snapEnabled || snapMarker,
+			"required": snapEnabled, "phase": firstNonEmptyStr(snapPhase, "idle"),
+			"detail": snapDetail, "error": snapErr, "pct": snapPct,
+			"busy": snapBusy, "failed": snapFailed,
+			"wget_running": snapBusy,
+			"service": cfg.SnapshotService,
+			"marker":  cfg.SnapshotMarker,
 		},
 		"sync": syncBlock,
 		"logs": map[string]any{
 			"title":  "Logs",
-			"source": "bsc-geth",
+			"source": map[bool]string{true: "bsc-snapshot", false: "bsc-geth"}[snapBusy || snapFailed],
 			"lines":  logTail,
 		},
 		"rpc": rpcBlock,

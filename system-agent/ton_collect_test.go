@@ -293,6 +293,45 @@ func TestTonBootstrapDumpProgressAfterVerify(t *testing.T) {
 	}
 }
 
+func TestTonBootstrapDumpProgressAfterExtractCompile(t *testing.T) {
+	env := "rpcnode-test-ton-dump-compile"
+	logPath := filepath.Join("/var/log/ton", env, "bootstrap.log")
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+		t.Skip("cannot write /var/log/ton:", err)
+	}
+	defer os.RemoveAll(filepath.Join("/var/log/ton", env))
+	body := strings.Join([]string{
+		"[#f034c0 236GiB/236GiB(100%) CN:0]",
+		"NOTICE Verification finished successfully. file=/var/ton-work/dump-cache/x.tar.lz",
+		"NOTICE Download complete: /var/ton-work/dump-cache/x.tar.lz",
+		"extracting dump /var/ton-work/dump-cache/x.tar.lz",
+		"compiling validator-engine",
+		"cmake --build .",
+	}, "\n")
+	if err := os.WriteFile(logPath, []byte(body), 0o644); err != nil {
+		t.Skip(err)
+	}
+	pct, detail := tonBootstrapDumpProgress(Config{Env: env})
+	if pct != 100 {
+		t.Fatalf("pct=%d want 100", pct)
+	}
+	if !strings.Contains(detail, "compiling") {
+		t.Fatalf("detail=%q want compiling (stale extracting must not win)", detail)
+	}
+	if strings.Contains(detail, "extracting dump") {
+		t.Fatalf("stale extract leaked into %q", detail)
+	}
+}
+
+func TestTonNewerThanExtractPhase(t *testing.T) {
+	if tonNewerThanExtractPhase("cmake --build .") != "compiling" {
+		t.Fatal("cmake")
+	}
+	if tonNewerThanExtractPhase("NOTICE Verification finished") != "" {
+		t.Fatal("verify is not later-than-extract")
+	}
+}
+
 func TestParseTonClientVersionCommit(t *testing.T) {
 	in := "validator-engine build information: [ Commit: bb935a83e8da44a367dc211f264c8ffa13cb7ca1, Date: 2026-08-03 15:10:16 +0300]"
 	got := parseTonClientVersionOutput(in)

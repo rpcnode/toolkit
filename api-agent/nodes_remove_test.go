@@ -287,7 +287,7 @@ func TestNodeUnitsForRemoveAllSupported(t *testing.T) {
 		"tron":        {"tron-mainnet.service", "tron-mainnet-snapshot.service"},
 		"solana":      {"solana-mainnet.service"},
 		"ethereum":    {"ethereum-geth-mainnet.service", "ethereum-lighthouse-mainnet.service"},
-		"bsc":         {"bsc-mainnet.service"},
+		"bsc":         {"bsc-mainnet.service", "bsc-mainnet-snapshot.service"},
 		"arb":         {"arb-mainnet.service"},
 		"robinhood":   {"robinhood-mainnet.service", "robinhood-mainnet-snapshot.service"},
 		"optimism":    {"optimism-mainnet.service", "optimism-op-node-mainnet.service"},

@@ -191,10 +191,9 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 	phase, _ := lc["phase"].(string)
 	snap, _ := st["snapshot"].(map[string]any)
 	marker := truthy(snap["ready"])
-	snapBusy := truthy(snap["wget_running"]) ||
-		strings.EqualFold(fmt.Sprint(snap["phase"]), "download") ||
-		strings.EqualFold(fmt.Sprint(snap["phase"]), "extract") ||
-		strings.EqualFold(fmt.Sprint(snap["phase"]), "extracting")
+	// In-flight = unit/tool actually running. Stale snapshot.phase=download
+	// after a failed oneshot must not block Start().
+	snapBusy := truthy(snap["wget_running"]) || truthy(snap["busy"])
 	snapFailed := truthy(snap["failed"])
 	nodeActive := false
 	if svc, _ := st["services"].(map[string]any); svc != nil {
@@ -430,8 +429,8 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 	}
 
 	// 1) After install: auto-start snapshot when required and not ready.
-	if autoSnap && !removing && snapRequired && !marker && !snapBusy && !snapFailed &&
-		(phase == "snapshot" || ns == "needs_snapshot") {
+	// Do not require phase==snapshot — a stale UI/IBD "start" must not skip the ExtraStep.
+	if autoSnap && !removing && snapRequired && !marker && !snapBusy && !snapFailed {
 		if p.backoffOK(prog) {
 			var err error
 			if strings.EqualFold(p.cfg.Network, "robinhood") {
@@ -439,9 +438,20 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 				// oneshot alone starts a stale unit and Sync % never appears.
 				err = startRobinhoodViaAPIAgent(p.cfg)
 			} else {
-				err = p.snap.Start()
+				if strings.EqualFold(p.cfg.Network, "bsc") {
+					if recoverBSCSnapshotMarker(p.cfg) {
+						marker = true
+					} else {
+						_ = ensureBSCSnapshotUnit(p.cfg)
+					}
+				}
+				if !marker {
+					err = p.snap.Start()
+				}
 			}
-			if err != nil {
+			if marker && strings.EqualFold(p.cfg.Network, "bsc") {
+				// recovered extract — do not Start() (would rewrite script / wipe)
+			} else if err != nil {
 				msg := err.Error()
 				// "already running/ready" is fine — not an error for pipeline.
 				if strings.Contains(msg, "already") {
@@ -463,18 +473,27 @@ func (p *LifecyclePipeline) Tick(st map[string]any) {
 		}
 	}
 
-	// Snapshot in flight + java-tron already up = genesis IBD into the same datadir.
-	// Stop the node; wget|tar cannot share output-directory with FullNode.
-	if snapRequired && !marker && nodeActive &&
-		(pipelineMayUseTronctl(p.cfg.Network) || strings.EqualFold(p.cfg.Network, "cardano")) {
+	// Snapshot in flight + node already up = genesis IBD into the same datadir.
+	// Stop only when systemd still says active — pgrep during a 10-min geth
+	// SIGINT must not re-stop + flood /var/log/rpcnode.log every collect tick.
+	if snapRequired && !marker &&
+		(pipelineMayUseTronctl(p.cfg.Network) ||
+			strings.EqualFold(p.cfg.Network, "cardano") ||
+			strings.EqualFold(p.cfg.Network, "bsc") ||
+			strings.EqualFold(p.cfg.Network, "sui")) {
 		unit := p.cfg.NodeService
 		if unit != "" && !strings.HasSuffix(unit, ".service") {
 			unit += ".service"
 		}
 		if unit != "" {
-			_ = exec.Command("systemctl", "stop", unit).Run()
-			hostLogf("INFO", "system-agent", "start", "stop %s — snapshot not ready", unit)
-			log.Printf("pipeline: stopped %s until snapshot marker exists", unit)
+			st := systemctlActive(unit)
+			if st == "active" || st == "activating" {
+				_ = exec.Command("systemctl", "stop", unit).Run()
+				if shouldLogSnapshotNodeStop(unit) {
+					hostLogf("INFO", "system-agent", "start", "stop %s — snapshot not ready", unit)
+					log.Printf("pipeline: stopped %s until snapshot marker exists", unit)
+				}
+			}
 			nodeActive = false
 		}
 	}
@@ -1581,4 +1600,17 @@ func startRobinhoodViaAPIAgent(cfg Config) error {
 		last = "no local api-agent listening for robinhood start"
 	}
 	return fmt.Errorf("%s", last)
+}
+
+var snapNodeStopLogAt sync.Map // unit → time.Time
+
+func shouldLogSnapshotNodeStop(unit string) bool {
+	now := time.Now()
+	if v, ok := snapNodeStopLogAt.Load(unit); ok {
+		if t, ok := v.(time.Time); ok && now.Sub(t) < 2*time.Minute {
+			return false
+		}
+	}
+	snapNodeStopLogAt.Store(unit, now)
+	return true
 }

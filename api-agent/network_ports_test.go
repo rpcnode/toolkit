@@ -32,6 +32,9 @@ func TestBuiltinPortProfilesDualNetwork(t *testing.T) {
 	if sol.Public != 39490 || sol.Agent != 39590 || sol.NodeHTTP != 8899 || sol.P2P != 8000 {
 		t.Fatalf("solana mainnet ports: %+v", sol)
 	}
+	if !sol.SkipIBD || sol.AdvertiseIBD() {
+		t.Fatal("solana SkipIBD: AdvertiseIBD must be false")
+	}
 	if sol.Public == btc.Public || sol.Agent == tron.Agent {
 		t.Fatal("solana ports must not collide with bitcoin/tron")
 	}
@@ -77,8 +80,11 @@ func TestBuiltinPortProfilesDualNetwork(t *testing.T) {
 		t.Fatalf("bsc testnet ports: %+v", bscTN)
 	}
 	bscCaps := lifecycleCapabilities("bsc", "mainnet")
-	if bscCaps["snapshot"] || !bscCaps["ibd"] {
+	if !bscCaps["snapshot"] || !bscCaps["ibd"] {
 		t.Fatalf("bsc capabilities=%v", bscCaps)
+	}
+	if len(bsc.ExtraSteps) == 0 || bsc.ExtraSteps[0] != "snapshot" {
+		t.Fatalf("bsc ExtraSteps=%v", bsc.ExtraSteps)
 	}
 	if !networkSupports("hyperliquid") || !networkSupports("arb") || !networkSupports("optimism") || !networkSupports("base") {
 		t.Fatal("supported networks missing L2 profiles")
@@ -184,5 +190,37 @@ func TestBitcoinProvisionForcesProfileUpstream(t *testing.T) {
 	}
 	if req.NodeHTTPPort != 8332 {
 		t.Fatalf("NodeHTTPPort=%d want 8332 from bitcoin profile", req.NodeHTTPPort)
+	}
+}
+
+func TestCatalogUpstreamHTTP(t *testing.T) {
+	stellar := lookupPortProfile("stellar", "mainnet")
+	if got := stellar.CatalogUpstreamHTTP(); got != 8000 {
+		t.Fatalf("stellar CatalogUpstreamHTTP=%d want 8000", got)
+	}
+	tron := lookupPortProfile("tron", "mainnet")
+	if !tron.PreferEnvUpstream {
+		t.Fatal("tron profile must PreferEnvUpstream (return 0)")
+	}
+	if got := tron.CatalogUpstreamHTTP(); got != 0 {
+		t.Fatalf("tron CatalogUpstreamHTTP=%d want 0 (keep env)", got)
+	}
+	empty := networkPortProfile{}
+	if got := empty.CatalogUpstreamHTTP(); got != 0 {
+		t.Fatalf("empty CatalogUpstreamHTTP=%d want 0", got)
+	}
+	upPort := 18091
+	if p := tron.CatalogUpstreamHTTP(); p > 0 {
+		upPort = p
+	}
+	if upPort != 18091 {
+		t.Fatalf("tron env remap lost: upPort=%d", upPort)
+	}
+	upPort = 18090
+	if p := stellar.CatalogUpstreamHTTP(); p > 0 {
+		upPort = p
+	}
+	if upPort != 8000 {
+		t.Fatalf("stellar stale env not overridden: upPort=%d", upPort)
 	}
 }

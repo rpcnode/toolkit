@@ -63,6 +63,10 @@ type NetworkProfile struct {
 	DefaultAgentPort  int
 	DefaultP2PPort    int
 	DefaultNodeHTTP   int // java-tron HTTP or bitcoind JSON-RPC
+	// PreferEnvUpstream: CatalogUpstreamHTTP returns 0 — keep TRON_NODE_HTTP_PORT (legacy remap).
+	PreferEnvUpstream bool
+	// SkipIBD: capabilities.ibd=false (Solana slots, not Bitcoin/EVM IBD).
+	SkipIBD bool
 
 	// Bitcoin Core conf / product metadata (ignored for TRON).
 	ChainFlag   string // e.g. chain=testnet4, signet=1
@@ -142,6 +146,7 @@ func builtinNetworkProfiles() []NetworkProfile {
 			DefaultAgentPort:   39190,
 			DefaultP2PPort:     18888,
 			DefaultNodeHTTP:    18090,
+			PreferEnvUpstream:  true,
 			DiskHintGiB:        1024,
 			OptPath:            "/opt/tron/mainnet",
 			EtcPath:            "/etc/tron/mainnet",
@@ -162,6 +167,7 @@ func builtinNetworkProfiles() []NetworkProfile {
 			DefaultAgentPort:   39191,
 			DefaultP2PPort:     18889,
 			DefaultNodeHTTP:    18091,
+			PreferEnvUpstream:  true,
 			DiskHintGiB:        256,
 			OptPath:            "/opt/tron/nile",
 			EtcPath:            "/etc/tron/nile",
@@ -181,6 +187,7 @@ func builtinNetworkProfiles() []NetworkProfile {
 			DefaultAgentPort:  39192,
 			DefaultP2PPort:    18890,
 			DefaultNodeHTTP:   18092,
+			PreferEnvUpstream: true,
 			DiskHintGiB:       256,
 			OptPath:           "/opt/tron/shasta",
 			EtcPath:           "/etc/tron/shasta",
@@ -304,6 +311,7 @@ func builtinNetworkProfiles() []NetworkProfile {
 			ExtraSteps:        nil,
 			ServicePrefix:     "solana",
 			NodeBinaryHint:    "agave-validator",
+			SkipIBD:           true,
 		},
 		{
 			Network:           "solana",
@@ -325,6 +333,7 @@ func builtinNetworkProfiles() []NetworkProfile {
 			ExtraSteps:        nil,
 			ServicePrefix:     "solana",
 			NodeBinaryHint:    "agave-validator",
+			SkipIBD:           true,
 		},
 		{
 			Network:           "solana",
@@ -346,6 +355,7 @@ func builtinNetworkProfiles() []NetworkProfile {
 			ExtraSteps:        nil,
 			ServicePrefix:     "solana",
 			NodeBinaryHint:    "agave-validator",
+			SkipIBD:           true,
 		},
 		{
 			Network:           "solana",
@@ -367,6 +377,7 @@ func builtinNetworkProfiles() []NetworkProfile {
 			ExtraSteps:        nil,
 			ServicePrefix:     "solana",
 			NodeBinaryHint:    "solana-test-validator",
+			SkipIBD:           true,
 		},
 		// Ethereum — Geth + Lighthouse EL/CL (no TRON snapshot). Ports MUST NOT collide with TRON/Bitcoin/Solana.
 		// Canonical: deploy/nodes/ethereum/DESIGN.md §5.
@@ -437,46 +448,48 @@ func builtinNetworkProfiles() []NetworkProfile {
 		// BSC — bnb-chain/bsc geth fork (Parlia). Ports MUST NOT collide with ethereum 3969x/3979x.
 		// Canonical: deploy/nodes/bsc/DESIGN.md §5.
 		{
-			Network:           "bsc",
-			Env:               "mainnet",
-			DisplayName:       "BNB Smart Chain Mainnet",
-			SnapshotPolicy:    SnapshotNever,
-			AutoSnapshot:      false,
-			AutoStartNode:     true,
-			DefaultPublicPort: 39890,
-			DefaultAgentPort:  39990,
-			DefaultP2PPort:    30311,
-			DefaultNodeHTTP:   8575,
-			ChainFlag:         "56",
-			WatchSlug:         "bsc",
-			DiskHintGiB:       2048,
-			OptPath:           "/opt/bsc/mainnet",
-			EtcPath:           "/etc/bsc/mainnet",
-			DataPath:          "/data/bsc/mainnet",
-			ExtraSteps:        nil,
-			ServicePrefix:     "bsc",
-			NodeBinaryHint:    "bsc-geth",
+			Network:            "bsc",
+			Env:                "mainnet",
+			DisplayName:        "BNB Smart Chain Mainnet",
+			SnapshotPolicy:     SnapshotRequired,
+			AutoSnapshot:       true,
+			AutoStartNode:      true,
+			DefaultSnapshotURL: "https://github.com/bnb-chain/bsc-snapshots",
+			DefaultPublicPort:  39890,
+			DefaultAgentPort:   39990,
+			DefaultP2PPort:     30311,
+			DefaultNodeHTTP:    8575,
+			ChainFlag:          "56",
+			WatchSlug:          "bsc",
+			DiskHintGiB:        2048,
+			OptPath:            "/opt/bsc/mainnet",
+			EtcPath:            "/etc/bsc/mainnet",
+			DataPath:           "/data/bsc/mainnet",
+			ExtraSteps:         []string{StepSnapshot},
+			ServicePrefix:      "bsc",
+			NodeBinaryHint:     "bsc-geth",
 		},
 		{
-			Network:           "bsc",
-			Env:               "testnet",
-			DisplayName:       "BNB Smart Chain Testnet",
-			SnapshotPolicy:    SnapshotNever,
-			AutoSnapshot:      false,
-			AutoStartNode:     true,
-			DefaultPublicPort: 39891,
-			DefaultAgentPort:  39991,
-			DefaultP2PPort:    30312,
-			DefaultNodeHTTP:   8576,
-			ChainFlag:         "97",
-			WatchSlug:         "bsc-testnet",
-			DiskHintGiB:       400,
-			OptPath:           "/opt/bsc/testnet",
-			EtcPath:           "/etc/bsc/testnet",
-			DataPath:          "/data/bsc/testnet",
-			ExtraSteps:        nil,
-			ServicePrefix:     "bsc",
-			NodeBinaryHint:    "bsc-geth",
+			Network:            "bsc",
+			Env:                "testnet",
+			DisplayName:        "BNB Smart Chain Testnet",
+			SnapshotPolicy:     SnapshotRequired,
+			AutoSnapshot:       true,
+			AutoStartNode:      true,
+			DefaultSnapshotURL: "https://github.com/bnb-chain/bsc-snapshots",
+			DefaultPublicPort:  39891,
+			DefaultAgentPort:   39991,
+			DefaultP2PPort:     30312,
+			DefaultNodeHTTP:    8576,
+			ChainFlag:          "97",
+			WatchSlug:          "bsc-testnet",
+			DiskHintGiB:        400,
+			OptPath:            "/opt/bsc/testnet",
+			EtcPath:            "/etc/bsc/testnet",
+			DataPath:           "/data/bsc/testnet",
+			ExtraSteps:         []string{StepSnapshot},
+			ServicePrefix:      "bsc",
+			NodeBinaryHint:     "bsc-geth",
 		},
 		// Hyperliquid — hl-visor non-validator + --serve-eth-rpc. Canonical: deploy/nodes/hyperliquid/DESIGN.md.
 		{
@@ -1460,34 +1473,7 @@ func (p NetworkProfile) SupportedLifecycleSteps() []string {
 // LifecycleCapabilities exposes boolean feature flags derived from the profile.
 func (p NetworkProfile) LifecycleCapabilities() map[string]bool {
 	snap := p.HasExtra(StepSnapshot) || p.SnapshotPolicy != SnapshotNever
-	// Snapshot-then-catch-up chains (robinhood) keep ibd=true so Sync UI stays after snapshot.
-	ibdCore := strings.EqualFold(p.Network, "bitcoin") ||
-		strings.EqualFold(p.Network, "doge") ||
-		strings.EqualFold(p.Network, "ltc") ||
-		strings.EqualFold(p.Network, "dash") ||
-		strings.EqualFold(p.Network, "bch") ||
-		strings.EqualFold(p.Network, "cardano") ||
-		strings.EqualFold(p.Network, "ethereum") ||
-		strings.EqualFold(p.Network, "bsc") ||
-		strings.EqualFold(p.Network, "hyperliquid") ||
-		strings.EqualFold(p.Network, "arb") ||
-		strings.EqualFold(p.Network, "robinhood") ||
-		strings.EqualFold(p.Network, "optimism") ||
-		strings.EqualFold(p.Network, "base") ||
-		strings.EqualFold(p.Network, "xrpl") ||
-		strings.EqualFold(p.Network, "stellar") ||
-		strings.EqualFold(p.Network, "ton") ||
-		strings.EqualFold(p.Network, "etc") ||
-		strings.EqualFold(p.Network, "zcash") ||
-		strings.EqualFold(p.Network, "sui") ||
-		strings.EqualFold(p.Network, "aptos") ||
-		strings.EqualFold(p.Network, "avalanche")
-	ibd := ibdCore && (!snap || strings.EqualFold(p.Network, "robinhood") ||
-		strings.EqualFold(p.Network, "sui") || strings.EqualFold(p.Network, "cardano"))
-	// Regtest is local — do not advertise IBD sync UI.
-	if ibd && isBitcoinRegtest(p.Env) {
-		ibd = false
-	}
+	ibd := p.AdvertiseIBD()
 	return map[string]bool{
 		"snapshot": snap,
 		"ibd":      ibd,
@@ -1520,6 +1506,25 @@ func ListKnownNetworks() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// CatalogUpstreamHTTP — catalog JSON-RPC, or 0 when the profile prefers env (TRON remap).
+func (p NetworkProfile) CatalogUpstreamHTTP() int {
+	if p.PreferEnvUpstream || p.DefaultNodeHTTP <= 0 {
+		return 0
+	}
+	return p.DefaultNodeHTTP
+}
+
+// AdvertiseIBD — catch-up / IBD UI. TRON (PreferEnvUpstream) and Solana (SkipIBD) return false.
+func (p NetworkProfile) AdvertiseIBD() bool {
+	if p.PreferEnvUpstream || p.SkipIBD || strings.TrimSpace(p.Network) == "" {
+		return false
+	}
+	if isBitcoinRegtest(p.Env) {
+		return false
+	}
+	return true
 }
 
 // ServiceUnit is the systemd unit for the chain node process.

@@ -188,12 +188,35 @@ func (s *Server) handleNodesStartWithEnv(w http.ResponseWriter, env, network str
 	}
 	hostLogf("INFO", "api-agent", "start", "begin %s/%s", network, env)
 	if block, msg := snapshotBlocksNodeStart(network, env); block {
-		hostLogf("ERROR", "api-agent", "start", "snapshot_required %s/%s: %s", network, env, msg)
-		writeJSON(w, http.StatusConflict, map[string]any{
-			"ok": false, "error": "snapshot_required", "message": msg,
-			"network": network, "env": env, "version": agentVersion(),
-		})
-		return
+		if network != "bsc" {
+			hostLogf("ERROR", "api-agent", "start", "snapshot_required %s/%s: %s", network, env, msg)
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"ok": false, "error": "snapshot_required", "message": msg,
+				"network": network, "env": env, "version": agentVersion(),
+			})
+			return
+		}
+		if err := startBSCOfficialSnapshot(env); err != nil {
+			hostLogf("ERROR", "api-agent", "start", "snapshot_start_failed %s/%s: %v", network, env, err)
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"ok": false, "error": "snapshot_start_failed", "message": err.Error(),
+				"network": network, "env": env, "version": agentVersion(),
+			})
+			return
+		}
+		data := strings.TrimSpace(lookupPortProfile(network, env).DataPath)
+		if data == "" {
+			data = filepath.Join("/data", network, env)
+		}
+		if !fileExists(filepath.Join(data, ".snapshot-ready")) {
+			hostLogf("INFO", "api-agent", "start", "deferred snapshot %s/%s", network, env)
+			writeJSON(w, http.StatusOK, map[string]any{
+				"ok": true, "action": "snapshot",
+				"message": "official snapshot started — node start waits for .snapshot-ready",
+				"network": network, "env": env, "version": agentVersion(),
+			})
+			return
+		}
 	}
 	if err := ensureNetworkHostDeps(network); err != nil {
 		hostLogf("ERROR", "api-agent", "start", "host_deps_failed %s/%s: %v", network, env, err)
@@ -1606,6 +1629,9 @@ func snapshotBlocksNodeStart(network, env string) (bool, string) {
 		data = filepath.Join("/data", network, env)
 	}
 	marker := filepath.Join(data, ".snapshot-ready")
+	if network == "bsc" && recoverBSCSnapshotMarkerOnHost(env, data, marker) {
+		return false, ""
+	}
 	if fileExists(marker) {
 		return false, ""
 	}

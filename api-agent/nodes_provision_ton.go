@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+// Engine asks 1.5M NOFILE; hard + kernel ceiling with headroom.
+const (
+	tonValidatorNofile = 4194304
+	tonNrOpen          = 8388608
+)
+
 // Toncoin provision — MyTonCtrl liteserver full (~30d) + TON HTTP API behind Go proxy.
 // ❌ Never Docker. Install is async (dump can take hours) — provision ACK must not block.
 // Canonical: deploy/nodes/ton/DESIGN.md
@@ -223,11 +229,11 @@ Restart=on-failure
 RestartPreventExitStatus=2
 RestartSec=60
 Nice=10
-LimitNOFILE=1048576
+LimitNOFILE=%d
 
 [Install]
 WantedBy=multi-user.target
-`, env, envPath, bootScript)
+`, env, envPath, bootScript, tonValidatorNofile)
 
 	nodeUnit := fmt.Sprintf(`[Unit]
 Description=Toncoin liteserver + TON HTTP API (%s) — RpcNode
@@ -272,6 +278,11 @@ LimitNOFILE=1048576
 `, req.NodeHTTPPort, req.NodeHTTPPort)
 	_ = os.WriteFile(filepath.Join(dropInDir, "rpcnode.conf"), []byte(dropIn), 0o644)
 	steps = append(steps, "wrote ton-http-api drop-in port "+fmt.Sprint(req.NodeHTTPPort))
+	if err := ensureTonNofileLimits(); err != nil {
+		steps = append(steps, "ton nofile limits: "+err.Error())
+	} else {
+		steps = append(steps, fmt.Sprintf("ton nofile %d + fs.nr_open %d", tonValidatorNofile, tonNrOpen))
+	}
 
 	agentURL := resolvePublicAgentURL(req.AgentPort)
 	watch := cluster.WatchSlug
@@ -370,15 +381,47 @@ func activateTonUnits(env string) error {
 	return nil
 }
 
+// validator-engine.cpp: change_maximize_rlimit(nofile, 1572864).
+// EPERM if hard < 1.5M or fs.nr_open is the stock 1048576. Headroom 4M / 8M.
+func ensureTonNofileLimits() error {
+	dir := "/etc/systemd/system/validator.service.d"
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	drop := fmt.Sprintf("[Service]\nLimitNOFILE=%d\n", tonValidatorNofile)
+	if err := os.WriteFile(filepath.Join(dir, "rpcnode-nofile.conf"), []byte(drop), 0o644); err != nil {
+		return err
+	}
+	_ = os.MkdirAll("/etc/sysctl.d", 0o755)
+	_ = os.WriteFile("/etc/sysctl.d/99-rpcnode-ton.conf", []byte(fmt.Sprintf("fs.nr_open = %d\n", tonNrOpen)), 0o644)
+	_ = exec.Command("sysctl", "-w", fmt.Sprintf("fs.nr_open=%d", tonNrOpen)).Run()
+	_ = exec.Command("systemctl", "daemon-reload").Run()
+	return nil
+}
+
 func ensureTonWorkdirLink(data string) error {
+	return ensureTonWorkdirLinkAt("/var/ton-work", data)
+}
+
+func tonWorkdirIsLive(work string) bool {
+	if st, err := os.Stat(filepath.Join(work, "keys", "client")); err == nil && !st.IsDir() {
+		return true
+	}
+	if st, err := os.Stat(filepath.Join(work, "db", "config.json")); err == nil && !st.IsDir() {
+		return true
+	}
+	return false
+}
+
+func ensureTonWorkdirLinkAt(work, data string) error {
 	data = strings.TrimSpace(data)
-	if data == "" {
+	work = strings.TrimSpace(work)
+	if data == "" || work == "" {
 		return fmt.Errorf("ton data path empty")
 	}
 	if err := os.MkdirAll(data, 0o755); err != nil {
 		return err
 	}
-	const work = "/var/ton-work"
 	st, err := os.Lstat(work)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -391,15 +434,24 @@ func ensureTonWorkdirLink(data string) error {
 		if filepath.Clean(target) == filepath.Clean(data) {
 			return nil
 		}
-		// Re-point only if current target is missing.
-		if _, err := os.Stat(target); err != nil {
-			_ = os.Remove(work)
-			return os.Symlink(data, work)
+		if tonWorkdirIsLive(work) {
+			return fmt.Errorf("%s already points to %s (want %s) — remove other TON env first", work, target, data)
 		}
-		return fmt.Errorf("%s already points to %s (want %s) — remove other TON env first", work, target, data)
+		_ = os.Remove(work)
+		return os.Symlink(data, work)
 	}
-	// Existing directory from prior MyTonCtrl — leave it; agent uses that tree.
-	return nil
+	if !st.IsDir() {
+		return fmt.Errorf("%s exists and is not a directory", work)
+	}
+	// Live prior MyTonCtrl tree — leave it.
+	if tonWorkdirIsLive(work) {
+		return nil
+	}
+	// Empty leftover after wipe (`-e` is true) — install.sh then has no keys/db.
+	if err := os.RemoveAll(work); err != nil {
+		return err
+	}
+	return os.Symlink(data, work)
 }
 
 func writeTonBootstrapScript(path, env, chain string, p2p, thaPort int, data, etc, logDir string) error {
@@ -418,6 +470,8 @@ MARKER="$ETC/bootstrap.done"
 LOG="$LOG_DIR/bootstrap.log"
 ARCHIVE_TTL=%d
 STATE_TTL=%d
+NOFILE=%d
+NR_OPEN=%d
 INSTALL_URL="https://raw.githubusercontent.com/ton-blockchain/mytonctrl/master/scripts/install.sh"
 
 # Wait out concurrent apt/dpkg via real package tools + lock fuser only.
@@ -483,6 +537,17 @@ disable_broken_apt_release_sources() {
 }
 
 mkdir -p "$DATA" "$ETC" "$LOG_DIR"
+# validator-engine change_maximize_rlimit(nofile, 1572864) → EPERM when
+# systemd hard is 1048576 and/or /proc/sys/fs/nr_open is the Ubuntu default 1M.
+# Headroom: 4M NOFILE / 8M nr_open. Write before install.sh starts the engine.
+mkdir -p /etc/systemd/system/validator.service.d
+cat >/etc/systemd/system/validator.service.d/rpcnode-nofile.conf <<EOF
+[Service]
+LimitNOFILE=$NOFILE
+EOF
+echo "fs.nr_open = $NR_OPEN" >/etc/sysctl.d/99-rpcnode-ton.conf
+sysctl -w "fs.nr_open=$NR_OPEN" >/dev/null 2>&1 || true
+systemctl daemon-reload || true
 exec >>"$LOG" 2>&1
 echo "[$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)] ton bootstrap start env=$ENV chain=$CHAIN"
 
@@ -491,7 +556,18 @@ if [[ -f "$MARKER" ]]; then
   exit 0
 fi
 
-if [[ ! -e /var/ton-work ]]; then
+# Empty leftover dir after remove: test -e is true, so the symlink was skipped.
+# MyTonCtrl then has no /var/ton-work/keys or db (bad private key / liteserver.pub).
+if [[ -L /var/ton-work ]]; then
+  tgt="$(readlink /var/ton-work || true)"
+  if [[ ! -e "$tgt" ]]; then
+    rm -f /var/ton-work
+    ln -sfn "$DATA" /var/ton-work
+  fi
+elif [[ ! -e /var/ton-work ]]; then
+  ln -sfn "$DATA" /var/ton-work
+elif [[ -d /var/ton-work ]] && [[ ! -f /var/ton-work/keys/client ]] && [[ ! -f /var/ton-work/db/config.json ]]; then
+  rm -rf /var/ton-work
   ln -sfn "$DATA" /var/ton-work
 fi
 
@@ -593,7 +669,7 @@ cat >/etc/systemd/system/validator.service.d/rpcnode.conf <<EOF
 IPAccounting=yes
 CPUAccounting=yes
 MemoryAccounting=yes
-LimitNOFILE=1048576
+LimitNOFILE=$NOFILE
 EOF
 systemctl daemon-reload || true
 
@@ -667,6 +743,6 @@ if [[ $rc -ne 0 ]]; then
 fi
 date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ >"$MARKER"
 echo "bootstrap finished"
-`, env, chain, p2p, thaPort, data, etc, logDir, tonArchiveTTLSec, tonStateTTLSec)
+`, env, chain, p2p, thaPort, data, etc, logDir, tonArchiveTTLSec, tonStateTTLSec, tonValidatorNofile, tonNrOpen)
 	return os.WriteFile(path, []byte(body), 0o755)
 }

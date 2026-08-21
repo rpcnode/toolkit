@@ -844,7 +844,14 @@ export const api = {
   workloadsUpsert: (body: Partial<Workload> & { server_id: string; network: string; env: string }) =>
     postJSON<{ ok?: boolean; item?: Workload; message?: string; error?: string }>('/api/workloads', body),
   workloadsStart: (body: { workload_id?: string; server_id?: string; env: string }) =>
-    postJSON<{ ok?: boolean; item?: Workload; message?: string; error?: string }>('/api/workloads/start', body),
+    postJSON<{
+      ok?: boolean
+      item?: Workload
+      message?: string
+      error?: string
+      action?: string
+      agent?: { action?: string; message?: string }
+    }>('/api/workloads/start', body),
   workloadsSetStatus: (body: { id: string; status: string }) =>
     postJSON<{ ok?: boolean; item?: Workload }>('/api/workloads/status', body),
   workloadsDelete: (id: string) =>

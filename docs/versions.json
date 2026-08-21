@@ -3,6 +3,190 @@
   "feed": "https://toolkit.rpcnode.dev/install/VERSIONS.json",
   "releases": [
     {
+      "version": "0.4.242",
+      "date": "2026-08-21",
+      "title": "BSC debug ignores snapshot ancient paths",
+      "notes": [
+        "Node Debug no longer flags bsc datadir error when the snapshot journal lists geth/chaindata/ancient/ while aria2 is downloading."
+      ]
+    },
+    {
+      "version": "0.4.241",
+      "date": "2026-08-21",
+      "title": "BSC start defers to official snapshot",
+      "notes": [
+        "POST /nodes/start without .snapshot-ready starts bsc-*-snapshot.service (action=snapshot) instead of Install fail. pgrep no longer matches itself (false script_running). Stale snapshot-state error does not block retry."
+      ]
+    },
+    {
+      "version": "0.4.240",
+      "date": "2026-08-21",
+      "title": "BSC snapshot keep extract after oneshot fail",
+      "notes": [
+        "After official extract, write .snapshot-keep + marker immediately so a dead oneshot (4h+ then syntax/start fail) does not wipe geth or block Install with snapshot_required. Start recovers marker from keep/log. Wizard does not treat tip snapshot.ready as ACK."
+      ]
+    },
+    {
+      "version": "0.4.239",
+      "date": "2026-08-21",
+      "title": "BSC snapshot SNAPSHOT_DIAG",
+      "notes": [
+        "Oneshot logs pid, script sha/inode/lines, wipe vs recover, fetch rc, ERR/EXIT line. Agent does not rewrite the script while the unit or aria2 is running; previous script saved as /var/log/bsc/<env>-official-snapshot.sh.prev. Copy of the running script: /var/log/bsc/<env>-snapshot.log.running.<pid>."
+      ]
+    },
+    {
+      "version": "0.4.238",
+      "date": "2026-08-20",
+      "title": "Release 0.4.238",
+      "notes": [
+        "Shipped via update-remote-agent.sh --publish."
+      ]
+    },
+    {
+      "version": "0.4.237",
+      "date": "2026-08-20",
+      "title": "TON empty /var/ton-work symlink (compile fix)",
+      "notes": [
+        "Same as 0.4.236: stub /var/ton-work after wipe is replaced with a link to /data/ton/<env>. Raw-string comment no longer uses backticks (broke go build)."
+      ]
+    },
+    {
+      "version": "0.4.236",
+      "date": "2026-08-20",
+      "title": "TON: empty /var/ton-work after wipe becomes the data symlink",
+      "notes": [
+        "Re-add testnet hit bad private key / missing liteserver.pub / no db: wipe left an empty /var/ton-work directory, bootstrap skipped the symlink (`-e` is true), MyTonCtrl ran against a stub. Stub dirs are replaced with a link to /data/ton/<env>."
+      ]
+    },
+    {
+      "version": "0.4.235",
+      "date": "2026-08-20",
+      "title": "Release 0.4.235",
+      "notes": [
+        "Shipped via update-remote-agent.sh --publish."
+      ]
+    },
+    {
+      "version": "0.4.234",
+      "date": "2026-08-20",
+      "title": "BSC snapshot: keep extract if script dies after tar",
+      "notes": [
+        "Oneshot hit `syntax error near done` after Extraction complete — bash re-read bsc-official-snapshot.sh after Update rewrote it mid-run. Agent now writes the marker if geth/chaindata/ancient/chain is already on disk, never rm -rf that tree, and does not overwrite the script while the unit is active."
+      ]
+    },
+    {
+      "version": "0.4.233",
+      "date": "2026-08-20",
+      "title": "Release 0.4.233",
+      "notes": [
+        "Shipped via update-remote-agent.sh --publish."
+      ]
+    },
+    {
+      "version": "0.4.232",
+      "date": "2026-08-20",
+      "title": "IBD flag from the profile, not a name list",
+      "notes": [
+        "lifecycleCapabilities no longer lists bitcoin||doge||… . AdvertiseIBD() is false when PreferEnvUpstream (TRON) or SkipIBD (Solana). Snapshot+catch-up (BSC / Robinhood / Sui / Cardano) keeps ibd=true without another exception list."
+      ]
+    },
+    {
+      "version": "0.4.231",
+      "date": "2026-08-20",
+      "title": "Release 0.4.231",
+      "notes": [
+        "Shipped via update-remote-agent.sh --publish."
+      ]
+    },
+    {
+      "version": "0.4.230",
+      "date": "2026-08-20",
+      "title": "Catalog owns non-TRON upstream HTTP",
+      "notes": [
+        "Leaf loadConfig no longer lists bitcoin||solana||… to ignore stale TRON_NODE_HTTP_PORT=18090. CatalogUpstreamHTTP() returns the catalog port, or 0 when the profile sets PreferEnvUpstream (TRON remap). No network-name check in the method."
+      ]
+    },
+    {
+      "version": "0.4.229",
+      "date": "2026-08-20",
+      "title": "Release 0.4.229",
+      "notes": [
+        "Shipped via update-remote-agent.sh --publish."
+      ]
+    },
+    {
+      "version": "0.4.228",
+      "date": "2026-08-20",
+      "title": "BSC snapshot bar from aria2 77%",
+      "notes": [
+        "Download % was stuck at 0: collect preferred .snapshot-state.json pct=0 over the aria2 journal line `[#id 1,347GiB/1,742GiB(77%)]`. Parser now reads journal/log first (comma GiB), writes verification_pct + snapshot.pct. UI shows the bar when snapshot.busy even if the wizard still thought BSC had no ExtraStep."
+      ]
+    },
+    {
+      "version": "0.4.227",
+      "date": "2026-08-20",
+      "title": "BSC snapshot starts; stop log not every 2s",
+      "notes": [
+        "Wizard treated BSC as no-snapshot and resumed Start (genesis IBD). Pipeline re-issued systemctl stop + hostLog every collect tick while geth was still dying, and skipped snapshot Start() on a stale phase=download. ExtraStep now starts whenever the marker is missing; audit log at most every 2 min."
+      ]
+    },
+    {
+      "version": "0.4.226",
+      "date": "2026-08-20",
+      "title": "Release 0.4.226",
+      "notes": [
+        "Shipped via update-remote-agent.sh --publish."
+      ]
+    },
+    {
+      "version": "0.4.225",
+      "date": "2026-08-20",
+      "title": "BSC snapshot build: restore time import",
+      "notes": [
+        "system-agent bscOfficialSnapshotRunning used time.Second after the import was dropped. Publish 0.4.225 failed on linux/amd64. Import restored. BSC official snapshot ExtraStep is 0.4.223."
+      ]
+    },
+    {
+      "version": "0.4.224",
+      "date": "2026-08-20",
+      "title": "Release 0.4.224",
+      "notes": [
+        "Shipped via update-remote-agent.sh --publish."
+      ]
+    },
+    {
+      "version": "0.4.223",
+      "date": "2026-08-20",
+      "title": "BSC official snapshot (not genesis IBD)",
+      "notes": [
+        "BNB mainnet from genesis is months (0.1%/hours at 7%). ExtraStep downloads official bnb-chain/bsc-snapshots via fetch-snapshot.sh (aria2 + lz4). Default pruned ~1.7 TB; picker full ~6.6 TB. Honest % from aria2/parts. After Update the pipeline writes the unit if missing, stops the node, and wipes geth/ when there is no marker. Do not Restart during download/extract."
+      ]
+    },
+    {
+      "version": "0.4.222",
+      "date": "2026-08-20",
+      "title": "TON NOFILE 4M + fs.nr_open 8M",
+      "notes": [
+        "validator-engine asks 1.5M fds. LimitNOFILE=4194304 and fs.nr_open=8388608 so setrlimit is not tight against the Ubuntu 1M ceiling. Heal rewrites the drop-in; do not Restart mid-apply."
+      ]
+    },
+    {
+      "version": "0.4.221",
+      "date": "2026-08-20",
+      "title": "TON setrlimit: 1.5M NOFILE + fs.nr_open",
+      "notes": [
+        "validator-engine change_maximize_rlimit(nofile, 1572864) logged PosixError EPERM against Ubuntu fs.nr_open 1048576 and LimitNOFILE=1048576. Drop-in + sysctl before install.sh starts the engine. Heal on collect. Do not Restart mid-apply."
+      ]
+    },
+    {
+      "version": "0.4.220",
+      "date": "2026-08-20",
+      "title": "TON dump 100%: extracting is not stuck",
+      "notes": [
+        "After aria2 100% the UI no longer sits on a stale «extracting dump» while install.sh compiles or the validator applies. Live tar/lz4 still shows extracting + elapsed. tha=0 and 99.9% are a hold until seqno>0 — not Synced."
+      ]
+    },
+    {
       "version": "0.4.219",
       "date": "2026-08-20",
       "title": "Release 0.4.219",
