@@ -1,0 +1,10 @@
+.git
+.gradle
+**/.gradle
+**/build
+**/node_modules
+**/dist
+**/.next
+app/database
+admin/.env
+cdn-site/data

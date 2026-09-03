@@ -1,0 +1,37 @@
+# Agave from anza-xyz/agave GitHub releases (linux x86_64 only — no Anza aarch64 tarball).
+# Note: since Agave v3.0 the solana-release tarball no longer includes agave-validator;
+# Start extracts CLI/keygen under node_dir, then builds the validator into node_dir/bin
+# from the VERSION pin (see chains/solana/scripts/build-agave.sh.tmpl). Never /opt/solana.
+# Companion scripts under chains/solana/scripts/ are copied into CLIENT_SYNC_DEST/solana/<env>/
+# on client download and synced to the host with the tarball (run-validator.sh.tmpl, …).
+programs:
+  - env: mainnet
+    id: agave-validator
+    source: { type: github, repo: anza-xyz/agave }
+    artifacts:
+      - name: "solana-release-x86_64-unknown-linux-gnu.tar.bz2"
+        urlTemplate: "https://github.com/anza-xyz/agave/releases/download/{tag}/solana-release-x86_64-unknown-linux-gnu.tar.bz2"
+    requirements: { logFile: logs/validator.log }
+    ports:
+      - { role: http, port: 8899, label: "HTTP RPC", config: required }
+      - { role: p2p, port: 8000, label: "P2P", config: required }
+  - env: testnet
+    id: agave-validator
+    source: { type: github, repo: anza-xyz/agave }
+    artifacts:
+      - name: "solana-release-x86_64-unknown-linux-gnu.tar.bz2"
+        urlTemplate: "https://github.com/anza-xyz/agave/releases/download/{tag}/solana-release-x86_64-unknown-linux-gnu.tar.bz2"
+    requirements: { logFile: logs/validator.log }
+    ports:
+      - { role: http, port: 8891, label: "HTTP RPC", config: required }
+      - { role: p2p, port: 8100, label: "P2P", config: required }
+  - env: devnet
+    id: agave-validator
+    source: { type: github, repo: anza-xyz/agave }
+    artifacts:
+      - name: "solana-release-x86_64-unknown-linux-gnu.tar.bz2"
+        urlTemplate: "https://github.com/anza-xyz/agave/releases/download/{tag}/solana-release-x86_64-unknown-linux-gnu.tar.bz2"
+    requirements: { logFile: logs/validator.log }
+    ports:
+      - { role: http, port: 8893, label: "HTTP RPC", config: required }
+      - { role: p2p, port: 8200, label: "P2P", config: required }

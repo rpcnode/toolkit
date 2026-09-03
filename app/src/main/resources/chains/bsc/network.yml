@@ -1,0 +1,89 @@
+# Disk plan, host sizing. Snapshot required — official bnb-chain/bsc-snapshots (fetch-snapshot.sh).
+# Directory name is the network id. Ports live in clients.yml beside this file.
+label: BNB Smart Chain
+diskRoles:
+  - id: chaindata
+    label: chaindata
+    media: nvme
+  - id: snapshots
+    label: snapshots / additional
+    media: ssd
+diskNotes:
+  - "Geth --datadir is the chaindata role leaf (creates <datadir>/geth/)."
+  - "Official snapshot CSV/parts use the snapshots role (SSD); fetch-snapshot.sh --auto-delete keeps only the in-flight part."
+  - "Parlia is in-process — no separate consensus client."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: BNB Smart Chain Mainnet
+    diskHintGiB: 2048
+    fullNodeGiB: 2048
+    archiveGiB: 6600
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: required
+    publicTip:
+      urls:
+        - https://bsc-rpc.publicnode.com
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: Pruned · pruneancient
+        hint: Official pruneancient (~1.7 TB). Matches gcmode=full + 2 TB plan. Default. BSC ≥ v1.7.2.
+        diskGiB: 1700
+        default: true
+      - id: full
+        kind: archive
+        label: Full history
+        hint: Official full ancient (~6.6 TB). Needs ~8 TB free. Not the 2 TB product disk.
+        diskGiB: 6600
+  - id: testnet
+    label: BNB Smart Chain Testnet
+    diskHintGiB: 400
+    fullNodeGiB: 400
+    archiveGiB: 440
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: required
+    publicTip:
+      urls:
+        - https://bsc-testnet-rpc.publicnode.com
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: Pruned · pruneancient
+        hint: Official pruneancient (~180 GB). Default. BSC ≥ v1.7.2.
+        diskGiB: 180
+        default: true
+      - id: full
+        kind: archive
+        label: Full history
+        hint: Official full ancient (~440 GB). Larger than the 400 GiB testnet disk hint.
+        diskGiB: 440
+
+# CLI flags live in systemd (chains/bsc). Genesis/config from release zip under /etc/bsc/<env>/.
+clientConfig:
+  program: geth
+  format: flags
+  bindings:
+    - key: snapshot
+      source: install_option
+      option: snapshot
+      default: "pruned"
+      description: Official snapshot — pruned (pruneancient) or full ancient
+    - key: datadir
+      source: disk_role_dir
+      role: chaindata
+      description: Geth --datadir (Disks chaindata role)
+    - key: snapshots
+      source: disk_role_dir
+      role: snapshots
+      description: Snapshot workspace for fetch-snapshot.sh -D
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: P2P listen port

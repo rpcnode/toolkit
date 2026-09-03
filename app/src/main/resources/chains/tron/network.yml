@@ -1,0 +1,147 @@
+# Disk plan, host sizing, snapshot policy. The directory name is the network id.
+# The live snapshot download URL is not here — it's resolved at read time by
+# chains/tron/infrastructure/http/TronSnapshotResolver.kt.
+label: TRON
+diskRoles:
+  - id: fullnode
+    label: FullNode DB
+    media: nvme
+  - id: solidity
+    label: SolidityNode / additional
+    media: ssd
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: TRON Mainnet
+    # diskHintGiB is the JBOD provisioning hint (generous headroom); fullNodeGiB/archiveGiB come
+    # from the snapshot picker — standard snapshot ~2.9 TB, balance_history snapshot ~3.6 TB.
+    diskHintGiB: 4096
+    fullNodeGiB: 2900
+    archiveGiB: 3600
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: required
+    publicTip:
+      urls:
+        # Same getnowblock call as local FullNode height — only the host differs.
+        - https://api.trongrid.io/wallet/getnowblock
+    snapshotTypes:
+      - id: full
+        kind: full
+        label: Full
+        hint: Standard FullNode snapshot (~2.9 TB)
+        diskGiB: 2900
+        default: true
+      - id: lite
+        kind: lite
+        label: Lite
+        hint: LiteFullNode snapshot
+        diskGiB: 1200
+        destLeaf: litefullnode
+      - id: archive
+        kind: archive
+        label: Archive
+        hint: Balance history / archive snapshot (~3.6 TB)
+        diskGiB: 3600
+  - id: nile
+    label: TRON Nile
+    diskHintGiB: 256
+    fullNodeGiB: 256
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: required
+    publicTip:
+      urls:
+        - https://nile.trongrid.io/wallet/getnowblock
+    snapshotTypes:
+      - id: full
+        kind: full
+        label: Full
+        hint: Nile FullNode snapshot
+        diskGiB: 256
+        default: true
+      - id: lite
+        kind: lite
+        label: Lite
+        hint: Nile LiteFullNode snapshot
+        diskGiB: 120
+        destLeaf: litefullnode
+  - id: shasta
+    label: TRON Shasta
+    diskHintGiB: 256
+    fullNodeGiB: 256
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://api.shasta.trongrid.io/wallet/getnowblock
+
+# Declarative map: shipped HOCON template → panel variables (RenderNodeClientConfigUseCase).
+# Template file names match clients/tron.yml configs[] and public/install/clients/tron/{env}/.
+# description is shown on the Start step (read-only preview).
+clientConfig:
+  program: FullNode.jar
+  format: hoocon
+  templates:
+    mainnet: main_net_config.conf
+    nile: config-nile.conf
+    shasta: shasta_net_config.conf
+  bindings:
+    # Paths are relative to java-tron -d / WorkingDirectory (node dest leaf: fullnode or litefullnode).
+    # Absolute disk_role paths break when -d is missing (java-tron nests under ./output-directory).
+    - path: storage.db.directory
+      source: literal
+      value: database
+      description: LevelDB/RocksDB data directory (relative to node dir / -d)
+    - path: storage.index.directory
+      source: literal
+      value: index
+      description: Index directory (relative to node dir / -d)
+    - path: node.listen.port
+      source: catalog_port
+      role: p2p
+      description: P2P listen port (fixed catalog port for this env)
+    - path: node.http.fullNodePort
+      source: catalog_port
+      role: http_fullnode
+      description: FullNode HTTP API port
+    - path: node.http.solidityPort
+      source: catalog_port
+      role: http_solidity
+      description: Solidity HTTP API port
+    - path: node.http.PBFTPort
+      source: catalog_port
+      role: http_pbft
+      description: PBFT HTTP API port
+    - path: node.rpc.port
+      source: catalog_port
+      role: grpc_fullnode
+      description: FullNode gRPC port
+    - path: node.rpc.PBFTPort
+      source: catalog_port
+      role: grpc_pbft
+      description: PBFT gRPC port
+    - path: storage.transHistory.switch
+      source: snapshot_kind
+      description: Transaction history DB — on for full/archive, off for lite (from Snapshot type)
+      map:
+        full: "on"
+        lite: "off"
+        archive: "on"
+      default: "on"
+    - path: node.maxConnections
+      source: install_option
+      option: max_connections
+      default: "30"
+      description: Maximum peer connections (P2P)
+    - path: node.minConnections
+      source: install_option
+      option: min_connections
+      default: "8"
+      description: Minimum peer connections to keep
+    - path: node.maxHttpConnectNumber
+      source: install_option
+      option: max_http_connections
+      default: "50"
+      description: Maximum concurrent HTTP API connections

@@ -1,0 +1,110 @@
+label: Bitcoin
+# Disk plan, host sizing, snapshot policy. The filename is the network id.
+# diskMedia is omitted on purpose: bitcoin has explicit diskRoles below, so each role carries
+# its own media class instead of one network-wide default.
+diskRoles:
+  - id: blockchain
+    label: Blockchain data
+    media: ssd
+  - id: index
+    label: Index / auxiliary
+    media: ssd
+diskNotes:
+  - "Electrs not in product — second role is reserved index/aux path only."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Bitcoin Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 1024
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://mempool.space/api/blocks/tip/height
+  - id: testnet4
+    label: Bitcoin Testnet4
+    diskHintGiB: 128
+    fullNodeGiB: 128
+    cpuCores: 2
+    memoryGiB: 8
+    snapshot: never
+    publicTip:
+      urls:
+        - https://mempool.space/testnet4/api/blocks/tip/height
+  - id: signet
+    label: Bitcoin Signet
+    diskHintGiB: 64
+    fullNodeGiB: 64
+    cpuCores: 2
+    memoryGiB: 4
+    snapshot: never
+    publicTip:
+      urls:
+        - https://mempool.space/signet/api/blocks/tip/height
+  - id: regtest
+    label: Bitcoin Regtest
+    diskHintGiB: 8
+    fullNodeGiB: 8
+    cpuCores: 1
+    memoryGiB: 2
+    snapshot: never
+
+# Declarative map: shipped bitcoin.conf → panel variables. INI uses [section] per env.
+# description is shown on the Start step (read-only preview).
+clientConfig:
+  program: bitcoin
+  format: ini
+  template: bitcoin.conf
+  envSections:
+    mainnet: main
+    testnet4: testnet4
+    signet: signet
+    regtest: regtest
+  bindings:
+    - key: datadir
+      source: disk_role_dir
+      role: blockchain
+      description: Bitcoin data directory (blocks, chainstate) from Disks blockchain role
+    - key: blocksdir
+      source: disk_role_dir
+      role: index
+      optional: true
+      description: Optional separate blocks directory from Disks index role
+    - key: port
+      source: catalog_port
+      role: p2p
+      description: P2P listen port (fixed catalog port for this env)
+    - key: rpcport
+      source: catalog_port
+      role: rpc
+      description: JSON-RPC listen port
+    - key: rpcbind
+      source: literal
+      value: "127.0.0.1"
+      description: RPC bind address (localhost only)
+    - key: maxconnections
+      source: install_option
+      option: max_connections
+      default: "125"
+      description: Maximum peer connections
+    - key: txindex
+      source: install_option
+      option: txindex
+      default: "0"
+      description: Maintain a full transaction index (0/1)
+    - key: server
+      source: literal
+      value: "1"
+      description: Accept JSON-RPC commands
+    - key: zmqpubrawblock
+      source: catalog_zmq_bind
+      role: zmq_rawblock
+      optional: true
+      description: ZMQ PUB endpoint for raw blocks (localhost)
+    - key: zmqpubrawtx
+      source: catalog_zmq_bind
+      role: zmq_rawtx
+      optional: true
+      description: ZMQ PUB endpoint for raw transactions (localhost)

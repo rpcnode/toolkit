@@ -1,0 +1,43 @@
+programs:
+  - env: mainnet
+    id: dash
+    source: { type: github, repo: dashpay/dash }
+    artifacts:
+      - name: "dashcore-x86_64-linux-gnu.tar.gz"
+        nameAarch64: "dashcore-aarch64-linux-gnu.tar.gz"
+        urlTemplate: "https://github.com/dashpay/dash/releases/download/{tag}/dashcore-{version}-x86_64-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/dashpay/dash/releases/download/{tag}/dashcore-{version}-aarch64-linux-gnu.tar.gz"
+    configs:
+      - name: dash.conf
+        urlTemplate: "https://raw.githubusercontent.com/dashpay/dash/{tag}/contrib/debian/examples/dash.conf"
+    ports:
+      - { role: p2p, port: 9999, label: "P2P", config: required }
+      - { role: rpc, port: 9998, label: "RPC", config: required }
+  - env: testnet
+    id: dash
+    source: { type: github, repo: dashpay/dash }
+    artifacts:
+      - name: "dashcore-x86_64-linux-gnu.tar.gz"
+        nameAarch64: "dashcore-aarch64-linux-gnu.tar.gz"
+        urlTemplate: "https://github.com/dashpay/dash/releases/download/{tag}/dashcore-{version}-x86_64-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/dashpay/dash/releases/download/{tag}/dashcore-{version}-aarch64-linux-gnu.tar.gz"
+    configs:
+      - name: dash.conf
+        urlTemplate: "https://raw.githubusercontent.com/dashpay/dash/{tag}/contrib/debian/examples/dash.conf"
+    ports:
+      - { role: p2p, port: 19999, label: "P2P", config: required }
+      - { role: rpc, port: 19998, label: "RPC", config: required }
+  - env: regtest
+    id: dash
+    source: { type: github, repo: dashpay/dash }
+    artifacts:
+      - name: "dashcore-x86_64-linux-gnu.tar.gz"
+        nameAarch64: "dashcore-aarch64-linux-gnu.tar.gz"
+        urlTemplate: "https://github.com/dashpay/dash/releases/download/{tag}/dashcore-{version}-x86_64-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/dashpay/dash/releases/download/{tag}/dashcore-{version}-aarch64-linux-gnu.tar.gz"
+    configs:
+      - name: dash.conf
+        urlTemplate: "https://raw.githubusercontent.com/dashpay/dash/{tag}/contrib/debian/examples/dash.conf"
+    ports:
+      - { role: p2p, port: 19899, label: "P2P", config: required }
+      - { role: rpc, port: 19898, label: "RPC", config: required }

@@ -1,0 +1,70 @@
+# Geth binaries from gethstore (version from GitHub ethereum/go-ethereum).
+# Lighthouse from sigp/lighthouse GitHub release assets.
+# urlTemplate "gethstore" is resolved by EthereumGethArtifactUrlResolver (blob list + commit).
+programs:
+  - env: mainnet
+    id: geth
+    source: { type: github, repo: ethereum/go-ethereum }
+    artifacts:
+      - name: "geth-linux-amd64.tar.gz"
+        nameAarch64: "geth-linux-arm64.tar.gz"
+        urlTemplate: "gethstore"
+        urlTemplateAarch64: "gethstore"
+    ports:
+      - { role: p2p, port: 30303, label: "P2P", config: required }
+      - { role: http, port: 8545, label: "HTTP RPC", config: required }
+      - { role: engine, port: 8551, label: "Engine API", config: required }
+      - { role: beacon, port: 5052, label: "Beacon HTTP", config: required }
+      - { role: consensus_p2p, port: 9000, label: "Consensus P2P", config: required }
+  - env: mainnet
+    id: lighthouse
+    source: { type: github, repo: sigp/lighthouse }
+    artifacts:
+      - name: "lighthouse-x86_64.tar.gz"
+        nameAarch64: "lighthouse-aarch64.tar.gz"
+        urlTemplate: "https://github.com/sigp/lighthouse/releases/download/{tag}/lighthouse-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/sigp/lighthouse/releases/download/{tag}/lighthouse-{tag}-aarch64-unknown-linux-gnu.tar.gz"
+  - env: sepolia
+    id: geth
+    source: { type: github, repo: ethereum/go-ethereum }
+    artifacts:
+      - name: "geth-linux-amd64.tar.gz"
+        nameAarch64: "geth-linux-arm64.tar.gz"
+        urlTemplate: "gethstore"
+        urlTemplateAarch64: "gethstore"
+    ports:
+      - { role: p2p, port: 30313, label: "P2P", config: required }
+      - { role: http, port: 8546, label: "HTTP RPC", config: required }
+      - { role: engine, port: 8552, label: "Engine API", config: required }
+      - { role: beacon, port: 5053, label: "Beacon HTTP", config: required }
+      - { role: consensus_p2p, port: 9100, label: "Consensus P2P", config: required }
+  - env: sepolia
+    id: lighthouse
+    source: { type: github, repo: sigp/lighthouse }
+    artifacts:
+      - name: "lighthouse-x86_64.tar.gz"
+        nameAarch64: "lighthouse-aarch64.tar.gz"
+        urlTemplate: "https://github.com/sigp/lighthouse/releases/download/{tag}/lighthouse-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/sigp/lighthouse/releases/download/{tag}/lighthouse-{tag}-aarch64-unknown-linux-gnu.tar.gz"
+  - env: hoodi
+    id: geth
+    source: { type: github, repo: ethereum/go-ethereum }
+    artifacts:
+      - name: "geth-linux-amd64.tar.gz"
+        nameAarch64: "geth-linux-arm64.tar.gz"
+        urlTemplate: "gethstore"
+        urlTemplateAarch64: "gethstore"
+    ports:
+      - { role: p2p, port: 30323, label: "P2P", config: required }
+      - { role: http, port: 8547, label: "HTTP RPC", config: required }
+      - { role: engine, port: 8553, label: "Engine API", config: required }
+      - { role: beacon, port: 5054, label: "Beacon HTTP", config: required }
+      - { role: consensus_p2p, port: 9200, label: "Consensus P2P", config: required }
+  - env: hoodi
+    id: lighthouse
+    source: { type: github, repo: sigp/lighthouse }
+    artifacts:
+      - name: "lighthouse-x86_64.tar.gz"
+        nameAarch64: "lighthouse-aarch64.tar.gz"
+        urlTemplate: "https://github.com/sigp/lighthouse/releases/download/{tag}/lighthouse-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/sigp/lighthouse/releases/download/{tag}/lighthouse-{tag}-aarch64-unknown-linux-gnu.tar.gz"

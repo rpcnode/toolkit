@@ -1,0 +1,25 @@
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Run as root (agent installs units as root). Do not pin User=nodeop —
+# that account is not created by toolkit and yields systemd status=217/USER.
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN
+ExecStart={{script_path}}
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=infinity
+TimeoutStopSec=600
+IPAccounting=yes
+CPUAccounting=yes
+MemoryAccounting=yes
+LimitNOFILE={{nofile}}
+LimitMEMLOCK=infinity
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

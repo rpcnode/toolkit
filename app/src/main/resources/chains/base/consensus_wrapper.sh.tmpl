@@ -1,0 +1,42 @@
+#!/bin/bash
+set -eu
+get_public_ip() {
+  local PROVIDERS=(
+    "http://ifconfig.me"
+    "http://api.ipify.org"
+    "http://ipecho.net/plain"
+    "http://v4.ident.me"
+  )
+  local provider IP
+  for provider in "${PROVIDERS[@]}"; do
+    IP=$(curl -s --max-time 10 --connect-timeout 5 "$provider" || true)
+    if [[ $IP =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      echo "$IP"
+      return 0
+    fi
+  done
+  return 1
+}
+if [[ -z "${BASE_NODE_L2_ENGINE_AUTH:-}" || -z "${BASE_NODE_L2_ENGINE_AUTH_RAW:-}" ]]; then
+  echo "BASE_NODE_L2_ENGINE_AUTH* required" >&2
+  exit 1
+fi
+mkdir -p "$(dirname "$BASE_NODE_L2_ENGINE_AUTH")"
+printf '%s\n' "$BASE_NODE_L2_ENGINE_AUTH_RAW" > "$BASE_NODE_L2_ENGINE_AUTH"
+chmod 640 "$BASE_NODE_L2_ENGINE_AUTH" || true
+ENGINE_HTTP="${BASE_NODE_L2_ENGINE_RPC/ws:\/\//http:\/\/}"
+ENGINE_HTTP="${ENGINE_HTTP/wss:\/\//https:\/\/}"
+ENGINE_HOSTPORT="${ENGINE_HTTP#http://}"
+ENGINE_HOSTPORT="${ENGINE_HOSTPORT#https://}"
+ENGINE_HOSTPORT="${ENGINE_HOSTPORT%/*}"
+ENGINE_HOST="${ENGINE_HOSTPORT%:*}"
+ENGINE_PORT="${ENGINE_HOSTPORT##*:}"
+until (echo >/dev/tcp/"$ENGINE_HOST"/"$ENGINE_PORT") 2>/dev/null; do
+  echo "waiting for base-reth-node engine ${ENGINE_HOST}:${ENGINE_PORT}"
+  sleep 2
+done
+if PUBLIC_IP=$(get_public_ip); then
+  export BASE_NODE_P2P_ADVERTISE_IP="$PUBLIC_IP"
+  echo "BASE_NODE_P2P_ADVERTISE_IP=$PUBLIC_IP"
+fi
+exec {{consensus_bin}} node

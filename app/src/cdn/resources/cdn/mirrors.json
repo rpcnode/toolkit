@@ -1,0 +1,60 @@
+{
+  "items": [
+    {
+      "network": "tron",
+      "env": "mainnet",
+      "type": "full",
+      "mirror": "http://34.86.86.229/",
+      "filename": "FullNode_output-directory.tgz",
+      "discover": "listing"
+    },
+    {
+      "network": "tron",
+      "env": "mainnet",
+      "type": "internal_tx",
+      "mirror": "http://35.247.128.170/",
+      "filename": "FullNode_output-directory.tgz",
+      "discover": "listing"
+    },
+    {
+      "network": "tron",
+      "env": "mainnet",
+      "type": "archive",
+      "mirror": "http://34.48.6.163/",
+      "filename": "FullNode_output-directory.tgz",
+      "discover": "listing"
+    },
+    {
+      "network": "tron",
+      "env": "nile",
+      "type": "full",
+      "mirror": "https://snapshots.nileex.io/",
+      "filename": "FullNode_output-directory.tgz",
+      "discover": "dated"
+    },
+    {
+      "network": "tron",
+      "env": "nile",
+      "type": "lite",
+      "mirror": "https://snapshots.nileex.io/",
+      "filename": "LiteFullNode_output-directory.tgz",
+      "discover": "dated"
+    },
+    {
+      "network": "base",
+      "env": "mainnet",
+      "type": "archive",
+      "mirror": "https://chain.base.org/api/snapshots",
+      "filename": "manifest.json",
+      "discover": "base_api"
+    },
+    {
+      "network": "base",
+      "env": "sepolia",
+      "type": "archive",
+      "mirror": "https://chain.base.org/api/snapshots",
+      "filename": "manifest.json",
+      "discover": "base_api"
+    }
+  ]
+}

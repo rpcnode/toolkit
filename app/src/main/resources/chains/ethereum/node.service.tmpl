@@ -1,0 +1,32 @@
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={{bin}} \
+  --datadir {{datadir}} \
+  --http --http.addr 127.0.0.1 --http.port {{http_port}} \
+  --http.api eth,net,web3,txpool \
+  --http.vhosts localhost \
+  --authrpc.addr 127.0.0.1 --authrpc.port {{engine_port}} \
+  --authrpc.jwtsecret {{jwt_path}} \
+  --authrpc.vhosts localhost \
+  --syncmode {{syncmode}} \
+  --gcmode {{gcmode}} \
+  --state.scheme path \
+  --cache {{cache_mb}} \
+  --maxpeers 100 \
+  --rpc.batch-request-limit 2000{{history_flag}} \
+  --port {{p2p_port}}{{network_flag}}
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=600
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE=1048576
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

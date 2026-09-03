@@ -1,0 +1,18 @@
+[Unit]
+Description=RpcNode Snapshot CDN public site (Next.js)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rpcnode
+Group=rpcnode
+WorkingDirectory=/opt/rpcnode/cdn-site
+EnvironmentFile=-/etc/rpcnode/rpcnode-cdn-site.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,31 @@
+# Rolling hl-visor from Hyperliquid CDN (no GitHub tag). Version = Last-Modified + ETag
+# via HyperliquidClientReleaseResolver. GPG pub key for binary verify / auto-upgrade.
+programs:
+  - env: mainnet
+    id: hl-visor
+    source: { type: pinned, version: "rolling", tag: "rolling", label: "binaries.hyperliquid.xyz" }
+    artifacts:
+      - name: "hl-visor"
+        urlTemplate: "https://binaries.hyperliquid.xyz/Mainnet/hl-visor"
+    configs:
+      - name: pub_key.asc
+        urlTemplate: "https://raw.githubusercontent.com/hyperliquid-dex/node/main/pub_key.asc"
+    requirements: { logFile: logs/hl-visor.log }
+    ports:
+      - { role: http, port: 3001, label: "EVM / info HTTP", config: required }
+      - { role: p2p, port: 4001, label: "Gossip", config: required }
+      - { role: p2p2, port: 4002, label: "Gossip aux", config: required }
+  - env: testnet
+    id: hl-visor
+    source: { type: pinned, version: "rolling", tag: "rolling", label: "binaries.hyperliquid-testnet.xyz" }
+    artifacts:
+      - name: "hl-visor"
+        urlTemplate: "https://binaries.hyperliquid-testnet.xyz/Testnet/hl-visor"
+    configs:
+      - name: pub_key.asc
+        urlTemplate: "https://raw.githubusercontent.com/hyperliquid-dex/node/main/pub_key.asc"
+    requirements: { logFile: logs/hl-visor.log }
+    ports:
+      - { role: http, port: 3001, label: "EVM / info HTTP", config: required }
+      - { role: p2p, port: 4001, label: "Gossip", config: required }
+      - { role: p2p2, port: 4002, label: "Gossip aux", config: required }

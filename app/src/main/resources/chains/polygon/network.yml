@@ -1,0 +1,70 @@
+# Disk plan, host sizing. Snapshot never — IBD / community snapshots later.
+# Filename is the network id. Ports live in clients/polygon.yml.
+label: Polygon
+diskRoles:
+  - id: bor
+    label: Bor DB
+    media: nvme
+  - id: heimdall
+    label: Heimdall home
+    media: ssd
+diskNotes:
+  - "Bor binary + .deb live in the bor role leaf; datadir is <bor>/datadir."
+  - "Heimdall home on SSD (consensus). Both units must run for a full PoS node."
+  - "Heimdall needs an Ethereum L1 JSON-RPC URL (default publicnode)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Polygon Mainnet
+    diskHintGiB: 8192
+    fullNodeGiB: 8192
+    archiveGiB: 16384
+    cpuCores: 16
+    memoryGiB: 64
+    snapshot: never
+    publicTip:
+      urls:
+        - https://polygon-bor-rpc.publicnode.com
+  - id: amoy
+    label: Polygon Amoy
+    diskHintGiB: 2048
+    fullNodeGiB: 2048
+    archiveGiB: 2048
+    cpuCores: 8
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://polygon-amoy-bor-rpc.publicnode.com
+
+# CLI / profile configs live in chains/polygon systemd + extracted debs. No conf patch on Start.
+clientConfig:
+  program: bor
+  format: flags
+  bindings:
+    - key: node
+      source: install_option
+      option: node
+      default: "full"
+      description: Bor mode — full (sentry) or archive
+    - key: datadir
+      source: disk_role_dir
+      role: bor
+      relative: datadir
+      description: Bor datadir (under bor role)
+    - key: heimdall-home
+      source: disk_role_dir
+      role: heimdall
+      description: Heimdall --home (Disks heimdall role)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: Bor JSON-RPC HTTP port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: Bor P2P listen port
+    - key: heimdall-api-port
+      source: catalog_port
+      role: heimdall_api
+      description: Heimdall REST API port

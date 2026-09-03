@@ -1,0 +1,40 @@
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={{bin}} node \
+  --datadir={{datadir}} \
+  --log.stdout.format=json \
+  --http \
+  --http.addr=127.0.0.1 \
+  --http.port={{http_port}} \
+  --http.api=eth,net,web3,txpool,debug \
+  --http.corsdomain=* \
+  --ws \
+  --ws.addr=127.0.0.1 \
+  --ws.port={{ws_port}} \
+  --ws.api=eth,net,web3,txpool,debug \
+  --ws.origins=* \
+  --authrpc.addr=127.0.0.1 \
+  --authrpc.port={{engine_port}} \
+  --authrpc.jwtsecret={{jwt_path}} \
+  --chain={{reth_chain}} \
+  --rollup.sequencer-http={{sequencer_http}} \
+  --rollup.disable-tx-pool-gossip \
+  --max-outbound-peers=100 \
+  --discovery.port={{p2p_port}} \
+  --discovery.v5.port={{discovery_v5}} \
+  --port={{p2p_port}}
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=300
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE=1048576
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,36 @@
+# sui-node + sui-tool from MystenLabs/sui GitHub releases (no Docker).
+# Tag prefixes differ per env (mainnet-v* vs testnet-v*). genesis.blob is required;
+# fullnode.yaml is generated on Start under node_dir.
+programs:
+  - env: mainnet
+    id: sui-node
+    source: { type: github, repo: MystenLabs/sui, tagPrefix: "mainnet-" }
+    artifacts:
+      - name: "sui-ubuntu-x86_64.tgz"
+        nameAarch64: "sui-ubuntu-aarch64.tgz"
+        urlTemplate: "https://github.com/MystenLabs/sui/releases/download/{tag}/sui-{tag}-ubuntu-x86_64.tgz"
+        urlTemplateAarch64: "https://github.com/MystenLabs/sui/releases/download/{tag}/sui-{tag}-ubuntu-aarch64.tgz"
+    configs:
+      - name: genesis.blob
+        urlTemplate: "https://github.com/MystenLabs/sui-genesis/raw/main/mainnet/genesis.blob"
+    requirements: { logFile: logs/sui.log }
+    ports:
+      - { role: http, port: 9000, label: "JSON-RPC", config: required }
+      - { role: metrics, port: 9184, label: "Metrics", config: required }
+      - { role: p2p, port: 8084, label: "P2P", config: required }
+  - env: testnet
+    id: sui-node
+    source: { type: github, repo: MystenLabs/sui, tagPrefix: "testnet-" }
+    artifacts:
+      - name: "sui-ubuntu-x86_64.tgz"
+        nameAarch64: "sui-ubuntu-aarch64.tgz"
+        urlTemplate: "https://github.com/MystenLabs/sui/releases/download/{tag}/sui-{tag}-ubuntu-x86_64.tgz"
+        urlTemplateAarch64: "https://github.com/MystenLabs/sui/releases/download/{tag}/sui-{tag}-ubuntu-aarch64.tgz"
+    configs:
+      - name: genesis.blob
+        urlTemplate: "https://github.com/MystenLabs/sui-genesis/raw/main/testnet/genesis.blob"
+    requirements: { logFile: logs/sui.log }
+    ports:
+      - { role: http, port: 9001, label: "JSON-RPC", config: required }
+      - { role: metrics, port: 9185, label: "Metrics", config: required }
+      - { role: p2p, port: 8085, label: "P2P", config: required }

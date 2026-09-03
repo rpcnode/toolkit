@@ -1,0 +1,27 @@
+CREATE TABLE nodes (
+  id              TEXT PRIMARY KEY,
+  server_id       TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL DEFAULT '',
+  network         TEXT NOT NULL,
+  env             TEXT NOT NULL,
+  public_port     INTEGER NOT NULL DEFAULT 0,
+  agent_port      INTEGER NOT NULL DEFAULT 0,
+  node_http_port  INTEGER NOT NULL DEFAULT 0,
+  p2p_port        INTEGER NOT NULL DEFAULT 0,
+  agent_url       TEXT NOT NULL DEFAULT '',
+  status          TEXT NOT NULL DEFAULT 'awaiting_ports',
+  client_version  TEXT NOT NULL DEFAULT '',
+  client_latest   TEXT NOT NULL DEFAULT '',
+  client_update_available INTEGER NOT NULL DEFAULT 0,
+  disk_layout_json TEXT NOT NULL DEFAULT '',
+  install_started_at TEXT NOT NULL DEFAULT '',
+  synced_at       TEXT NOT NULL DEFAULT '',
+  install_options_json TEXT NOT NULL DEFAULT '',
+  live_test_status TEXT NOT NULL DEFAULT '',
+  live_test_at    TEXT NOT NULL DEFAULT '',
+  live_test_error TEXT NOT NULL DEFAULT '',
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL,
+  UNIQUE (server_id, network, env)
+);
+CREATE INDEX idx_nodes_server ON nodes(server_id);

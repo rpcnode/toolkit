@@ -1,0 +1,82 @@
+# Toncoin liteserver (MyTonCtrl). Pin-only — no CDN tarball.
+# Directory name is the network id. Ports live in clients.yml beside this file.
+label: Toncoin
+diskRoles:
+  - id: blockchain
+    label: Blockchain DB
+    media: nvme
+  - id: archive
+    label: Archive / additional
+    media: ssd
+diskNotes:
+  - "MyTonCtrl uses host-global /var/ton-work — RpcNode symlinks it to the blockchain disk role."
+  - "Only one TON env per host (validator/mytoncore units are shared)."
+  - "Dump (~30d) is the product default; archive needs ≥12 TiB NVMe."
+oneEnvPerHost: true
+envs:
+  - id: mainnet
+    label: Toncoin Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 1024
+    archiveGiB: 12288
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: never
+    publicTip:
+      urls:
+        - https://toncenter.com/api/v2/getMasterchainInfo
+  - id: testnet
+    label: Toncoin Testnet
+    diskHintGiB: 256
+    fullNodeGiB: 256
+    archiveGiB: 4096
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://testnet.toncenter.com/api/v2/getMasterchainInfo
+
+# Host install via MyTonCtrl — format: flags for Start Config preview.
+# Capacity literals must match TonUnitBodies / bootstrap drop-ins.
+clientConfig:
+  program: validator-engine
+  format: flags
+  bindings:
+    - key: blockchain
+      source: disk_role_dir
+      role: blockchain
+      description: Blockchain DB (NVMe) — /var/ton-work target
+    - key: archive
+      source: disk_role_dir
+      role: archive
+      description: Archive / aux path (SSD)
+    - key: http
+      source: catalog_port
+      role: http
+      description: TON HTTP API listen port
+    - key: p2p
+      source: catalog_port
+      role: p2p
+      description: validator-engine P2P listen port
+    - key: history
+      source: install_option
+      option: history
+      default: dump
+      description: MyTonCtrl history — dump (~30d) or archive
+    - key: LimitNOFILE
+      source: literal
+      value: "4194304"
+      description: systemd LimitNOFILE for validator-engine
+    - key: archive_ttl
+      source: literal
+      value: "2592000"
+      description: Archive TTL seconds (~30d) for dump mode
+    - key: state_ttl
+      source: literal
+      value: "86400"
+      description: State cache GC TTL seconds (~1d)
+    - key: fs.nr_open
+      source: literal
+      value: "8388608"
+      description: sysctl fs.nr_open so the engine can raise RLIMIT_NOFILE

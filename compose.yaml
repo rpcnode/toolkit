@@ -1,0 +1,63 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+      target: server
+    image: rpcnode-server:local
+    restart: unless-stopped
+    environment:
+      PANEL_CORS_ORIGINS: ""
+    volumes:
+      - rpcnode-data:/data
+
+  admin:
+    build:
+      context: .
+      dockerfile: admin/Dockerfile
+    image: rpcnode-admin:local
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "${RPCNODE_PORT:-8093}:8080"
+
+  cdn:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+      target: cdn
+    image: rpcnode-cdn:local
+    profiles:
+      - cdn
+    restart: unless-stopped
+    volumes:
+      - rpcnode-cdn-data:/data
+
+  cdn-site:
+    build: ./cdn-site
+    image: rpcnode-cdn-site:local
+    profiles:
+      - cdn
+    restart: unless-stopped
+    environment:
+      SNAPSHOT_CDN_DIR: /data
+    volumes:
+      - rpcnode-cdn-data:/data
+
+  cdn-nginx:
+    image: nginx:1.27-alpine
+    profiles:
+      - cdn
+    restart: unless-stopped
+    depends_on:
+      - cdn-site
+    ports:
+      - "${CDN_HTTP_PORT:-8095}:8095"
+    volumes:
+      - ./cdn-site/deploy/nginx.docker.conf:/etc/nginx/conf.d/default.conf:ro
+      - rpcnode-cdn-data:/data:ro
+
+volumes:
+  rpcnode-data:
+  rpcnode-cdn-data:

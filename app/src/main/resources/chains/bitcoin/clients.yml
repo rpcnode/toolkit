@@ -1,0 +1,73 @@
+# Fixed catalog ports — carried over from the Go sibling's shipped catalog
+# (internal/networks/bitcoin/facts.go). testnet4 intentionally reuses the legacy
+# testnet3 18332/18333 pair, not Core's newer 48332/48333 default — that's this product's
+# catalog choice, kept as-is so it matches what's already deployed.
+# public_port/agent_port/sys_listen (Go RPC proxy + leaf agent) are out of scope here.
+#
+# Artifact `name` / `nameAarch64` are stable on-disk names (no version). Upstream URLs still
+# use {version}; the host install-plan and panel sync use these fixed filenames.
+programs:
+  - env: mainnet
+    id: bitcoin
+    source: { type: github, repo: bitcoin/bitcoin }
+    artifacts:
+      - name: "bitcoin-x86_64-linux-gnu.tar.gz"
+        nameAarch64: "bitcoin-aarch64-linux-gnu.tar.gz"
+        urlTemplate: "https://bitcoincore.org/bin/bitcoin-core-{version}/bitcoin-{version}-x86_64-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://bitcoincore.org/bin/bitcoin-core-{version}/bitcoin-{version}-aarch64-linux-gnu.tar.gz"
+    configs:
+      - name: bitcoin.conf
+        urlTemplate: "https://raw.githubusercontent.com/bitcoin/bitcoin/{tag}/share/examples/bitcoin.conf"
+    ports:
+      - { role: p2p, port: 8333, label: "P2P", config: required }
+      - { role: rpc, port: 8332, label: "RPC", config: required }
+      - { role: zmq_rawblock, port: 28332, label: "ZMQ rawblock", config: optional }
+      - { role: zmq_rawtx, port: 28333, label: "ZMQ rawtx", config: optional }
+  - env: testnet4
+    id: bitcoin
+    source: { type: github, repo: bitcoin/bitcoin }
+    artifacts:
+      - name: "bitcoin-x86_64-linux-gnu.tar.gz"
+        nameAarch64: "bitcoin-aarch64-linux-gnu.tar.gz"
+        urlTemplate: "https://bitcoincore.org/bin/bitcoin-core-{version}/bitcoin-{version}-x86_64-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://bitcoincore.org/bin/bitcoin-core-{version}/bitcoin-{version}-aarch64-linux-gnu.tar.gz"
+    configs:
+      - name: bitcoin.conf
+        urlTemplate: "https://raw.githubusercontent.com/bitcoin/bitcoin/{tag}/share/examples/bitcoin.conf"
+    ports:
+      - { role: p2p, port: 18333, label: "P2P", config: required }
+      - { role: rpc, port: 18332, label: "RPC", config: required }
+      - { role: zmq_rawblock, port: 28342, label: "ZMQ rawblock", config: optional }
+      - { role: zmq_rawtx, port: 28343, label: "ZMQ rawtx", config: optional }
+  - env: signet
+    id: bitcoin
+    source: { type: github, repo: bitcoin/bitcoin }
+    artifacts:
+      - name: "bitcoin-x86_64-linux-gnu.tar.gz"
+        nameAarch64: "bitcoin-aarch64-linux-gnu.tar.gz"
+        urlTemplate: "https://bitcoincore.org/bin/bitcoin-core-{version}/bitcoin-{version}-x86_64-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://bitcoincore.org/bin/bitcoin-core-{version}/bitcoin-{version}-aarch64-linux-gnu.tar.gz"
+    configs:
+      - name: bitcoin.conf
+        urlTemplate: "https://raw.githubusercontent.com/bitcoin/bitcoin/{tag}/share/examples/bitcoin.conf"
+    ports:
+      - { role: p2p, port: 38333, label: "P2P", config: required }
+      - { role: rpc, port: 38332, label: "RPC", config: required }
+      - { role: zmq_rawblock, port: 28352, label: "ZMQ rawblock", config: optional }
+      - { role: zmq_rawtx, port: 28353, label: "ZMQ rawtx", config: optional }
+  - env: regtest
+    id: bitcoin
+    source: { type: github, repo: bitcoin/bitcoin }
+    artifacts:
+      - name: "bitcoin-x86_64-linux-gnu.tar.gz"
+        nameAarch64: "bitcoin-aarch64-linux-gnu.tar.gz"
+        urlTemplate: "https://bitcoincore.org/bin/bitcoin-core-{version}/bitcoin-{version}-x86_64-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://bitcoincore.org/bin/bitcoin-core-{version}/bitcoin-{version}-aarch64-linux-gnu.tar.gz"
+    configs:
+      - name: bitcoin.conf
+        urlTemplate: "https://raw.githubusercontent.com/bitcoin/bitcoin/{tag}/share/examples/bitcoin.conf"
+    ports:
+      - { role: p2p, port: 18444, label: "P2P", config: required }
+      - { role: rpc, port: 18443, label: "RPC", config: required }
+      - { role: zmq_rawblock, port: 28362, label: "ZMQ rawblock", config: optional }
+      - { role: zmq_rawtx, port: 28363, label: "ZMQ rawtx", config: optional }

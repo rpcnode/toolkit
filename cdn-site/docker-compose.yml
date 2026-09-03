@@ -1,0 +1,30 @@
+# Public Snapshot CDN: Next.js site (:7090) + nginx (:8095).
+#
+# From this directory:
+#   export SNAPSHOT_CDN_DIR=/data/rpcnode-cdn   # same root as rpcnode-cdn.jar
+#   docker compose up -d --build
+#
+# The JAR writes archives on the host; both containers mount that tree.
+
+services:
+  cdn-site:
+    build: .
+    image: rpcnode-cdn-site:local
+    restart: unless-stopped
+    environment:
+      SNAPSHOT_CDN_DIR: /data
+    volumes:
+      - ${SNAPSHOT_CDN_DIR:-./data}:/data
+    ports:
+      - "${CDN_SITE_PORT:-7090}:7090"
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - cdn-site
+    ports:
+      - "${CDN_HTTP_PORT:-8095}:8095"
+    volumes:
+      - ./deploy/nginx.docker.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${SNAPSHOT_CDN_DIR:-./data}/snapshots:/data/snapshots:ro

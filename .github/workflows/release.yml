@@ -1,0 +1,68 @@
+name: Release toolkit
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build JARs and publish release
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.ref_name }}
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 26
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "26"
+          cache: gradle
+
+      - name: Set panel version
+        run: printf '%s\n' "${TAG#v}" > admin/PANEL_VERSION
+
+      - name: Build release JARs
+        working-directory: app
+        run: ./gradlew --no-daemon buildFatJar agentFatJar cdnFatJar --console=plain
+
+      - name: Stage artifacts
+        run: |
+          mkdir -p dist
+          cp -f app/build/libs/rpcnode-server.jar dist/rpcnode-server.jar
+          cp -f app/build/libs/rpcnode-agent.jar dist/rpcnode-agent.jar
+          cp -f app/build/libs/rpcnode-cdn.jar dist/rpcnode-cdn.jar
+          sha256sum \
+            dist/rpcnode-server.jar \
+            dist/rpcnode-agent.jar \
+            dist/rpcnode-cdn.jar \
+            > "dist/rpcnode-${TAG}.sha256"
+          ls -lh dist
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" \
+              dist/rpcnode-server.jar \
+              dist/rpcnode-agent.jar \
+              dist/rpcnode-cdn.jar \
+              "dist/rpcnode-${TAG}.sha256" \
+              --clobber
+          else
+            gh release create "$TAG" \
+              dist/rpcnode-server.jar \
+              dist/rpcnode-agent.jar \
+              dist/rpcnode-cdn.jar \
+              "dist/rpcnode-${TAG}.sha256" \
+              --title "RpcNode ${TAG}" \
+              --generate-notes
+          fi

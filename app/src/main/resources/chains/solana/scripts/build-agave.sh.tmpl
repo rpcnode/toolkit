@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+# Build agave-validator from Anza source (release tarball no longer ships it since Agave v3.0).
+# Installs OS build deps + rustup automatically (Debian/Ubuntu apt, Fedora dnf, RHEL/Rocky yum|dnf).
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+export HOME="${HOME:-/root}"
+export CARGO_HOME="${CARGO_HOME:-/root/.cargo}"
+export RUSTUP_HOME="${RUSTUP_HOME:-/root/.rustup}"
+DEST={{dest}}
+WORK={{work}}
+TAG={{tag}}
+GIT=https://github.com/anza-xyz/agave.git
+
+if [ -x "$DEST" ]; then echo "already at $DEST"; exit 0; fi
+for cand in "$WORK/bin/agave-validator" "$WORK/target/release/agave-validator"; do
+  if [ -x "$cand" ]; then
+    install -m 755 "$cand" "$DEST"
+    echo "reused $cand → $DEST"
+    exit 0
+  fi
+done
+
+run_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo -n "$@"
+  else
+    echo "need root (or passwordless sudo) to install packages: $*" >&2
+    exit 1
+  fi
+}
+
+# Package lists mirror toolkit-go HostPackages + pkgmgr Map (debian names → rpm).
+ensure_host_deps() {
+  local id like id_like=""
+  if [ -r /etc/os-release ]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    id="${ID:-}"
+    id_like="${ID_LIKE:-}"
+  fi
+  local fam="unknown"
+  case " ${id} ${id_like} " in
+    *" debian "*|*" ubuntu "*|*" linuxmint "*) fam=debian ;;
+    *" fedora "*|*" nobara "*) fam=fedora ;;
+    *" rhel "*|*" centos "*|*" rocky "*|*" alma "*|*" amzn "*) fam=rhel ;;
+  esac
+  # Amazon Linux / some RHEL images advertise like=fedora — prefer rhel map when ID is clear.
+  case "$id" in
+    rhel|centos|rocky|almalinux|amzn) fam=rhel ;;
+    fedora) fam=fedora ;;
+    debian|ubuntu|linuxmint) fam=debian ;;
+  esac
+
+  echo "solana build: ensuring host deps (family=$fam id=${id:-?})"
+  case "$fam" in
+    debian)
+      if ! command -v apt-get >/dev/null 2>&1; then
+        echo "debian-like host but apt-get missing" >&2
+        exit 1
+      fi
+      run_root apt-get update -y
+      run_root apt-get install -y --no-install-recommends \
+        curl ca-certificates bzip2 git \
+        build-essential pkg-config libudev-dev \
+        llvm libclang-dev clang cmake \
+        protobuf-compiler libssl-dev libprotobuf-dev
+      ;;
+    fedora)
+      if command -v dnf >/dev/null 2>&1; then
+        run_root dnf install -y \
+          curl ca-certificates bzip2 git \
+          gcc gcc-c++ make pkgconf-pkg-config systemd-devel \
+          llvm clang clang-devel cmake \
+          protobuf-compiler openssl-devel protobuf-devel
+      else
+        echo "fedora-like host but dnf missing" >&2
+        exit 1
+      fi
+      ;;
+    rhel)
+      if command -v dnf >/dev/null 2>&1; then
+        run_root dnf install -y \
+          curl ca-certificates bzip2 git \
+          gcc gcc-c++ make pkgconf-pkg-config systemd-devel \
+          llvm clang clang-devel cmake \
+          protobuf-compiler openssl-devel protobuf-devel
+      elif command -v yum >/dev/null 2>&1; then
+        run_root yum install -y \
+          curl ca-certificates bzip2 git \
+          gcc gcc-c++ make pkgconf-pkg-config systemd-devel \
+          llvm clang clang-devel cmake \
+          protobuf-compiler openssl-devel protobuf-devel
+      else
+        echo "rhel-like host but dnf/yum missing" >&2
+        exit 1
+      fi
+      ;;
+    *)
+      echo "unsupported OS for auto package install (ID=${id:-unknown} ID_LIKE=${id_like:-})." >&2
+      echo "Install Agave build deps manually, then retry Start." >&2
+      exit 1
+      ;;
+  esac
+}
+
+ensure_rustup() {
+  if command -v rustc >/dev/null 2>&1 && command -v cargo >/dev/null 2>&1; then
+    return 0
+  fi
+  if [ -x "$CARGO_HOME/bin/rustc" ] && [ -x "$CARGO_HOME/bin/cargo" ]; then
+    # shellcheck disable=SC1091
+    . "$CARGO_HOME/env"
+    return 0
+  fi
+  echo "solana build: installing rustup (stable)"
+  curl --proto '=https' --tlsv1.2 -sSf \
+    --connect-timeout 30 --retry 8 --retry-delay 3 --retry-all-errors --retry-connrefused \
+    https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+  # shellcheck disable=SC1091
+  . "$CARGO_HOME/env"
+}
+
+ensure_host_deps
+ensure_rustup
+# shellcheck disable=SC1091
+. "$CARGO_HOME/env"
+
+if [ ! -d "$WORK/.git" ]; then
+  rm -rf "$WORK"
+  git clone --depth 1 --branch "$TAG" "$GIT" "$WORK"
+fi
+cd "$WORK"
+cargo build --release --bin agave-validator
+mkdir -p bin
+install -m 755 target/release/agave-validator bin/agave-validator
+install -m 755 bin/agave-validator "$DEST"
+test -x "$DEST"

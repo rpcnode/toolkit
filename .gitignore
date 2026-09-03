@@ -1,0 +1,21 @@
+# admin
+admin/.env
+admin/node_modules/
+admin/dist/
+.cursor
+
+# Keep GitHub Actions publishable
+!.github/
+!.github/workflows/
+!.github/workflows/**
+
+# local release staging
+dist/
+
+# app (also listed in app/.gitignore)
+app/build/
+app/.gradle/
+app/.idea/
+app/.kotlin/
+app/database/
+*.log

@@ -1,0 +1,91 @@
+# Disk plan, host sizing. Snapshot never — geth snap/IBD + lighthouse checkpoint sync.
+# Directory name is the network id. Ports live in clients.yml beside this file.
+label: Ethereum
+diskRoles:
+  - id: execution
+    label: Execution Client DB
+    media: nvme
+  - id: consensus
+    label: Consensus Client DB
+    media: ssd
+diskNotes:
+  - "Geth binary + tarballs live in the execution role leaf; --datadir is <execution>/datadir (geth creates <datadir>/geth/)."
+  - "Lighthouse datadir on consensus (SSD)."
+  - "Post-merge: both geth and lighthouse must be running. JWT shared under /etc/ethereum/<env>/."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Ethereum Mainnet
+    diskHintGiB: 2048
+    fullNodeGiB: 2048
+    archiveGiB: 14336
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: never
+    publicTip:
+      urls:
+        - https://ethereum-rpc.publicnode.com
+      beaconUrls:
+        - https://ethereum-beacon-api.publicnode.com
+  - id: sepolia
+    label: Ethereum Sepolia
+    diskHintGiB: 400
+    fullNodeGiB: 400
+    archiveGiB: 2048
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://ethereum-sepolia-rpc.publicnode.com
+      beaconUrls:
+        - https://ethereum-sepolia-beacon-api.publicnode.com
+  - id: hoodi
+    label: Ethereum Hoodi
+    diskHintGiB: 400
+    fullNodeGiB: 400
+    archiveGiB: 2048
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://ethereum-hoodi-rpc.publicnode.com
+      beaconUrls:
+        - https://ethereum-hoodi-beacon-api.publicnode.com
+
+# CLI flags live in systemd units (chains/ethereum). No conf patch on Start.
+clientConfig:
+  program: geth
+  format: flags
+  bindings:
+    - key: node
+      source: install_option
+      option: node
+      default: "full"
+      description: Geth mode — full (snap+gcmode full) or archive (syncmode full + gcmode archive)
+    - key: datadir
+      source: disk_role_dir
+      role: execution
+      relative: datadir
+      description: Geth --datadir (under execution role; avoids clash with binary named geth)
+    - key: lighthouse-datadir
+      source: disk_role_dir
+      role: consensus
+      description: Lighthouse consensus datadir (Disks consensus role)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: Geth JSON-RPC HTTP port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: Geth P2P listen port
+    - key: engine-port
+      source: catalog_port
+      role: engine
+      description: Engine API (JWT) port
+    - key: beacon-port
+      source: catalog_port
+      role: beacon
+      description: Lighthouse HTTP / beacon API port

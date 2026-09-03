@@ -1,0 +1,48 @@
+# base-reth-node + base-consensus from GitHub base/base releases (no Docker).
+programs:
+  - env: mainnet
+    id: base-reth-node
+    source: { type: github, repo: base/base }
+    artifacts:
+      - name: "base-reth-node-x86_64.tar.gz"
+        nameAarch64: "base-reth-node-aarch64.tar.gz"
+        urlTemplate: "https://github.com/base/base/releases/download/{tag}/base-reth-node-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/base/base/releases/download/{tag}/base-reth-node-{tag}-aarch64-unknown-linux-gnu.tar.gz"
+    ports:
+      - { role: p2p, port: 30353, label: "P2P", config: required }
+      - { role: http, port: 8571, label: "HTTP RPC", config: required }
+      - { role: ws, port: 8581, label: "WebSocket RPC", config: required }
+      - { role: engine, port: 8572, label: "Engine API", config: required }
+      - { role: consensus_p2p, port: 9023, label: "Consensus P2P", config: required }
+      - { role: discovery_v5, port: 9203, label: "Discovery v5", config: required }
+  - env: mainnet
+    id: base-consensus
+    source: { type: github, repo: base/base }
+    artifacts:
+      - name: "base-consensus-x86_64.tar.gz"
+        nameAarch64: "base-consensus-aarch64.tar.gz"
+        urlTemplate: "https://github.com/base/base/releases/download/{tag}/base-consensus-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/base/base/releases/download/{tag}/base-consensus-{tag}-aarch64-unknown-linux-gnu.tar.gz"
+  - env: sepolia
+    id: base-reth-node
+    source: { type: github, repo: base/base }
+    artifacts:
+      - name: "base-reth-node-x86_64.tar.gz"
+        nameAarch64: "base-reth-node-aarch64.tar.gz"
+        urlTemplate: "https://github.com/base/base/releases/download/{tag}/base-reth-node-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/base/base/releases/download/{tag}/base-reth-node-{tag}-aarch64-unknown-linux-gnu.tar.gz"
+    ports:
+      - { role: p2p, port: 30354, label: "P2P", config: required }
+      - { role: http, port: 8573, label: "HTTP RPC", config: required }
+      - { role: ws, port: 8583, label: "WebSocket RPC", config: required }
+      - { role: engine, port: 8574, label: "Engine API", config: required }
+      - { role: consensus_p2p, port: 9033, label: "Consensus P2P", config: required }
+      - { role: discovery_v5, port: 9213, label: "Discovery v5", config: required }
+  - env: sepolia
+    id: base-consensus
+    source: { type: github, repo: base/base }
+    artifacts:
+      - name: "base-consensus-x86_64.tar.gz"
+        nameAarch64: "base-consensus-aarch64.tar.gz"
+        urlTemplate: "https://github.com/base/base/releases/download/{tag}/base-consensus-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/base/base/releases/download/{tag}/base-consensus-{tag}-aarch64-unknown-linux-gnu.tar.gz"

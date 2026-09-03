@@ -1,0 +1,21 @@
+# Pin-only — MyTonCtrl install.sh on the host (no CDN artifacts).
+# Ports match Go sibling facts (internal/networks/ton/facts.go).
+programs:
+  - env: mainnet
+    id: validator-engine
+    source: { type: pinned, version: "2.18.0", tag: "v2.18.0", label: "ton-blockchain/mytonctrl" }
+    skipReason: "Host MyTonCtrl install (pin-only)"
+    requirements: { logFile: logs/ton.log }
+    artifacts: []
+    ports:
+      - { role: http, port: 8081, label: "TON HTTP API", config: required }
+      - { role: p2p, port: 30310, label: "P2P (validator)", config: required }
+  - env: testnet
+    id: validator-engine
+    source: { type: pinned, version: "2.18.0", tag: "v2.18.0", label: "ton-blockchain/mytonctrl" }
+    skipReason: "Host MyTonCtrl install (pin-only)"
+    requirements: { logFile: logs/ton.log }
+    artifacts: []
+    ports:
+      - { role: http, port: 8082, label: "TON HTTP API", config: required }
+      - { role: p2p, port: 30311, label: "P2P (validator)", config: required }

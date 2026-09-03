@@ -1,0 +1,28 @@
+#!/bin/bash
+set -euo pipefail
+MARKER={{marker}}
+BOOT_UNIT={{bootstrap_unit}}
+LOG={{log_file}}
+mkdir -p "$(dirname "$LOG")"
+exec >>"$LOG" 2>&1
+
+if [[ ! -f "$MARKER" ]]; then
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] bootstrap marker missing — starting $BOOT_UNIT"
+  systemctl start --no-block "$BOOT_UNIT" || true
+  while [[ ! -f "$MARKER" ]]; do
+    if systemctl is-failed "$BOOT_UNIT" >/dev/null 2>&1; then
+      echo "bootstrap unit failed" >&2
+      exit 1
+    fi
+    sleep 5
+  done
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] bootstrap done"
+fi
+
+systemctl start --no-block validator.service mytoncore.service 2>/dev/null || true
+for u in ton-http-api.service ton_http_api.service; do
+  systemctl start --no-block "$u" 2>/dev/null || true
+done
+
+# Keep MainPID alive for HostNodeLaunchSupport.waitActive — stock daemons are separate units.
+exec sleep infinity

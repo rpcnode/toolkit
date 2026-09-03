@@ -1,0 +1,64 @@
+#!/bin/bash
+set -uo pipefail
+export LC_ALL=C
+ENV='{{env}}'
+TOOL='{{tool}}'
+GENESIS='{{genesis}}'
+DB='{{db}}'
+MARKER='{{marker}}'
+STATE='{{state}}'
+LOG='{{log}}'
+NODE_UNIT="rpcnode-sui-${ENV}.service"
+mkdir -p "$(dirname "$LOG")" "$DB"
+snapdiag() { echo "SNAPSHOT_DIAG $*" | tee -a "$LOG"; }
+state() { printf '{"phase":"%s","pct":%s,"detail":"%s","updated_at":"%s"}\n' \
+  "$1" "$2" "$3" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$STATE"; }
+snapdiag "begin pid=$$ env=$ENV db=$DB"
+trap 'snapdiag "ERR line=$LINENO cmd=$BASH_COMMAND rc=$?"' ERR
+trap 'snapdiag "TERM rc=143 — interrupted, not done"; exit 143' TERM
+systemctl stop "$NODE_UNIT" 2>/dev/null || true
+if [ ! -x "$TOOL" ] && ! command -v "$TOOL" >/dev/null 2>&1; then
+  snapdiag "ERROR sui-tool missing at $TOOL"
+  state error 0 "sui-tool missing at $TOOL"
+  exit 1
+fi
+if [ ! -f "$GENESIS" ]; then
+  snapdiag "ERROR genesis.blob missing at $GENESIS"
+  state error 0 "genesis.blob missing at $GENESIS — sync Sui clients first"
+  exit 1
+fi
+# SIGTERM mid-download leaves files and no marker. Wipe only an empty DB
+# (genesis leftover). Partial formal restore must resume — not rm -rf.
+if [ ! -f "$MARKER" ]; then
+  if [ -z "$(find "$DB" -mindepth 1 -maxdepth 1 2>/dev/null | head -1)" ]; then
+    snapdiag "empty db — formal snapshot from scratch"
+  else
+    snapdiag "resume formal snapshot — keeping $DB"
+  fi
+fi
+state download 0 "Sui formal snapshot · resolving…"
+# sui-tool opens mysten-metrics (default bind) — two envs at once → AddrInUse panic.
+while true; do
+  others="$(pgrep -af 'sui-tool.*download-formal-snapshot' 2>/dev/null | grep -vF -- "--network $ENV" | grep -v grep || true)"
+  if [ -z "$others" ]; then break; fi
+  snapdiag "waiting for another env formal snapshot (metrics bind)…"
+  sleep 45
+done
+set -o pipefail
+"$TOOL" download-formal-snapshot \
+  --latest \
+  --genesis "$GENESIS" \
+  --network "$ENV" \
+  --path "$DB" \
+  --num-parallel-downloads 50 \
+  --no-sign-request 2>&1 | tee -a "$LOG"
+RC=${PIPESTATUS[0]}
+snapdiag "download_done rc=$RC"
+if [ "$RC" -ne 0 ]; then
+  state error 0 "sui-tool download-formal-snapshot failed rc=$RC — see $LOG"
+  exit "$RC"
+fi
+touch "$MARKER"
+state done 100 "Formal snapshot ready"
+snapdiag "DONE marker=$MARKER"
+exit 0

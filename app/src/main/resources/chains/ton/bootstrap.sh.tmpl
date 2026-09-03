@@ -1,0 +1,265 @@
+#!/bin/bash
+# RpcNode Toncoin bootstrap — MyTonCtrl liteserver ({{install_mode}}).
+set -euo pipefail
+ENV={{env}}
+CHAIN={{chain}}
+P2P={{p2p}}
+THA_PORT={{tha_port}}
+DATA={{data}}
+MARKER_DIR={{marker_dir}}
+LOG_DIR={{log_dir}}
+MARKER="$MARKER_DIR/bootstrap.done"
+LOG="$LOG_DIR/bootstrap.log"
+ARCHIVE_TTL={{archive_ttl}}
+STATE_TTL={{state_ttl}}
+NOFILE={{nofile}}
+NR_OPEN={{nr_open}}
+INSTALL_URL={{install_url}}
+INSTALL_EXTRA={{install_extra}}
+
+wait_apt_lock() {
+  local deadline=$((SECONDS + 900))
+  while true; do
+    local busy=0
+    if pgrep -x apt-get >/dev/null 2>&1 \
+       || pgrep -x apt >/dev/null 2>&1 \
+       || pgrep -x dpkg >/dev/null 2>&1; then
+      busy=1
+    elif fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 \
+       || fuser /var/lib/dpkg/lock >/dev/null 2>&1 \
+       || fuser /var/lib/apt/lists/lock >/dev/null 2>&1 \
+       || fuser /var/cache/apt/archives/lock >/dev/null 2>&1; then
+      busy=1
+    fi
+    if [[ $busy -eq 0 ]]; then
+      return 0
+    fi
+    if (( SECONDS >= deadline )); then
+      echo "timeout waiting for apt/dpkg lock (900s) — continuing anyway" >&2
+      return 0
+    fi
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] waiting for apt/dpkg lock..."
+    sleep 15
+  done
+}
+
+disable_broken_apt_release_sources() {
+  local err urc f host
+  set +e
+  err="$(apt-get update -y 2>&1)"
+  urc=$?
+  set -e
+  printf '%s\n' "$err"
+  if [[ $urc -eq 0 ]] || ! printf '%s\n' "$err" | grep -qi 'does not have a Release file'; then
+    return 0
+  fi
+  echo "disabling apt lists that 404 (no Release file)"
+  for f in /etc/apt/sources.list.d/*.list; do
+    [[ -f "$f" ]] || continue
+    if printf '%s\n' "$err" | grep -qiE 'ookla|speedtest-cli' && grep -qiE 'ookla|speedtest-cli' "$f"; then
+      echo "disable $f"
+      mv -f "$f" "${f}.rpcnode-disabled"
+      continue
+    fi
+    while IFS= read -r host; do
+      [[ -n "$host" ]] || continue
+      if grep -q "$host" "$f"; then
+        echo "disable $f (host $host)"
+        mv -f "$f" "${f}.rpcnode-disabled"
+        break
+      fi
+    done < <(printf '%s\n' "$err" | grep -E '^Err:[0-9]+' | grep -oE 'https://[^/]+' | sed 's|https://||' | sort -u)
+  done
+  apt-get update -y || true
+}
+
+mkdir -p "$DATA" "$MARKER_DIR" "$LOG_DIR"
+mkdir -p /etc/systemd/system/validator.service.d
+cat >/etc/systemd/system/validator.service.d/rpcnode-nofile.conf <<EOF
+[Service]
+LimitNOFILE=$NOFILE
+EOF
+echo "fs.nr_open = $NR_OPEN" >/etc/sysctl.d/99-rpcnode-ton.conf
+sysctl -w "fs.nr_open=$NR_OPEN" >/dev/null 2>&1 || true
+systemctl daemon-reload || true
+exec >>"$LOG" 2>&1
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] ton bootstrap start env=$ENV chain=$CHAIN"
+
+if [[ -f "$MARKER" ]]; then
+  echo "bootstrap already done"
+  exit 0
+fi
+
+if [[ -L /var/ton-work ]]; then
+  tgt="$(readlink /var/ton-work || true)"
+  if [[ ! -e "$tgt" ]]; then
+    rm -f /var/ton-work
+    ln -sfn "$DATA" /var/ton-work
+  fi
+elif [[ ! -e /var/ton-work ]]; then
+  ln -sfn "$DATA" /var/ton-work
+elif [[ -d /var/ton-work ]] && [[ ! -f /var/ton-work/keys/client ]] && [[ ! -f /var/ton-work/db/config.json ]]; then
+  rm -rf /var/ton-work
+  ln -sfn "$DATA" /var/ton-work
+fi
+
+export DEBIAN_FRONTEND=noninteractive
+export HOME="${HOME:-/root}"
+export USER="${USER:-root}"
+if ! command -v apt-get >/dev/null 2>&1; then
+  echo "ERROR: TON/MyTonCtrl bootstrap is Debian/Ubuntu-only (apt-get required)." >&2
+  exit 1
+fi
+wait_apt_lock
+disable_broken_apt_release_sources
+wait_apt_lock
+apt-get install -y curl wget git ca-certificates python3-pip || true
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+if ! curl -fsSL --connect-timeout 30 --max-time 180 --retry 8 --retry-delay 3 --retry-all-errors --retry-connrefused "$INSTALL_URL" -o "$TMP/install.sh"; then
+  echo "ERROR: download install.sh failed" >&2
+  exit 1
+fi
+chmod +x "$TMP/install.sh"
+
+export ARCHIVE_TTL STATE_TTL
+export VALIDATOR_PORT="$P2P"
+rc=1
+attempt=1
+while (( attempt <= 5 )); do
+  wait_apt_lock || true
+  set +e
+  env HOME="$HOME" USER="$USER" bash "$TMP/install.sh" -m liteserver -n "$CHAIN" $INSTALL_EXTRA
+  rc=$?
+  set -e
+  echo "install.sh attempt=$attempt exit=$rc extra=$INSTALL_EXTRA"
+  if [[ $rc -eq 0 ]]; then
+    break
+  fi
+  if grep -qi 'does not have a Release file' "$LOG" 2>/dev/null; then
+    echo "apt repo 404 (no Release file) — not a dpkg lock"
+    disable_broken_apt_release_sources
+    if [[ "${HEALED_APT:-0}" -eq 0 ]]; then
+      HEALED_APT=1
+      attempt=$((attempt + 1))
+      continue
+    fi
+    echo "apt still broken after disabling 404 sources — exit 2 (no restart loop)"
+    exit 2
+  fi
+  if grep -qiE 'Could not get lock /var/lib/dpkg|Unable to acquire the dpkg frontend lock' "$LOG" 2>/dev/null; then
+    echo "apt/dpkg lock — retry in 60s (attempt $attempt/5)"
+    sleep 60
+    attempt=$((attempt + 1))
+    continue
+  fi
+  if [[ $rc -eq 128 ]] && grep -qi 'HOME not set' "$LOG" 2>/dev/null; then
+    export HOME=/root
+    echo "retry install.sh with HOME=/root (attempt $attempt/5)"
+    sleep 5
+    attempt=$((attempt + 1))
+    continue
+  fi
+  break
+done
+echo "install.sh exit=$rc"
+
+MTC_PY=/usr/local/bin/mytoncore/venv/bin/python
+MTC_DB=/usr/local/bin/mytoncore/mytoncore.db
+if [[ -x "$MTC_PY" && -f "$MTC_DB" ]]; then
+  "$MTC_PY" -m mytonctrl -c "$MTC_DB" --cmd "installer clcf" || true
+  "$MTC_PY" -m mytonctrl -c "$MTC_DB" --cmd "installer enable THA" || true
+fi
+
+for tha_unit in ton_http_api ton-http-api; do
+  mkdir -p "/etc/systemd/system/${tha_unit}.service.d"
+  cat >"/etc/systemd/system/${tha_unit}.service.d/rpcnode.conf" <<EOF
+[Service]
+Environment=TON_API_HTTP_PORT=$THA_PORT
+Environment=TON_API_PORT=$THA_PORT
+LimitNOFILE=1048576
+EOF
+done
+if [[ -f /etc/systemd/system/ton_http_api.service ]]; then
+  sed -i "s/--port 8801/--port $THA_PORT/g; s/--port 8080/--port $THA_PORT/g" /etc/systemd/system/ton_http_api.service || true
+  ln -sfn /etc/systemd/system/ton_http_api.service /etc/systemd/system/ton-http-api.service || true
+fi
+systemctl daemon-reload || true
+
+mkdir -p /etc/systemd/system/validator.service.d
+cat >/etc/systemd/system/validator.service.d/rpcnode.conf <<EOF
+[Service]
+IPAccounting=yes
+CPUAccounting=yes
+MemoryAccounting=yes
+LimitNOFILE=$NOFILE
+EOF
+systemctl daemon-reload || true
+
+if [[ -f /etc/systemd/system/validator.service ]]; then
+  python3 - <<'PY' || true
+import re
+path = "/etc/systemd/system/validator.service"
+try:
+    text = open(path).read()
+except OSError:
+    raise SystemExit(0)
+mem = 0
+for line in open("/proc/meminfo"):
+    if line.startswith("MemTotal:"):
+        mem = int(line.split()[1]) // 1024
+        break
+gib = mem / 1024
+if gib < 16:
+    cache = 1 << 30
+elif gib < 32:
+    cache = 2 << 30
+elif gib < 64:
+    cache = 4 << 30
+else:
+    cache = 8 << 30
+m = re.search(r"(?m)^ExecStart\s*=\s*(.+)$", text)
+if not m or "validator-engine" not in m.group(1):
+    raise SystemExit(0)
+line = m.group(1).strip()
+line = re.sub(r"\s+--celldb-cache-size(?:=|\s+)\S+", "", line)
+line = re.sub(r"\s+--celldb-preload-all\b", "", line)
+line = re.sub(r"\s+--celldb-in-memory\b", "", line)
+line = re.sub(r"\s+--celldb-direct-io\b", "", line)
+line = re.sub(r"\s+--fast-state-serializer\b", "", line)
+flag = f"--celldb-cache-size={cache}"
+if flag not in line:
+    line = line.strip() + " " + flag
+new = re.sub(r"(?m)^ExecStart\s*=\s*.+$", "ExecStart=" + line, text, count=1)
+if new != text:
+    open(path, "w").write(new)
+    print(f"capped celldb cache at {cache} bytes (RAM ~{gib:.0f} GiB)")
+PY
+  systemctl daemon-reload || true
+fi
+
+systemctl enable validator.service mytoncore.service 2>/dev/null || true
+systemctl restart validator.service 2>/dev/null || true
+systemctl restart mytoncore.service 2>/dev/null || true
+for u in ton_http_api.service ton-http-api.service; do
+  systemctl enable "$u" 2>/dev/null || true
+  systemctl restart "$u" 2>/dev/null || true
+done
+
+VE_BIN=""
+for c in /usr/bin/ton/validator-engine/validator-engine /usr/bin/ton/validator-engine; do
+  if [[ -x "$c" && ! -d "$c" ]]; then VE_BIN="$c"; break; fi
+done
+if [[ -n "$VE_BIN" ]] && systemctl cat validator.service >/dev/null 2>&1; then
+  date -u +%Y-%m-%dT%H:%M:%SZ >"$MARKER"
+  echo "bootstrap marker written ($VE_BIN)"
+  exit 0
+fi
+
+if [[ $rc -ne 0 ]]; then
+  echo "bootstrap failed rc=$rc" >&2
+  exit $rc
+fi
+date -u +%Y-%m-%dT%H:%M:%SZ >"$MARKER"
+echo "bootstrap finished"

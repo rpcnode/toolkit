@@ -1,0 +1,1 @@
+-- Shared toolkit.db schema. Slice tables start at V2.

@@ -1,0 +1,27 @@
+[Unit]
+Description={{description}}
+After=network-online.target {{geth_unit}}
+Wants=network-online.target {{geth_unit}}
+
+[Service]
+Type=simple
+ExecStart={{bin}} bn \
+  --network {{lighthouse_network}} \
+  --datadir {{datadir}} \
+  --execution-endpoint http://127.0.0.1:{{engine_port}} \
+  --execution-jwt {{jwt_path}} \
+  --checkpoint-sync-url {{checkpoint_url}} \
+  --http --http-address 127.0.0.1 --http-port {{beacon_port}} \
+  --port {{consensus_p2p}} \
+  --supernode \
+  --prune-blobs false
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=300
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE=1048576
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

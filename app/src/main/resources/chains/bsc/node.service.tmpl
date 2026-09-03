@@ -1,0 +1,30 @@
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={{bin}} \
+  --datadir {{datadir}}{{config_flag}} \
+  --http --http.addr 127.0.0.1 --http.port {{http_port}} \
+  --http.api eth,net,web3,txpool,parlia \
+  --http.vhosts localhost \
+  --rpc.allow-unprotected-txs \
+  --syncmode full \
+  --gcmode full \
+  --tries-verify-mode none \
+  --cache {{cache_mb}} \
+  --maxpeers 100 \
+  --rpc.batch-request-limit 2000 \
+  --port {{p2p_port}}
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=600
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE=1048576
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

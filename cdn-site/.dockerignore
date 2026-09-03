@@ -1,0 +1,13 @@
+node_modules
+.next
+.idea
+out
+.git
+.gitignore
+.env
+.env.local
+.env*.local
+rpcnode-cdn-site.env
+*.log
+README.md
+data

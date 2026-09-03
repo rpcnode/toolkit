@@ -1,0 +1,28 @@
+# xrpld from Ripple apt pool (amd64 .deb). Version tags from XRPLF/rippled GitHub.
+# No Docker. arm64 has no official xrpld package in this pool — amd64 only.
+# Stable on-disk name: xrpld-amd64.deb. Upstream pool uses xrpld_{version}-1_amd64.deb.
+programs:
+  - env: mainnet
+    id: xrpld
+    source: { type: github, repo: XRPLF/rippled }
+    artifacts:
+      - name: "xrpld-amd64.deb"
+        urlTemplate: "https://repos.ripple.com/repos/rippled-deb/pool/stable/xrpld_{version}-1_amd64.deb"
+    requirements: { logFile: logs/xrpld.log }
+    ports:
+      - { role: http, port: 5005, label: "JSON-RPC", config: required }
+      - { role: p2p, port: 51235, label: "P2P", config: required }
+      - { role: ws, port: 6005, label: "WebSocket", config: required }
+      - { role: grpc, port: 51251, label: "gRPC", config: required }
+  - env: testnet
+    id: xrpld
+    source: { type: github, repo: XRPLF/rippled }
+    artifacts:
+      - name: "xrpld-amd64.deb"
+        urlTemplate: "https://repos.ripple.com/repos/rippled-deb/pool/stable/xrpld_{version}-1_amd64.deb"
+    requirements: { logFile: logs/xrpld.log }
+    ports:
+      - { role: http, port: 5006, label: "JSON-RPC", config: required }
+      - { role: p2p, port: 51236, label: "P2P", config: required }
+      - { role: ws, port: 6008, label: "WebSocket", config: required }
+      - { role: grpc, port: 51252, label: "gRPC", config: required }

@@ -1,0 +1,43 @@
+programs:
+  - env: mainnet
+    id: litecoin
+    source: { type: github, repo: litecoin-project/litecoin }
+    artifacts:
+      - name: "litecoin-x86_64-linux-gnu.tar.gz"
+        nameAarch64: "litecoin-aarch64-linux-gnu.tar.gz"
+        urlTemplate: "https://github.com/litecoin-project/litecoin/releases/download/{tag}/litecoin-{version}-x86_64-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/litecoin-project/litecoin/releases/download/{tag}/litecoin-{version}-aarch64-linux-gnu.tar.gz"
+    configs:
+      - name: litecoin.conf
+        urlTemplate: "https://raw.githubusercontent.com/litecoin-project/litecoin/{tag}/share/examples/litecoin.conf"
+    ports:
+      - { role: p2p, port: 9333, label: "P2P", config: required }
+      - { role: rpc, port: 9332, label: "RPC", config: required }
+  - env: testnet
+    id: litecoin
+    source: { type: github, repo: litecoin-project/litecoin }
+    artifacts:
+      - name: "litecoin-x86_64-linux-gnu.tar.gz"
+        nameAarch64: "litecoin-aarch64-linux-gnu.tar.gz"
+        urlTemplate: "https://github.com/litecoin-project/litecoin/releases/download/{tag}/litecoin-{version}-x86_64-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/litecoin-project/litecoin/releases/download/{tag}/litecoin-{version}-aarch64-linux-gnu.tar.gz"
+    configs:
+      - name: litecoin.conf
+        urlTemplate: "https://raw.githubusercontent.com/litecoin-project/litecoin/{tag}/share/examples/litecoin.conf"
+    ports:
+      - { role: p2p, port: 19333, label: "P2P", config: required }
+      - { role: rpc, port: 19332, label: "RPC", config: required }
+  - env: regtest
+    id: litecoin
+    source: { type: github, repo: litecoin-project/litecoin }
+    artifacts:
+      - name: "litecoin-x86_64-linux-gnu.tar.gz"
+        nameAarch64: "litecoin-aarch64-linux-gnu.tar.gz"
+        urlTemplate: "https://github.com/litecoin-project/litecoin/releases/download/{tag}/litecoin-{version}-x86_64-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/litecoin-project/litecoin/releases/download/{tag}/litecoin-{version}-aarch64-linux-gnu.tar.gz"
+    configs:
+      - name: litecoin.conf
+        urlTemplate: "https://raw.githubusercontent.com/litecoin-project/litecoin/{tag}/share/examples/litecoin.conf"
+    ports:
+      - { role: p2p, port: 19444, label: "P2P", config: required }
+      - { role: rpc, port: 19443, label: "RPC", config: required }

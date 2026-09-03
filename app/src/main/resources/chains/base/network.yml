@@ -1,0 +1,140 @@
+# Disk plan, host sizing. Snapshot required — official Base V2 via base-reth-node download.
+# Directory name is the network id. Ports live in clients.yml beside this file.
+label: Base
+diskRoles:
+  - id: execution
+    label: Execution DB
+    media: nvme
+  - id: snapshots
+    label: snapshots / additional
+    media: ssd
+diskNotes:
+  - "base-reth-node --datadir is the execution role leaf."
+  - "Official V2 snapshots download straight into the execution datadir (segmented, resumable)."
+  - "Consensus (base-consensus) needs an Ethereum L1 execution RPC + beacon API."
+  - "Start exposes editable l1_rpc / l1_beacon (default: publicnode; override with your eth or RPCNODE_L1_*)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Base Mainnet
+    diskHintGiB: 9216
+    fullNodeGiB: 3145
+    archiveGiB: 3711
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: required
+    publicTip:
+      urls:
+        - https://base-rpc.publicnode.com
+    l1Parent:
+      rpc: https://ethereum-rpc.publicnode.com
+      beacon: https://ethereum-beacon-api.publicnode.com
+      pickHelp: |
+        Click Public for the default publicnode L1, or an active Ethereum node from this panel
+        (same-host uses 127.0.0.1 — required when Base runs beside eth on the host).
+    snapshotTypes:
+      - id: archive
+        kind: archive
+        label: Archive · full history
+        hint: Official V2 archive (~3711 GiB). Matches the unit (no --prune.*). Default. Manifest 2026-08-26, grows weekly.
+        diskGiB: 3711
+        default: true
+      - id: full
+        kind: full
+        label: Full · reth full-node preset
+        hint: "reth's --full preset (~3145 GiB): state, headers and only the last 10064 blocks (~5-6 h on Base)."
+        diskGiB: 3145
+      - id: minimal
+        kind: pruned
+        label: Minimal · state + headers
+        hint: Smallest set needed to boot (~677 GiB). No historical data.
+        diskGiB: 677
+  - id: sepolia
+    label: Base Sepolia
+    diskHintGiB: 2304
+    fullNodeGiB: 828
+    archiveGiB: 956
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: required
+    publicTip:
+      urls:
+        - https://base-sepolia-rpc.publicnode.com
+    l1Parent:
+      rpc: https://ethereum-sepolia-rpc.publicnode.com
+      beacon: https://ethereum-sepolia-beacon-api.publicnode.com
+      pickHelp: |
+        Click Public for the default publicnode L1, or an active Ethereum Sepolia node from this panel
+        (same-host uses 127.0.0.1 — required when Base runs beside eth on the host).
+    snapshotTypes:
+      - id: archive
+        kind: archive
+        label: Archive · full history
+        hint: Official V2 archive (~956 GiB). Default.
+        diskGiB: 956
+        default: true
+      - id: full
+        kind: full
+        label: Full · reth full-node preset
+        hint: reth --full preset (~828 GiB).
+        diskGiB: 828
+      - id: minimal
+        kind: pruned
+        label: Minimal · state + headers
+        hint: Smallest set needed to boot (~283 GiB).
+        diskGiB: 283
+
+# CLI flags live in systemd (chains/base). No conf patch on Start.
+clientConfig:
+  program: base-reth-node
+  format: flags
+  bindings:
+    - key: snapshot
+      source: install_option
+      option: snapshot
+      default: "archive"
+      description: Official V2 snapshot — archive, full, or minimal
+    - key: datadir
+      source: disk_role_dir
+      role: execution
+      description: base-reth-node --datadir (Disks execution role)
+    - key: snapshots
+      source: disk_role_dir
+      role: snapshots
+      description: Aux / snapshot workspace (SSD)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: P2P listen port
+    - key: engine-port
+      source: catalog_port
+      role: engine
+      description: Engine API (JWT) port
+    - key: l1-rpc
+      source: install_option
+      option: l1_rpc
+      default: ""
+      description: Ethereum L1 execution RPC (public default; override with your own or local eth)
+      testConnect:
+        kind: eth_rpc
+        label: Test connect
+        help: |
+          Panel POSTs eth_blockNumber to this URL. Expect JSON-RPC result with a hex block height.
+          Use a blob-capable Sepolia/Mainnet execution endpoint Base consensus can reach from the panel host.
+          Local eth example: http://127.0.0.1:8546 (sepolia) or http://127.0.0.1:8545 (mainnet).
+    - key: l1-beacon
+      source: install_option
+      option: l1_beacon
+      default: ""
+      description: Ethereum L1 beacon / blob API (public default; required for derivation)
+      testConnect:
+        kind: beacon_genesis
+        label: Test connect
+        help: |
+          Panel GETs {url}/eth/v1/beacon/genesis. Expect JSON with data.genesis_time.
+          Beacon must expose the standard Beacon API (blobs required for OP Stack derivation).
+          Local example: http://127.0.0.1:5053 (sepolia) or http://127.0.0.1:5052 (mainnet).

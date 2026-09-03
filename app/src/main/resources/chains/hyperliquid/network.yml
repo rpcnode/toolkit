@@ -1,0 +1,57 @@
+# Disk plan, host sizing. Snapshot never — hl-visor streams from gossip peers.
+# oneEnvPerHost: hl-node panics if another process matching "hl-node" is already running.
+# Ports live in clients.yml beside this file.
+label: Hyperliquid
+diskRoles:
+  - id: chain
+    label: Hyperliquid data
+    media: nvme
+diskNotes:
+  - "hl-visor data lives under the chain role leaf (symlinked as hl/hyperliquid_data)."
+  - "HOME is the node_dir; workdir is node_dir/hl (never /opt or /etc)."
+  - "Gossip ports 4001 and 4002 must be reachable from the public internet."
+  - "Only one Hyperliquid env per host (hl-node process-name singleton)."
+oneEnvPerHost: true
+envs:
+  - id: mainnet
+    label: Hyperliquid Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 1024
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc.hyperliquid.xyz/evm
+  - id: testnet
+    label: Hyperliquid Testnet
+    diskHintGiB: 512
+    fullNodeGiB: 512
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc.hyperliquid-testnet.xyz/evm
+
+# CLI flags live in systemd (chains/hyperliquid). No conf patch on Start.
+clientConfig:
+  program: hl-visor
+  format: flags
+  bindings:
+    - key: datadir
+      source: disk_role_dir
+      role: chain
+      description: hl-visor data dir (Disks chain role → hl/hyperliquid_data)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: HyperEVM / info HTTP port (binary-fixed 3001)
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: Gossip P2P port (binary-fixed 4001)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd open-file limit for hl-visor

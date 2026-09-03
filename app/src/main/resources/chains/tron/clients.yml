@@ -1,0 +1,101 @@
+# Fixed catalog ports — carried over from the Go sibling's shipped catalog
+# (internal/networks/tron/env.go) so mainnet/nile/shasta can coexist on one host without a
+# clash: each env gets its own offset, not the client's own upstream defaults. "Check ports"
+# only checks these are free — it never remaps them.
+# public_port/agent_port/sys_listen (Go RPC proxy + leaf agent) are out of scope here — this
+# Kotlin build has no per-node proxy/leaf-agent layer yet.
+#
+# Official snapshot mirror roots (http://34.86.86.229/ …) live under snapshots: — not in
+# networks/tron.yml. PreferCdnSnapshotUseCase mirrors them under
+# /snapshots/{network}/{env}/{type}/ on Snapshot CDN.
+#
+# requirements.javaMajor — host JDK major for java_jar launch (java-tron rejects non-8 on amd64).
+# requirements.logFile — process log relative to node_dir (admin Sync tails this path).
+programs:
+  - env: mainnet
+    id: FullNode.jar
+    source: { type: pinned, version: "4.8.2.1", tag: "GreatVoyage-v4.8.2.1", label: "tronprotocol/java-tron" }
+    requirements: { javaMajor: 8, logFile: logs/tron.log }
+    artifacts:
+      - name: FullNode.jar
+        urlTemplate: "https://github.com/tronprotocol/java-tron/releases/download/{tag}/FullNode-x64.jar"
+        urlTemplateAarch64: "https://github.com/tronprotocol/java-tron/releases/download/{tag}/FullNode-aarch64.jar"
+    configs:
+      - name: main_net_config.conf
+        urlTemplate: "https://raw.githubusercontent.com/tronprotocol/java-tron/{tag}/framework/src/main/resources/config.conf"
+    ports:
+      - { role: p2p, port: 18888, label: "P2P", config: required }
+      - { role: http_fullnode, port: 18090, label: "HTTP API (fullnode)", config: required }
+      - { role: http_solidity, port: 18190, label: "HTTP API (solidity)", config: required }
+      - { role: http_pbft, port: 18191, label: "HTTP API (PBFT)", config: required }
+      - { role: grpc_fullnode, port: 50051, label: "gRPC (fullnode)", config: required }
+      - { role: grpc_solidity, port: 50061, label: "gRPC (solidity)", config: none }
+      - { role: grpc_pbft, port: 50071, label: "gRPC (PBFT)", config: required }
+      - { role: metrics, port: 9527, label: "Metrics", config: none }
+  - env: nile
+    id: FullNode.jar
+    source: { type: pinned, version: "4.8.2.1-PQ1-build1", tag: "GreatVoyage-Nile-v4.8.2.1-PQ1-build1", label: "tron-nile-testnet/nile-testnet" }
+    requirements: { javaMajor: 8, logFile: logs/tron.log }
+    artifacts:
+      - name: FullNode.jar
+        urlTemplate: "https://github.com/tron-nile-testnet/nile-testnet/releases/download/{tag}/FullNode-Nile-x64-4.8.2.1-pq1-build1.jar"
+        urlTemplateAarch64: "https://github.com/tron-nile-testnet/nile-testnet/releases/download/{tag}/FullNode-Nile-aarch64-4.8.2.1-pq1-build1.jar"
+    configs:
+      - name: config-nile.conf
+        urlTemplate: "https://raw.githubusercontent.com/tron-nile-testnet/nile-testnet/master/framework/src/main/resources/config-nile.conf"
+    ports:
+      - { role: p2p, port: 18889, label: "P2P", config: required }
+      - { role: http_fullnode, port: 18091, label: "HTTP API (fullnode)", config: required }
+      - { role: http_solidity, port: 18290, label: "HTTP API (solidity)", config: required }
+      - { role: http_pbft, port: 18291, label: "HTTP API (PBFT)", config: required }
+      - { role: grpc_fullnode, port: 50151, label: "gRPC (fullnode)", config: required }
+      - { role: grpc_solidity, port: 50161, label: "gRPC (solidity)", config: none }
+      - { role: grpc_pbft, port: 50171, label: "gRPC (PBFT)", config: required }
+      - { role: metrics, port: 9528, label: "Metrics", config: none }
+  - env: shasta
+    id: FullNode.jar
+    source: { type: pinned, version: "4.8.2.1", tag: "GreatVoyage-v4.8.2.1", label: "tronprotocol/java-tron" }
+    requirements: { javaMajor: 8, logFile: logs/tron.log }
+    artifacts:
+      - name: FullNode.jar
+        urlTemplate: "https://github.com/tronprotocol/java-tron/releases/download/{tag}/FullNode-x64.jar"
+        urlTemplateAarch64: "https://github.com/tronprotocol/java-tron/releases/download/{tag}/FullNode-aarch64.jar"
+    configs:
+      - name: shasta_net_config.conf
+        urlTemplate: "https://raw.githubusercontent.com/tronprotocol/java-tron/{tag}/framework/src/main/resources/config.conf"
+        optional: true
+    ports:
+      - { role: p2p, port: 18890, label: "P2P", config: required }
+      - { role: http_fullnode, port: 18092, label: "HTTP API (fullnode)", config: required }
+      - { role: http_solidity, port: 18390, label: "HTTP API (solidity)", config: required }
+      - { role: http_pbft, port: 18391, label: "HTTP API (PBFT)", config: required }
+      - { role: grpc_fullnode, port: 50251, label: "gRPC (fullnode)", config: required }
+      - { role: grpc_solidity, port: 50261, label: "gRPC (solidity)", config: none }
+      - { role: grpc_pbft, port: 50271, label: "gRPC (PBFT)", config: required }
+      - { role: metrics, port: 9529, label: "Metrics", config: none }
+
+# Official LevelDB / LiteFullNode mirror roots. Keys match networks/tron.yml snapshotTypes[].id.
+# discover: listing = Apache index scrape; dated = HEAD backupYYYYMMDD/<filename> (Nile).
+snapshots:
+  mainnet:
+    full:
+      mirror: "http://34.86.86.229/"
+      filename: FullNode_output-directory.tgz
+      discover: listing
+    internal_tx:
+      mirror: "http://35.247.128.170/"
+      filename: FullNode_output-directory.tgz
+      discover: listing
+    archive:
+      mirror: "http://34.48.6.163/"
+      filename: FullNode_output-directory.tgz
+      discover: listing
+  nile:
+    full:
+      mirror: "https://snapshots.nileex.io/"
+      filename: FullNode_output-directory.tgz
+      discover: dated
+    lite:
+      mirror: "https://snapshots.nileex.io/"
+      filename: LiteFullNode_output-directory.tgz
+      discover: dated

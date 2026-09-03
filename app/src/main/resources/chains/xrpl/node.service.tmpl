@@ -1,0 +1,25 @@
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+ExecStart={{bin}} --conf {{conf}}
+# Bounded server_stop so NuDB can close. timeout 15s — stalled RPC must not hang systemd.
+ExecStop=-/usr/bin/timeout 15 {{bin}} --conf {{conf}} server_stop
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=45
+KillMode=mixed
+KillSignal=SIGTERM
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+IPAccounting=yes
+CPUAccounting=yes
+MemoryAccounting=yes
+LimitNOFILE={{nofile}}
+
+[Install]
+WantedBy=multi-user.target

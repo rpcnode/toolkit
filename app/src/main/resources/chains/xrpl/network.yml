@@ -1,0 +1,76 @@
+# Disk plan, host sizing. Snapshot never — peer IBD fills ledger_history window.
+# Directory name is the network id. Ports live in clients.yml beside this file.
+label: XRP Ledger
+diskRoles:
+  - id: ledger
+    label: Ledger + NuDB
+    media: ssd
+diskNotes:
+  - "xrpld NuDB lives under the ledger role leaf (database_path/db/nudb)."
+  - "History window is chosen via Install options (xrpl_history), not a second disk role."
+  - "Full history has no public snapshot (~39 TiB official archive)."
+  - "xrpld.cfg, validators.txt, and bins live under the node_dir (not /opt/ripple)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: XRP Ledger Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 1024
+    archiveGiB: 39936
+    cpuCores: 8
+    memoryGiB: 64
+    snapshot: never
+    publicTip:
+      urls:
+        - https://xrplcluster.com
+        - https://s1.ripple.com:51234
+  - id: testnet
+    label: XRP Ledger Testnet
+    diskHintGiB: 128
+    fullNodeGiB: 128
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://s.altnet.rippletest.net:51234
+
+# Generated xrpld.cfg on Start (chains/xrpl). No conf patch — format: flags.
+# Capacity / history literals mirror Go RenderCfg + unit LimitNOFILE.
+clientConfig:
+  program: xrpld
+  format: flags
+  bindings:
+    - key: ledger
+      source: disk_role_dir
+      role: ledger
+      description: xrpld database_path / NuDB (Disks ledger role)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC admin HTTP port (127.0.0.1)
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: Peer protocol listen port (0.0.0.0)
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: Public WebSocket port (127.0.0.1)
+    - key: grpc-port
+      source: catalog_port
+      role: grpc
+      description: gRPC port for Clio (127.0.0.1)
+    - key: xrpl_history
+      source: install_option
+      option: xrpl_history
+      default: "weeks"
+      description: Ledger history window (stock / day / weeks / full)
+    - key: peers_max
+      source: literal
+      value: "100"
+      description: peers_max (raise outgoing peer slots)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for xrpld

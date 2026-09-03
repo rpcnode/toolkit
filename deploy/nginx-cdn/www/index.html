@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RpcNode · Snapshot CDN</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <img src="logo.svg" alt="" width="36" height="36" />
+        <span>RpcNode</span>
+      </div>
+      <p class="tag">Snapshot CDN</p>
+    </header>
+    <main>
+      <h1>Mirrored node snapshots</h1>
+      <p class="lede">
+        Latest official archives mirrored for download. Empty list means the sync
+        daemon has not published a mirror yet.
+      </p>
+      <div id="status" class="status">Loading catalogue…</div>
+      <div id="list" class="list" hidden></div>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,157 @@
+# Disk plan, host sizing. Snapshot required via Agave (cluster download), not toolkit aria2.
+# Directory name is the network id. Ports live in clients.yml beside this file.
+label: Solana
+diskRoles:
+  - id: ledger
+    label: Ledger
+    media: nvme
+  - id: accounts
+    label: Accounts
+    media: nvme
+  - id: snapshots
+    label: Snapshots
+    media: ssd
+diskNotes:
+  - "Put ledger and accounts on different disks when ≥2 NVMe/SSD mounts exist."
+  - "Agave downloads the cluster snapshot itself after Start (via-node ExtraStep)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Solana Mainnet
+    diskHintGiB: 2048
+    fullNodeGiB: 2048
+    archiveGiB: 409600
+    cpuCores: 16
+    memoryGiB: 128
+    snapshot: required
+    snapshotBootstrap: via_node
+    publicTip:
+      urls:
+        - https://api.mainnet-beta.solana.com
+    snapshotTypes:
+      - id: full
+        kind: full
+        label: Full
+        hint: Cluster snapshot + bounded ledger (~160 GiB compressed floor)
+        diskGiB: 160
+        default: true
+  - id: testnet
+    label: Solana Testnet
+    diskHintGiB: 1024
+    fullNodeGiB: 1024
+    archiveGiB: 102400
+    cpuCores: 12
+    memoryGiB: 64
+    snapshot: required
+    snapshotBootstrap: via_node
+    publicTip:
+      urls:
+        - https://api.testnet.solana.com
+    snapshotTypes:
+      - id: full
+        kind: full
+        label: Full
+        hint: Testnet cluster snapshot (~60 GiB compressed floor)
+        diskGiB: 60
+        default: true
+  - id: devnet
+    label: Solana Devnet
+    diskHintGiB: 512
+    fullNodeGiB: 512
+    archiveGiB: 51200
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: required
+    snapshotBootstrap: via_node
+    publicTip:
+      urls:
+        - https://api.devnet.solana.com
+    snapshotTypes:
+      - id: full
+        kind: full
+        label: Full
+        hint: Devnet cluster snapshot (~40 GiB compressed floor)
+        diskGiB: 40
+        default: true
+
+# CLI flags live in run-validator.sh (chains/solana). No conf patch on Start.
+# Capacity literals below mirror SolanaUnitBodies / Go render.go — Start preview only.
+clientConfig:
+  program: agave-validator
+  format: flags
+  bindings:
+    - key: ledger
+      source: disk_role_dir
+      role: ledger
+      description: Agave --ledger (Disks ledger role)
+    - key: accounts
+      source: disk_role_dir
+      role: accounts
+      description: Agave --accounts (Disks accounts role)
+    - key: snapshots
+      source: disk_role_dir
+      role: snapshots
+      description: Agave --snapshots (Disks snapshots role)
+    - key: rpc-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: P2P dynamic-port-range base
+    - key: rpc-threads
+      source: install_option
+      option: rpc_threads
+      default: "128"
+      description: Agave --rpc-threads (Tokio RPC IO pool)
+    - key: rpc-pubsub-worker-threads
+      source: install_option
+      option: rpc_pubsub_worker_threads
+      default: "32"
+      description: Agave --rpc-pubsub-worker-threads
+    - key: rpc-pubsub-max-active-subscriptions
+      source: install_option
+      option: rpc_pubsub_max_active_subscriptions
+      default: "5000000"
+      description: Max active PubSub subscriptions across all websocket connections
+    - key: rpc-max-request-body-size
+      source: install_option
+      option: rpc_max_request_body_size
+      default: "104857600"
+      description: Max JSON-RPC request body (100 MiB)
+    - key: LimitNOFILE
+      source: install_option
+      option: LimitNOFILE
+      default: "4194304"
+      description: systemd LimitNOFILE (open files / sockets headroom)
+    - key: net.core.rmem_default
+      source: install_option
+      option: sysctl_rmem_default
+      default: "134217728"
+      description: sysctl net.core.rmem_default (Anza recommended 134217728)
+    - key: net.core.rmem_max
+      source: install_option
+      option: sysctl_rmem_max
+      default: "134217728"
+      description: sysctl net.core.rmem_max (Anza recommended 134217728)
+    - key: net.core.wmem_default
+      source: install_option
+      option: sysctl_wmem_default
+      default: "134217728"
+      description: sysctl net.core.wmem_default (Anza recommended 134217728)
+    - key: net.core.wmem_max
+      source: install_option
+      option: sysctl_wmem_max
+      default: "134217728"
+      description: sysctl net.core.wmem_max (Anza recommended 134217728)
+    - key: vm.max_map_count
+      source: install_option
+      option: sysctl_vm_max_map_count
+      default: "1000000"
+      description: sysctl vm.max_map_count (Anza recommended 1000000)
+    - key: fs.nr_open
+      source: install_option
+      option: sysctl_fs_nr_open
+      default: "8388608"
+      description: sysctl fs.nr_open (must be ≥ LimitNOFILE; recommended 8388608)

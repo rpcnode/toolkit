@@ -1,0 +1,139 @@
+#!/bin/bash
+set -euo pipefail
+export LC_ALL=C
+ENV='{{env}}'
+NODE_UNIT="rpcnode-bsc-${ENV}.service"
+DATA='{{data}}'
+SNAP='{{snap}}'
+OPT='{{opt}}'
+MARKER='{{marker}}'
+STATE='{{state}}'
+LOG='{{log}}'
+FLAVOR='{{flavor}}'
+PREFIX='{{prefix}}'
+README='{{readme}}'
+FETCH='{{fetch}}'
+mkdir -p "$(dirname "$LOG")" "$DATA" "$SNAP" "$OPT/bin"
+if ! command -v aria2c >/dev/null || ! command -v lz4 >/dev/null; then
+  if command -v apt-get >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get install -y -qq aria2 lz4
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf -y install aria2 lz4
+  elif command -v yum >/dev/null 2>&1; then
+    yum -y install aria2 lz4
+  else
+    echo "ERROR: need aria2c + lz4 (no apt-get/dnf/yum)" >&2
+    exit 1
+  fi
+fi
+echo "{\"phase\":\"download\",\"pct\":0,\"detail\":\"BSC official snapshot · resolving latest\",\"flavor\":\"$FLAVOR\",\"updated_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" >"$STATE"
+SELF="${BASH_SOURCE[0]:-$0}"
+snapdiag() { echo "SNAPSHOT_DIAG $*" | tee -a "$LOG"; }
+pin_keep() {
+  if [ -d "$DATA/geth/chaindata" ]; then
+    echo keep >"$DATA/.snapshot-keep"
+    snapdiag "pin_keep chaindata"
+  fi
+}
+snapdiag "begin pid=$$ ppid=$PPID toolkit={{toolkit_version}} self=$SELF"
+snapdiag "env=$ENV data=$DATA snap=$SNAP marker=$MARKER ancient=$([ -d "$DATA/geth/chaindata/ancient/chain" ] && echo yes || echo no)"
+cp -p "$SELF" "${LOG}.running.$$" 2>/dev/null || true
+trap 'snapdiag "ERR line=$LINENO cmd=$BASH_COMMAND rc=$?"' ERR
+trap 'snapdiag "TERM rc=143 — interrupted extract, not done"; exit 143' TERM
+trap 'snapdiag "EXIT rc=$? line=$LINENO"' EXIT
+(
+  while kill -0 $$ 2>/dev/null; do
+    sleep 15
+    if [ -d "$DATA/geth/chaindata" ]; then
+      pin_keep
+    fi
+    [ -f "$MARKER" ] && break
+  done
+) &
+systemctl stop "$NODE_UNIT" 2>/dev/null || true
+CUR="$(awk 'BEGIN{s=0} /START official|SNAPSHOT_DIAG begin/{buf=""; s=1} {if(s) buf=buf $0 "\n"} END{printf "%s", buf}' "$LOG" 2>/dev/null || true)"
+if [ -z "$CUR" ]; then CUR="$(cat "$LOG" 2>/dev/null || true)"; fi
+if [ -f "$DATA/.snapshot-keep" ] && [ -d "$DATA/geth/chaindata" ]; then
+  if printf '%s' "$CUR" | grep -qE ' DONE |^DONE ' ||
+     { printf '%s' "$CUR" | grep -qF 'fetch_done rc=0' && printf '%s' "$CUR" | grep -qF 'marker_after_fetch'; }; then
+    snapdiag "recover_extract writing marker"
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) INFO extract already on disk — writing marker" | tee -a "$LOG"
+    date -u +"%Y-%m-%dT%H:%M:%SZ" >"$MARKER"
+    echo "{\"phase\":\"done\",\"pct\":100,\"detail\":\"BSC official snapshot ready (recovered extract)\",\"flavor\":\"$FLAVOR\",\"updated_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" >"$STATE"
+    exit 0
+  fi
+  snapdiag "recover_extract skip: no DONE in current run (keep+chaindata — resume fetch)"
+fi
+if [ ! -f "$MARKER" ] && [ ! -f "$DATA/.snapshot-keep" ] && [ ! -d "$DATA/geth/chaindata" ]; then
+  snapdiag "wipe_geth no_marker_no_keep_no_chaindata"
+  rm -rf "$DATA/geth"
+elif [ ! -f "$MARKER" ] && [ -d "$DATA/geth/chaindata" ]; then
+  snapdiag "wipe_geth skip: chaindata present (resume or official extract)"
+fi
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) INFO download snapshot https://github.com/bnb-chain/bsc-snapshots  bsc/$ENV $FLAVOR" >>/var/log/rpcnode.log 2>/dev/null || true
+NAME=""
+for i in 1 2 3; do
+  MD="$(curl -fsSL --connect-timeout 30 --max-time 180 --retry 8 --retry-delay 3 --retry-all-errors --retry-connrefused "$README" || true)"
+  NAME="$(printf '%s\n' "$MD" | grep -oE "${PREFIX}-[0-9]{8}" | head -1 || true)"
+  if [ -n "$NAME" ]; then break; fi
+  sleep 8
+done
+if [ -z "$NAME" ]; then
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ERROR cannot resolve latest $PREFIX from README" | tee -a "$LOG"
+  echo "{\"phase\":\"error\",\"pct\":0,\"error\":\"cannot resolve latest $PREFIX from bsc-snapshots README\",\"updated_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" >"$STATE"
+  exit 1
+fi
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) START official $NAME flavor=$FLAVOR" | tee -a "$LOG"
+curl -fsSL --connect-timeout 30 --max-time 180 --retry 8 --retry-delay 3 --retry-all-errors --retry-connrefused "$FETCH" -o "$OPT/bin/fetch-snapshot.sh"
+chmod 755 "$OPT/bin/fetch-snapshot.sh"
+(
+  while kill -0 $$ 2>/dev/null; do
+    sleep 8
+    [ -f "$MARKER" ] && break
+    FLAT=$(tr '\r' '\n' <"$LOG" 2>/dev/null | tail -n 800 || true)
+    APCT=$(printf '%s\n' "$FLAT" | grep -oE '\[#[0-9a-fA-F]+[^]]*\]' | tail -1 | grep -oE '\([0-9]+)%\)' | tr -dc '0-9' || true)
+    SIZE=$(printf '%s\n' "$FLAT" | grep -oE '[0-9][0-9,.]*GiB/[0-9][0-9,.]*GiB\([0-9]+)%\)' | tail -1 || true)
+    PARTS=$(printf '%s\n' "$FLAT" | grep -cE 'Download complete:|Extraction complete|Skipping [^ ]+ - already downloaded' || true)
+    CSV=$(ls -1 "$SNAP"/${PREFIX}-*.csv 2>/dev/null | head -1 || true)
+    TOTAL=0
+    if [ -n "$CSV" ] && [ -f "$CSV" ]; then
+      TOTAL=$(grep -cE '\.tar\.lz4,' "$CSV" 2>/dev/null || true)
+    fi
+    PCT=""
+    DETAIL="Official snapshot · bnb-chain/bsc-snapshots"
+    if [ "${TOTAL:-0}" -gt 0 ] 2>/dev/null; then
+      CUR=${APCT:-0}
+      DONE=${PARTS:-0}
+      if [ "$DONE" -gt "$TOTAL" ] 2>/dev/null; then DONE=$TOTAL; fi
+      PCT=$(awk -v d="$DONE" -v t="$TOTAL" -v c="$CUR" 'BEGIN{p=d*100/t; if(c>0&&d<t)p+=c/t; if(p>99.9)p=99.9; if(p<0)p=0; printf "%.1f", p}')
+      DETAIL="Official snapshot · ${DONE}/${TOTAL} parts"
+      if [ -n "$SIZE" ]; then DETAIL="$DETAIL · $SIZE"; fi
+    elif [ -n "$APCT" ] && [ "$APCT" -gt 0 ] 2>/dev/null; then
+      PCT=$APCT
+      if [ "$PCT" -ge 100 ] 2>/dev/null; then PCT=99.9; fi
+      if [ -n "$SIZE" ]; then DETAIL="Official snapshot · $SIZE"; else DETAIL="Official snapshot · ${PCT}%"; fi
+    fi
+    if [ -n "$PCT" ]; then
+      echo "{\"phase\":\"download\",\"pct\":$PCT,\"detail\":\"$DETAIL\",\"flavor\":\"$FLAVOR\",\"updated_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" >"$STATE"
+    fi
+  done
+) &
+set -o pipefail
+cd "$SNAP"
+bash "$OPT/bin/fetch-snapshot.sh" -d -e -c{{prune_flag}} --auto-delete -D "$SNAP" -E "$DATA" "$NAME" 2>&1 | tee -a "$LOG"
+snapdiag "fetch_done rc=${PIPESTATUS[0]:-?} ancient=$([ -d "$DATA/geth/chaindata/ancient/chain" ] && echo yes || echo no)"
+pin_keep
+if [ -d "$DATA/geth/chaindata" ]; then
+  date -u +"%Y-%m-%dT%H:%M:%SZ" >"$MARKER"
+  snapdiag "marker_after_fetch"
+fi
+if [ ! -d "$DATA/geth/chaindata" ]; then
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ERROR extract missing $DATA/geth/chaindata" | tee -a "$LOG"
+  echo "{\"phase\":\"error\",\"pct\":0,\"error\":\"extract missing geth/chaindata\",\"updated_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" >"$STATE"
+  exit 1
+fi
+date -u +"%Y-%m-%dT%H:%M:%SZ" >"$MARKER"
+echo "{\"phase\":\"done\",\"pct\":100,\"detail\":\"BSC official snapshot ready · $NAME\",\"flavor\":\"$FLAVOR\",\"name\":\"$NAME\",\"updated_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" >"$STATE"
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DONE $NAME" | tee -a "$LOG"

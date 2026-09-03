@@ -1,0 +1,31 @@
+# BSC geth fork from GitHub bnb-chain/bsc (Parlia in-process).
+# Binary is a raw executable (not a tarball). Genesis/config zip per env.
+programs:
+  - env: mainnet
+    id: geth
+    source: { type: github, repo: bnb-chain/bsc }
+    artifacts:
+      - name: "geth_linux"
+        nameAarch64: "geth_linux"
+        urlTemplate: "https://github.com/bnb-chain/bsc/releases/download/{tag}/geth_linux"
+        urlTemplateAarch64: "https://github.com/bnb-chain/bsc/releases/download/{tag}/geth-linux-arm64"
+    configs:
+      - name: "mainnet.zip"
+        urlTemplate: "https://github.com/bnb-chain/bsc/releases/download/{tag}/mainnet.zip"
+    ports:
+      - { role: p2p, port: 30311, label: "P2P", config: required }
+      - { role: http, port: 8575, label: "HTTP RPC", config: required }
+  - env: testnet
+    id: geth
+    source: { type: github, repo: bnb-chain/bsc }
+    artifacts:
+      - name: "geth_linux"
+        nameAarch64: "geth_linux"
+        urlTemplate: "https://github.com/bnb-chain/bsc/releases/download/{tag}/geth_linux"
+        urlTemplateAarch64: "https://github.com/bnb-chain/bsc/releases/download/{tag}/geth-linux-arm64"
+    configs:
+      - name: "testnet.zip"
+        urlTemplate: "https://github.com/bnb-chain/bsc/releases/download/{tag}/testnet.zip"
+    ports:
+      - { role: p2p, port: 30312, label: "P2P", config: required }
+      - { role: http, port: 8576, label: "HTTP RPC", config: required }

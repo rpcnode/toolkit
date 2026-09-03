@@ -1,0 +1,43 @@
+# ZODL bookworm tarball from download.z.cash (x86_64 only — no official aarch64 build).
+# Version discovery uses GitHub zcash/zcash releases; {version} / {tag} fill the URL below.
+programs:
+  - env: mainnet
+    id: zcash
+    source: { type: github, repo: zcash/zcash }
+    # zcashd writes to datadir/debug.log — not systemd stdout (logs/node.out stays empty).
+    requirements: { logFile: debug.log }
+    artifacts:
+      - name: "zcash-x86_64-linux-gnu.tar.gz"
+        urlTemplate: "https://download.z.cash/downloads/zcash-{version}-linux64-debian-bookworm.tar.gz"
+    configs:
+      - name: zcash.conf
+        urlTemplate: "https://raw.githubusercontent.com/zcash/zcash/{tag}/contrib/debian/examples/zcash.conf"
+    ports:
+      - { role: p2p, port: 8233, label: "P2P", config: required }
+      - { role: rpc, port: 8232, label: "RPC", config: required }
+  - env: testnet
+    id: zcash
+    source: { type: github, repo: zcash/zcash }
+    requirements: { logFile: debug.log }
+    artifacts:
+      - name: "zcash-x86_64-linux-gnu.tar.gz"
+        urlTemplate: "https://download.z.cash/downloads/zcash-{version}-linux64-debian-bookworm.tar.gz"
+    configs:
+      - name: zcash.conf
+        urlTemplate: "https://raw.githubusercontent.com/zcash/zcash/{tag}/contrib/debian/examples/zcash.conf"
+    ports:
+      - { role: p2p, port: 18233, label: "P2P", config: required }
+      - { role: rpc, port: 18232, label: "RPC", config: required }
+  - env: regtest
+    id: zcash
+    source: { type: github, repo: zcash/zcash }
+    requirements: { logFile: debug.log }
+    artifacts:
+      - name: "zcash-x86_64-linux-gnu.tar.gz"
+        urlTemplate: "https://download.z.cash/downloads/zcash-{version}-linux64-debian-bookworm.tar.gz"
+    configs:
+      - name: zcash.conf
+        urlTemplate: "https://raw.githubusercontent.com/zcash/zcash/{tag}/contrib/debian/examples/zcash.conf"
+    ports:
+      - { role: p2p, port: 18344, label: "P2P", config: required }
+      - { role: rpc, port: 18332, label: "RPC", config: required }

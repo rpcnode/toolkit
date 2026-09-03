@@ -1,0 +1,109 @@
+# Disk plan, host sizing. Snapshot never — Nitro self-inits pruned/archive on first start.
+# Directory name is the network id (arb). Host data root is arbitrum (see dataRoot).
+# Ports live in clients.yml beside this file.
+label: Arbitrum
+dataRoot: arbitrum
+diskRoles:
+  - id: execution
+    label: Execution DB
+    media: nvme
+  - id: snapshots
+    label: snapshots / additional
+    media: ssd
+diskNotes:
+  - "Nitro --persistent.chain is the execution role leaf."
+  - "Pruned init downloads into the execution datadir on first start (no toolkit aria2)."
+  - "Nitro needs an Ethereum L1 execution RPC + beacon / blob API (parent chain)."
+  - "Start exposes editable l1_rpc / l1_beacon (default: publicnode; override with your eth or RPCNODE_L1_*)."
+  - "Nitro comes from the RpcNode CDN tarball (Clients → Add/Download). Archive layout: bin/nitro, nitro-legacy/machines, target/machines."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Arbitrum One Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 1024
+    archiveGiB: 3800
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: never
+    publicTip:
+      urls:
+        - https://arbitrum-one-rpc.publicnode.com
+    l1Parent:
+      rpc: https://ethereum-rpc.publicnode.com
+      beacon: https://ethereum-beacon-api.publicnode.com
+      pickHelp: |
+        Click Public for the default publicnode L1, or an active Ethereum node from this panel
+        (same-host uses 127.0.0.1 — required when Nitro runs beside eth on the host).
+  - id: sepolia
+    label: Arbitrum Sepolia
+    diskHintGiB: 400
+    fullNodeGiB: 400
+    archiveGiB: 900
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://arbitrum-sepolia-rpc.publicnode.com
+    l1Parent:
+      rpc: https://ethereum-sepolia-rpc.publicnode.com
+      beacon: https://ethereum-sepolia-beacon-api.publicnode.com
+      pickHelp: |
+        Click Public for the default publicnode L1, or an active Ethereum Sepolia node from this panel
+        (same-host uses 127.0.0.1 — required when Nitro runs beside eth on the host).
+
+# CLI flags live in systemd (chains/arb). No conf patch on Start.
+clientConfig:
+  program: nitro
+  format: flags
+  bindings:
+    - key: snapshot
+      source: install_option
+      option: snapshot
+      default: "pruned"
+      description: Nitro init — pruned (--init.latest) or PathDB archive
+    - key: datadir
+      source: disk_role_dir
+      role: execution
+      description: Nitro --persistent.chain (Disks execution role)
+    - key: snapshots
+      source: disk_role_dir
+      role: snapshots
+      description: Aux / snapshot workspace (SSD)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: JSON-RPC WebSocket port
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd open-file limit for Nitro
+    - key: l1-rpc
+      source: install_option
+      option: l1_rpc
+      default: ""
+      description: Ethereum L1 execution RPC (public default; override with your own or local eth)
+      testConnect:
+        kind: eth_rpc
+        label: Test connect
+        help: |
+          Panel POSTs eth_blockNumber to this URL. Expect JSON-RPC result with a hex block height.
+          Nitro needs a reachable Ethereum L1 execution RPC (Sepolia or Mainnet matching the Arb env).
+          Local eth example: http://127.0.0.1:8546 (sepolia) or http://127.0.0.1:8545 (mainnet).
+    - key: l1-beacon
+      source: install_option
+      option: l1_beacon
+      default: ""
+      description: Ethereum L1 beacon / blob API (public default; required for Nitro)
+      testConnect:
+        kind: beacon_genesis
+        label: Test connect
+        help: |
+          Panel GETs {url}/eth/v1/beacon/genesis. Expect JSON with data.genesis_time.
+          Beacon / blob API is required for Nitro parent-chain data.
+          Local example: http://127.0.0.1:5053 (sepolia) or http://127.0.0.1:5052 (mainnet).

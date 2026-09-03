@@ -1,0 +1,26 @@
+# Nitro from Docker Hub Registry HTTP (no Docker daemon). Panel Download pulls
+# offchainlabs/nitro-node layers, extracts bin/nitro + wasm machines, packs tar.gz.
+# Version/tag from OffchainLabs/nitro release notes (or Hub tag list).
+programs:
+  - env: mainnet
+    id: nitro
+    source: { type: github, repo: OffchainLabs/nitro }
+    artifacts:
+      - name: "nitro-x86_64-linux.tar.gz"
+        nameAarch64: "nitro-aarch64-linux.tar.gz"
+        urlTemplate: "docker://offchainlabs/nitro-node:{tag}"
+        urlTemplateAarch64: "docker://offchainlabs/nitro-node:{tag}"
+    ports:
+      - { role: http, port: 8547, label: "HTTP RPC", config: required }
+      - { role: ws, port: 8548, label: "WebSocket RPC", config: required }
+  - env: sepolia
+    id: nitro
+    source: { type: github, repo: OffchainLabs/nitro }
+    artifacts:
+      - name: "nitro-x86_64-linux.tar.gz"
+        nameAarch64: "nitro-aarch64-linux.tar.gz"
+        urlTemplate: "docker://offchainlabs/nitro-node:{tag}"
+        urlTemplateAarch64: "docker://offchainlabs/nitro-node:{tag}"
+    ports:
+      - { role: http, port: 8657, label: "HTTP RPC", config: required }
+      - { role: ws, port: 8658, label: "WebSocket RPC", config: required }

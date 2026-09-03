@@ -1,0 +1,43 @@
+programs:
+  - env: mainnet
+    id: dogecoin
+    source: { type: github, repo: dogecoin/dogecoin }
+    artifacts:
+      - name: "dogecoin-x86_64-linux-gnu.tar.gz"
+        nameAarch64: "dogecoin-aarch64-linux-gnu.tar.gz"
+        urlTemplate: "https://github.com/dogecoin/dogecoin/releases/download/{tag}/dogecoin-{version}-x86_64-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/dogecoin/dogecoin/releases/download/{tag}/dogecoin-{version}-aarch64-linux-gnu.tar.gz"
+    configs:
+      - name: dogecoin.conf
+        urlTemplate: "https://raw.githubusercontent.com/dogecoin/dogecoin/{tag}/share/dogecoin.conf"
+    ports:
+      - { role: p2p, port: 22556, label: "P2P", config: required }
+      - { role: rpc, port: 22555, label: "RPC", config: required }
+  - env: testnet
+    id: dogecoin
+    source: { type: github, repo: dogecoin/dogecoin }
+    artifacts:
+      - name: "dogecoin-x86_64-linux-gnu.tar.gz"
+        nameAarch64: "dogecoin-aarch64-linux-gnu.tar.gz"
+        urlTemplate: "https://github.com/dogecoin/dogecoin/releases/download/{tag}/dogecoin-{version}-x86_64-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/dogecoin/dogecoin/releases/download/{tag}/dogecoin-{version}-aarch64-linux-gnu.tar.gz"
+    configs:
+      - name: dogecoin.conf
+        urlTemplate: "https://raw.githubusercontent.com/dogecoin/dogecoin/{tag}/share/dogecoin.conf"
+    ports:
+      - { role: p2p, port: 44556, label: "P2P", config: required }
+      - { role: rpc, port: 44555, label: "RPC", config: required }
+  - env: regtest
+    id: dogecoin
+    source: { type: github, repo: dogecoin/dogecoin }
+    artifacts:
+      - name: "dogecoin-x86_64-linux-gnu.tar.gz"
+        nameAarch64: "dogecoin-aarch64-linux-gnu.tar.gz"
+        urlTemplate: "https://github.com/dogecoin/dogecoin/releases/download/{tag}/dogecoin-{version}-x86_64-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/dogecoin/dogecoin/releases/download/{tag}/dogecoin-{version}-aarch64-linux-gnu.tar.gz"
+    configs:
+      - name: dogecoin.conf
+        urlTemplate: "https://raw.githubusercontent.com/dogecoin/dogecoin/{tag}/share/dogecoin.conf"
+    ports:
+      - { role: p2p, port: 18444, label: "P2P", config: required }
+      - { role: rpc, port: 18332, label: "RPC", config: required }

@@ -1,0 +1,960 @@
+' toolkit-kotlin — UML for the IDE (PlantUML 1.2024+)
+' IntelliJ: PlantUML integration → open file → Alt+D
+' Diagrams: @startuml <name> — switch in preview
+
+@startuml toolkit-deployment
+title Deployment: admin + panel + agent + cdn
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam defaultFontSize 11
+
+actor Browser
+
+component "admin React SPA\npages + api.ts" as Admin
+
+package "rpcnode-server (src/main :8093)" {
+  component "Application.kt" as AppMain
+  component "panel Routes.kt" as Routes
+  component "Toolkit.kt" as Toolkit
+  component "Use cases" as UseCases
+  database "toolkit.db" as DB
+  component "YAML catalogs" as Yaml
+}
+
+package "rpcnode-agent (src/agent)" {
+  component "AgentMain.kt" as AgentMain
+  component "AgentRoutes.kt" as AgentRoutes
+  component "agent use cases" as AgentUC
+}
+
+package "rpcnode-cdn (src/cdn)" {
+  component "CdnMain.kt" as CdnMain
+  component "WatchSnapshotsUseCase" as WatchCdn
+  component "LocalSnapshotSource" as LocalSrc
+}
+
+node "remote host" {
+  component "client binary" as ClientBin
+}
+
+cloud "CDN host" {
+  component "nginx snapshots" as Nginx
+}
+
+cloud "official mirrors" as Official
+
+AppMain --> Routes
+Routes --> Toolkit
+Toolkit --> UseCases
+UseCases --> DB
+UseCases --> Yaml
+
+AgentMain --> AgentRoutes
+AgentRoutes --> AgentUC
+CdnMain --> WatchCdn
+WatchCdn --> LocalSrc
+
+Browser --> Admin
+Admin --> Routes : REST /api/*
+AgentUC --> Routes : POST metrics
+Routes --> AgentRoutes : HttpHostAgentClient
+LocalSrc --> Official : discover + download
+AgentUC --> ClientBin
+UseCases ..> Nginx : PreferCdnSnapshot
+Admin ..> Nginx : snapshot URL
+
+@enduml
+
+
+@startuml toolkit-layers
+title Hexagonal layers (template for each slice)
+
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+package "Presentation (panel only)" {
+  class Routes <<Ktor>> {
+    panel/slice/presentation/http
+    *Routes.kt
+  }
+}
+
+package Application {
+  class UseCase {
+    suspend invoke()
+  }
+  interface Port {
+    HostAgentClient
+    UrlProbe
+  }
+}
+
+package Domain {
+  class Model
+  interface RepoIface
+}
+
+package Infrastructure {
+  class SqliteRepo
+  class HttpAdapter
+  class YamlCatalog
+}
+
+Routes --> UseCase : Command
+UseCase --> Model
+UseCase --> RepoIface
+UseCase --> Port
+SqliteRepo ..|> RepoIface
+HttpAdapter ..|> Port
+YamlCatalog ..|> RepoIface
+
+note bottom of Routes
+  Business logic NOT in panel.*
+  panel = HTTP only
+end note
+
+@enduml
+
+
+@startuml toolkit-slices
+title Bounded contexts and panel HTTP
+
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+package catalog {
+  component NetworkCatalog as Cat
+  component LookupNetworkUseCase
+  component LookupNetworkEnvUseCase
+}
+
+package auth {
+  component CredentialStore
+  component SessionStore
+  component LoginUseCase
+  component LogoutUseCase
+  component GetAuthStatusUseCase
+}
+
+package setup {
+  component GetSetupStatusUseCase
+  component CreateAdminUseCase
+}
+
+package settings {
+  component SettingsStore
+  component GetSettingsUseCase
+  component SaveSettingsUseCase
+  component SnapshotCdnOrigin
+}
+
+package networks {
+  component NetworkRepository
+  component ListNetworksUseCase
+  component SetNetworkStatusUseCase
+  component RemoveNetworkUseCase
+  component CheckNetworkInstallUseCase
+  component ResolveSnapshotUseCase
+  component PreferCdnSnapshotUseCase
+}
+
+package clients {
+  component ClientProgramCatalog
+  component ClientVersionRepository
+  component ListClientsUseCase
+  component AddClientUseCase
+  component ProbeClientsUseCase
+  component SyncClientsUseCase
+  component DeleteClientUseCase
+  component DownloadClientProgramUseCase
+  component DetectPortConflictsUseCase
+}
+
+package servers {
+  component ServerRepository
+  component ServerMetricsRepository
+  component ListServersUseCase
+  component RegisterServerUseCase
+  component RemoveServerUseCase
+  component IngestServerMetricsUseCase
+  component ProbeHostAgentUseCase
+  component UpdateHostAgentUseCase
+  component ResolvePanelOriginUseCase
+  interface HostAgentClient
+  component HttpHostAgentClient
+}
+
+package nodes {
+  component NodeRepository
+  component ListNodesUseCase
+  component GetNodeUseCase
+  component AddNodeUseCase
+  component RemoveNodeUseCase
+  component GetNodePortsUseCase
+  component CheckNodePortsUseCase
+}
+
+package install {
+  component RenderAgentScriptUseCase
+  component ServeInstallFileUseCase
+}
+
+package chains {
+  component BitcoinClientReleaseResolver
+  component TronClientReleaseResolver
+  component TronSnapshotResolver
+}
+
+package shared {
+  component ToolkitDatabase
+}
+
+package wiring {
+  class Toolkit <<compositionRoot>>
+}
+
+package "panel.presentation.http" {
+  component ApplicationKt
+  component HealthRoutes
+  component SetupRoutes
+  component AuthRoutes
+  component SettingsRoutes
+  component NetworksRoutes
+  component ClientsRoutes
+  component InstallRoutes
+  component ServersRoutes
+  component AgentIngestRoutes
+  component NodesRoutes
+}
+
+Toolkit --> Cat
+Toolkit --> LoginUseCase
+Toolkit --> GetSettingsUseCase
+Toolkit --> ListNetworksUseCase
+Toolkit --> ListClientsUseCase
+Toolkit --> ListServersUseCase
+Toolkit --> AddNodeUseCase
+Toolkit --> CheckNodePortsUseCase
+
+AddNodeUseCase --> NodeRepository
+AddNodeUseCase --> ServerRepository
+AddNodeUseCase --> Cat
+AddClientUseCase --> Cat
+ListNetworksUseCase --> Cat
+RegisterServerUseCase --> HostAgentClient
+CheckNodePortsUseCase --> HostAgentClient
+PreferCdnSnapshotUseCase --> ResolveSnapshotUseCase
+PreferCdnSnapshotUseCase --> SettingsStore
+ResolveSnapshotUseCase --> Cat
+SyncClientsUseCase --> DownloadClientProgramUseCase
+HttpHostAgentClient ..|> HostAgentClient
+
+AuthRoutes --> LoginUseCase
+SetupRoutes --> CreateAdminUseCase
+SettingsRoutes --> GetSettingsUseCase
+NetworksRoutes --> ListNetworksUseCase
+ClientsRoutes --> SyncClientsUseCase
+ServersRoutes --> RegisterServerUseCase
+AgentIngestRoutes --> IngestServerMetricsUseCase
+NodesRoutes --> AddNodeUseCase
+InstallRoutes --> RenderAgentScriptUseCase
+
+@enduml
+
+
+@startuml toolkit-panel-api
+title Panel REST API -> Use case -> Routes file
+
+skinparam shadowing false
+
+class AuthSetup {
+  GET /healthz
+  --
+  HealthRoutes.kt
+  ..
+  GET /api/setup/status
+  GetSetupStatusUseCase
+  SetupRoutes.kt
+  ..
+  POST /api/setup
+  CreateAdminUseCase
+  SetupRoutes.kt
+  ..
+  GET /api/auth/status
+  GetAuthStatusUseCase
+  AuthRoutes.kt
+  ..
+  POST /api/auth/login
+  LoginUseCase
+  AuthRoutes.kt
+  ..
+  POST /api/auth/logout
+  LogoutUseCase
+  AuthRoutes.kt
+}
+
+class SettingsApi {
+  GET /api/settings
+  GetSettingsUseCase
+  SettingsRoutes.kt
+  ..
+  PUT /api/settings
+  SaveSettingsUseCase
+  SettingsRoutes.kt
+}
+
+class NetworksApi {
+  GET /api/networks
+  ListNetworksUseCase
+  ..
+  GET /api/networks/snapshot
+  PreferCdnSnapshotUseCase
+  ..
+  POST /api/networks
+  SetNetworkStatusUseCase
+  ..
+  POST /api/networks/install
+  CheckNetworkInstallUseCase
+  ..
+  DELETE /api/networks/id
+  RemoveNetworkUseCase
+}
+
+class ClientsApi {
+  GET /api/clients
+  ListClientsUseCase
+  ..
+  GET /api/clients/preview
+  PreviewClientsUseCase
+  ..
+  GET /api/clients/version
+  ResolveClientReleaseUseCase
+  ..
+  POST /api/clients
+  AddClientUseCase
+  ..
+  POST /api/clients/probe
+  ProbeClientsUseCase
+  ..
+  POST /api/clients/sync
+  SyncClientsUseCase
+  ..
+  POST /api/clients/delete
+  DeleteClientUseCase
+}
+
+class ServersApi {
+  GET /api/servers
+  ListServersUseCase
+  ..
+  POST /api/servers
+  RegisterServerUseCase
+  ..
+  DELETE /api/servers/id
+  RemoveServerUseCase
+  ..
+  POST /api/servers/probe
+  ProbeHostAgentUseCase
+  ..
+  POST /api/v1/agent/update
+  UpdateHostAgentUseCase
+  ..
+  POST /api/agent/v1/metrics
+  IngestServerMetricsUseCase
+}
+
+class NodesApi {
+  GET /api/nodes
+  ListNodesUseCase
+  ..
+  GET /api/nodes/id
+  GetNodeUseCase
+  ..
+  POST /api/nodes
+  AddNodeUseCase
+  ..
+  GET /api/nodes/id/ports
+  GetNodePortsUseCase
+  ..
+  POST /api/nodes/id/ports/check
+  CheckNodePortsUseCase
+  ..
+  POST /api/nodes/remove
+  RemoveNodeUseCase
+}
+
+class InstallApi {
+  GET /install/version
+  RenderAgentScriptUseCase
+  ..
+  GET /install/path
+  ServeInstallFileUseCase
+  ..
+  GET /api/agent/channel
+  InstallRoutes.kt
+}
+
+@enduml
+
+
+@startuml toolkit-wiring-classes
+title Toolkit + repositories
+
+skinparam shadowing false
+
+class Toolkit {
+  +catalog
+  +listNetworks
+  +getSettings
+  +listClients
+  +syncClients
+  +listServers
+  +registerServer
+  +addNode
+  +getNodePorts
+  +checkNodePorts
+  +preferCdnSnapshot
+  --
+  +production(cfg)
+}
+
+class Application {
+  +main()
+  +module(cfg, toolkit)
+}
+
+interface NodeRepository {
+  +list()
+  +find(id)
+  +insert()
+}
+
+interface ServerRepository {
+  +find(id)
+  +save()
+  +list()
+}
+
+interface SettingsStore {
+  +read()
+  +save()
+}
+
+interface HostAgentClient {
+  +enroll()
+  +identity()
+  +checkPorts()
+  +update()
+}
+
+interface NetworkCatalog
+
+class AddNodeUseCase
+class RegisterServerUseCase
+class CheckNodePortsUseCase
+class HttpHostAgentClient
+class SqliteNodeRepository
+class SqliteServerRepository
+class SqliteSettingsStore
+class YamlClientProgramCatalog
+class YamlNetworkFactsRepository
+
+Application --> Toolkit
+Toolkit *-- AddNodeUseCase
+Toolkit *-- RegisterServerUseCase
+Toolkit *-- CheckNodePortsUseCase
+
+AddNodeUseCase --> NodeRepository
+AddNodeUseCase --> ServerRepository
+RegisterServerUseCase --> ServerRepository
+RegisterServerUseCase --> HostAgentClient
+CheckNodePortsUseCase --> NodeRepository
+CheckNodePortsUseCase --> HostAgentClient
+
+SqliteNodeRepository ..|> NodeRepository
+SqliteServerRepository ..|> ServerRepository
+SqliteSettingsStore ..|> SettingsStore
+HttpHostAgentClient ..|> HostAgentClient
+YamlNetworkFactsRepository ..|> NetworkCatalog
+
+@enduml
+
+
+@startuml toolkit-sequence-register-server
+title Sequence: register host
+
+actor Admin as "ServersPage"
+participant Routes as "ServersRoutes"
+participant UC as "RegisterServerUseCase"
+participant Repo as "SqliteServerRepository"
+participant Agent as "HttpHostAgentClient"
+
+Admin -> Routes : POST /api/servers
+Routes -> UC : invoke
+UC -> Agent : POST /api/v1/enroll
+Agent --> UC : ok
+UC -> Agent : GET /api/v1/agent
+Agent --> UC : identity
+UC -> Repo : save
+Repo --> UC
+UC --> Routes : Created
+Routes --> Admin : 200
+
+@enduml
+
+
+@startuml toolkit-sequence-add-node
+title Sequence: add node
+
+actor Admin as "NodesPage"
+participant Routes as "NodesRoutes"
+participant UC as "AddNodeUseCase"
+participant Nodes as "NodeRepository"
+participant Servers as "ServerRepository"
+participant Catalog as "NetworkCatalog"
+participant Clients as "ClientVersionRepository"
+
+Admin -> Routes : POST /api/nodes
+Routes -> UC : invoke
+UC -> Servers : find
+UC -> Catalog : validate
+UC -> Clients : check installed
+UC -> Nodes : insert AWAITING_PORTS
+Nodes --> UC : Created
+UC --> Routes : Created
+Routes --> Admin : 200
+
+@enduml
+
+
+@startuml toolkit-sequence-node-ports
+title Sequence: check node ports
+
+actor Admin as "NodePortsPanel"
+participant Routes as "NodesRoutes"
+participant UC as "CheckNodePortsUseCase"
+participant Nodes as "NodeRepository"
+participant Catalog as "ClientProgramCatalog"
+participant Agent as "HttpHostAgentClient"
+
+Admin -> Routes : POST ports/check
+Routes -> UC : invoke
+UC -> Nodes : find
+UC -> Catalog : fixed ports
+UC -> Agent : POST agent/ports/check
+Agent --> UC : statuses
+UC --> Routes : result
+Routes --> Admin : json
+
+@enduml
+
+
+@startuml toolkit-agent
+title rpcnode-agent (separate JAR)
+
+skinparam shadowing false
+
+package "agent.presentation.http" {
+  component AgentMain
+  component AgentRoutes
+}
+
+package "agent.application" {
+  component EnrollPanelUseCase
+  component UnenrollPanelUseCase
+  component GetAgentIdentityUseCase
+  component CollectHostMetricsUseCase
+  component PushHostMetricsUseCase
+  component UpdateAgentUseCase
+  component CheckPortsUseCase
+  component ReserveAgentPortsUseCase
+}
+
+package "agent.infrastructure" {
+  component HttpPanelReachabilityClient
+  component HttpPanelMetricsClient
+  component TcpPortProbe
+  component CatalogFixedPortsReader
+  component FilePanelEnrollmentStore
+  component LinuxHostMetrics
+}
+
+package "panel remote" {
+  component PanelMetricsIngest
+  component PanelRegisterServer
+}
+
+AgentMain --> AgentRoutes
+AgentRoutes --> EnrollPanelUseCase
+AgentRoutes --> UnenrollPanelUseCase
+AgentRoutes --> GetAgentIdentityUseCase
+AgentRoutes --> CollectHostMetricsUseCase
+AgentRoutes --> UpdateAgentUseCase
+AgentRoutes --> CheckPortsUseCase
+
+PushHostMetricsUseCase --> HttpPanelMetricsClient
+HttpPanelMetricsClient --> PanelMetricsIngest
+EnrollPanelUseCase --> HttpPanelReachabilityClient
+CheckPortsUseCase --> TcpPortProbe
+CheckPortsUseCase --> CatalogFixedPortsReader
+ReserveAgentPortsUseCase --> AgentRoutes
+
+PanelRegisterServer ..> EnrollPanelUseCase : POST /api/servers
+
+@enduml
+
+
+@startuml toolkit-cdn
+title rpcnode-cdn + PreferCdnSnapshot
+
+skinparam shadowing false
+
+package cdn {
+  component CdnMain
+  component CdnMenu
+  component WatchSnapshotsUseCase
+  component LocalSnapshotSource
+  component FileSnapshotTargetStore
+  component EmbeddedMirrorCatalog
+  component DiskSnapshotMirrorStore
+  component ResumableHttpDownload
+}
+
+package "panel networks" {
+  component NetworksSnapshotRoute
+  component PreferCdnSnapshotUseCase
+  component ResolveSnapshotUseCase
+  component HttpCdnMirrorProbe
+  component TronSnapshotResolver
+}
+
+package settings {
+  component SnapshotCdnOrigin
+  component SettingsStore
+}
+
+storage "snapshot dir" as Disk
+storage "targets JSON" as Targets
+cloud nginx as Nginx
+cloud "official mirrors" as Official
+
+CdnMain --> WatchSnapshotsUseCase : sync
+CdnMain --> CdnMenu : menu
+CdnMenu --> FileSnapshotTargetStore
+WatchSnapshotsUseCase --> LocalSnapshotSource
+WatchSnapshotsUseCase --> DiskSnapshotMirrorStore
+LocalSnapshotSource --> FileSnapshotTargetStore
+LocalSnapshotSource --> EmbeddedMirrorCatalog
+LocalSnapshotSource --> Official
+DiskSnapshotMirrorStore --> ResumableHttpDownload
+DiskSnapshotMirrorStore --> Disk
+FileSnapshotTargetStore --> Targets
+Disk --> Nginx
+
+NetworksSnapshotRoute --> PreferCdnSnapshotUseCase
+PreferCdnSnapshotUseCase --> ResolveSnapshotUseCase
+PreferCdnSnapshotUseCase --> SettingsStore
+PreferCdnSnapshotUseCase --> HttpCdnMirrorProbe
+HttpCdnMirrorProbe --> Nginx
+ResolveSnapshotUseCase --> TronSnapshotResolver
+
+@enduml
+
+
+@startuml toolkit-admin
+title Admin SPA -> api.ts -> Panel
+
+skinparam shadowing false
+
+package "admin pages" {
+  component HomePage
+  component ServersPage
+  component NodesPage
+  component EnvDetailPage
+  component NetworksPage
+  component ClientsPage
+  component SettingsPage
+}
+
+package "admin api.ts" {
+  component apiRegistryList
+  component apiRegistryUpsert
+  component apiWorkloadsList
+  component apiWorkloadsGet
+  component apiWorkloadsHostDisks
+  component apiWorkloadsDiskLayout
+  component apiNodePorts
+  component apiCheckNodePorts
+  component apiNetworks
+  component apiClients
+  component apiPanelSettings
+}
+
+package "panel routes" {
+  component routeServers
+  component routeHosts
+  component routeNodes
+  component routeNetworks
+  component routeClients
+  component routeSettings
+}
+
+ServersPage --> apiRegistryList
+ServersPage --> apiRegistryUpsert
+apiRegistryList --> routeServers
+apiRegistryUpsert --> routeServers
+
+NodesPage --> apiWorkloadsList
+EnvDetailPage --> apiWorkloadsGet
+EnvDetailPage --> apiWorkloadsHostDisks
+EnvDetailPage --> apiWorkloadsDiskLayout
+EnvDetailPage --> apiNodePorts
+EnvDetailPage --> apiCheckNodePorts
+apiWorkloadsList --> routeNodes
+apiWorkloadsGet --> routeNodes
+apiWorkloadsHostDisks --> routeHosts
+apiWorkloadsDiskLayout --> routeNodes
+apiNodePorts --> routeNodes
+apiCheckNodePorts --> routeNodes
+
+NetworksPage --> apiNetworks
+apiNetworks --> routeNetworks
+ClientsPage --> apiClients
+apiClients --> routeClients
+SettingsPage --> apiPanelSettings
+apiPanelSettings --> routeSettings
+HomePage --> apiNetworks
+
+note bottom of EnvDetailPage
+  Some api.workloads still legacy Go
+  cross-check NodesRoutes.kt
+end note
+
+@enduml
+
+
+@startuml toolkit-node-disk-layout
+title Node disk layout — catalog per network + saved paths
+
+skinparam shadowing false
+
+file "networks/tron.yml\ndiskRoles: fullnode, solidity" as TronYml
+file "networks/bitcoin.yml\ndiskRoles: blockchain, index" as BtcYml
+file "networks/solana.yml\ndiskRoles: ledger, accounts, snapshots" as SolYml
+
+component "GET /api/host/disks" as HostDisksRoute
+component "GET /api/nodes/{id}/disk-layout" as DiskLayoutRoute
+component "GetHostDisksUseCase" as HostDisksUC
+component "GetNodeDiskLayoutUseCase" as DiskLayoutUC
+component "NetworkDiskLayoutCatalog" as Catalog
+database "nodes.disk_layout_json" as NodeDb
+component "HttpHostDiskReader\n→ agent GET /api/v1/host/disks" as AgentReader
+
+TronYml --> Catalog
+BtcYml --> Catalog
+SolYml --> Catalog
+
+HostDisksRoute --> HostDisksUC
+HostDisksUC --> Catalog
+HostDisksUC --> AgentReader
+HostDisksUC --> HostDisksRoute : disks, mounts,\nsummary
+
+DiskLayoutRoute --> DiskLayoutUC
+DiskLayoutUC --> NodeDb : read saved layout
+DiskLayoutUC --> Catalog : multi_disk_roles,\nlayout_rules
+DiskLayoutUC --> HostDisksUC : host inventory\n→ recommended
+DiskLayoutUC --> DiskLayoutRoute : disk_layout.roles[]\n(id, label, mount, dir)
+
+note right of Catalog
+  Each network defines JBOD roles
+  (what to store where). Env sizing
+  from diskHintGiB / fullNodeGiB.
+end note
+
+note bottom of DiskLayoutRoute
+  Solana: ledger / accounts / snapshots
+  TRON: fullnode / solidity
+  Bitcoin: blockchain / index
+  Operator picks mount per role on Disks step;
+  PUT persists JSON to nodes row.
+end note
+
+@enduml
+
+
+@startuml toolkit-node-client-config
+title Node client config render (planned) — template + bindings per network
+
+skinparam shadowing false
+
+folder "public/install/clients" as PubClients {
+  file "tron/nile/config-nile.conf\n(HOCON upstream)" as TronTpl
+  file "bitcoin/mainnet/bitcoin.conf\n(INI upstream)" as BtcTpl
+}
+
+file "resources/clients/*.yml\nartifact + config names" as ClientsYml
+file "resources/networks/tron.yml\nclientConfig.bindings" as TronNet
+file "resources/networks/bitcoin.yml\nclientConfig.bindings" as BtcNet
+
+database "nodes.disk_layout_json\nnodes.install_options_json" as NodeDb
+component "ClientProgramCatalog\nfixed ports" as PortCat
+
+package "nodes.application.config (planned)" {
+  component BuildNodeConfigContextUseCase as BuildCtx
+  component LoadClientConfigTemplateUseCase as LoadTpl
+  component ParseClientConfigTemplateUseCase as Parse
+  component RenderNodeClientConfigUseCase as Render
+  component GetNodeClientConfigUseCase as GetCfg
+}
+
+package "nodes.infrastructure.config (planned)" {
+  component HooconConfigParser
+  component IniConfigParser
+  component NetworkClientConfigCatalog
+}
+
+component "GET /api/nodes/{id}/client-config\n(planned)" as ApiRoute
+component "NodeInstallWizard\nstep Start preview" as WizardStart
+component "agent provision\nwrite rendered conf" as AgentProv
+
+ClientsYml --> LoadTpl
+PubClients --> LoadTpl
+TronNet --> NetworkClientConfigCatalog
+BtcNet --> NetworkClientConfigCatalog
+NetworkClientConfigCatalog --> Render
+
+NodeDb --> BuildCtx
+PortCat --> BuildCtx
+BuildCtx --> Render
+LoadTpl --> Parse
+Parse --> HooconConfigParser : tron
+Parse --> IniConfigParser : bitcoin
+Parse --> Render
+
+Render --> GetCfg
+GetCfg --> ApiRoute
+ApiRoute --> WizardStart
+Render --> AgentProv
+
+note right of TronNet
+  disk_role_dir → fullnode/solidity
+  catalog_port → p2p, http_*, grpc_*
+  install_option → maxConnections
+end note
+
+note right of BtcNet
+  disk_role_dir → blockchain, index
+  catalog_port → p2p, rpc
+  envSections → [main], [testnet4], …
+end note
+
+note bottom of Render
+  Do not edit upstream templates
+  under public/ — only write the
+  rendered copy into the host datadir.
+end note
+
+@enduml
+
+
+@startuml toolkit-file-index
+title Cheat sheet: task -> file
+
+skinparam shadowing false
+
+rectangle "REST endpoint" as R1
+rectangle "panel/slice/presentation/http/*Routes.kt" as R1f
+
+rectangle "business logic" as R2
+rectangle "slice/application/*UseCase.kt" as R2f
+
+rectangle "model" as R3
+rectangle "slice/domain/model/" as R3f
+
+rectangle "SQLite" as R4
+rectangle "slice/infrastructure/persistence/" as R4f
+rectangle "resources/db/migration/" as R4m
+
+rectangle "panel <-> agent" as R5
+rectangle "HttpHostAgentClient.kt" as R5f
+
+rectangle "DI wiring" as R6
+rectangle "wiring/Toolkit.kt" as R6f
+
+rectangle "port catalog" as R7
+rectangle "resources/clients/*.yml" as R7f
+
+rectangle "client config render" as R11
+rectangle "networks/*.yml clientConfig" as R11f
+rectangle "nodes/application/config/" as R11u
+
+rectangle "admin UI" as R8
+rectangle "admin/src/pages/" as R8f
+rectangle "admin/src/api.ts" as R8a
+
+rectangle "agent JAR" as R9
+rectangle "src/agent/AgentRoutes.kt" as R9f
+
+rectangle "cdn JAR" as R10
+rectangle "WatchSnapshotsUseCase.kt" as R10f
+
+R1 --> R1f
+R2 --> R2f
+R3 --> R3f
+R4 --> R4f
+R4 --> R4m
+R5 --> R5f
+R6 --> R6f
+R7 --> R7f
+R11 --> R11f
+R11 --> R11u
+R8 --> R8f
+R8 --> R8a
+R9 --> R9f
+R10 --> R10f
+
+@enduml
+
+
+@startuml toolkit-tron-snapshot-mirrors
+title TRON official snapshot mirrors + CDN by type
+
+skinparam shadowing false
+
+file "networks/tron.yml\nsnapshotTypes:\n full / lite / archive" as NetYml
+file "clients/tron.yml\nsnapshots:\n mirror roots" as CliYml
+
+rectangle "Official mirrors (clients/tron.yml)" as Official {
+  card "mainnet/full\nhttp://34.86.86.229/" as MFull
+  card "mainnet/internal_tx\nhttp://35.247.128.170/" as MInt
+  card "mainnet/archive\nhttp://34.48.6.163/" as MArch
+  card "nile/full · nile/lite\nhttps://snapshots.nileex.io/\n(dated HEAD)" as MNile
+}
+
+rectangle "Panel" as Panel {
+  component "TronSnapshotResolver(type)" as Resolver
+  component "PreferCdnSnapshotUseCase" as Prefer
+  database "nodes.install_options_json\n{ snapshot: full|lite|… }" as Opts
+}
+
+rectangle "Snapshot CDN" as Cdn {
+  folder "/snapshots/tron/mainnet/full/" as CdnFull
+  folder "/snapshots/tron/mainnet/archive/" as CdnArch
+  folder "/snapshots/tron/nile/lite/" as CdnLite
+}
+
+NetYml --> Panel : wizard choices
+CliYml --> Official
+Official --> Resolver
+Opts --> Prefer : type id
+Resolver --> Prefer : official archive URL
+Prefer --> Cdn : prefer when VERSION matches
+Prefer --> Official : else official
+
+note bottom of Official
+  Mirror IPs/hosts must stay in clients/tron.yml
+  (and this diagram) — not in networks/*.yml.
+end note
+
+@enduml

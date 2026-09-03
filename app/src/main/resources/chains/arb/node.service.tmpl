@@ -1,0 +1,34 @@
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=HOME={{datadir}}
+EnvironmentFile=-{{env_file}}
+ExecStart={{bin}} \
+  --parent-chain.connection.url={{l1_rpc}} \
+  --parent-chain.blob-client.beacon-url={{l1_beacon}} \
+  --chain.id={{chain_id}} \
+  --http.addr=127.0.0.1 \
+  --http.port={{http_port}} \
+  --http.api=net,web3,eth,debug \
+  --http.vhosts=* \
+  --http.corsdomain=* \
+  --ws.addr=127.0.0.1 \
+  --ws.port={{ws_port}} \
+  --ws.api=net,web3,eth,debug \
+{{init_flags}}  --persistent.chain={{datadir}} \
+  --validation.wasm.allowed-wasm-module-roots={{wasm_roots}}{{archive_flags}}
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=infinity
+TimeoutStopSec=600
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE={{limit_nofile}}
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

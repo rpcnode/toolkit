@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" role="img" aria-label="RpcNode">
+  <rect width="32" height="32" fill="#070b0a"/>
+  <rect x="7.5" y="7.5" width="17" height="17" stroke="#3ddc97" stroke-opacity="0.28"/>
+  <path
+    d="M16 9v3.5M10.5 22.5l4.2-4.2M21.5 22.5l-4.2-4.2"
+    stroke="#3ddc97"
+    stroke-opacity="0.72"
+    stroke-width="1"
+    stroke-linecap="square"
+  />
+  <rect x="15" y="7" width="2" height="2" fill="#3ddc97"/>
+  <rect x="9" y="21" width="2" height="2" fill="#3ddc97"/>
+  <rect x="21" y="21" width="2" height="2" fill="#3ddc97"/>
+  <rect x="14" y="14" width="4" height="4" fill="#3ddc97"/>
+</svg>

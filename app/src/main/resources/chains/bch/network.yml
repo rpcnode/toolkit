@@ -1,0 +1,80 @@
+label: Bitcoin Cash
+diskRoles:
+  - id: blockchain
+    label: Blockchain data
+    media: ssd
+  - id: index
+    label: Index / auxiliary
+    media: ssd
+diskNotes:
+  - "Mainnet P2P/RPC ports match Bitcoin Core — do not colocate BCH and BTC mainnet on one host."
+oneEnvPerHost: true
+envs:
+  - id: mainnet
+    label: Bitcoin Cash Mainnet
+    diskHintGiB: 512
+    fullNodeGiB: 512
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://api.blockchair.com/bitcoin-cash/stats
+  - id: testnet
+    label: Bitcoin Cash Testnet
+    diskHintGiB: 64
+    fullNodeGiB: 64
+    cpuCores: 2
+    memoryGiB: 8
+    snapshot: never
+  - id: regtest
+    label: Bitcoin Cash Regtest
+    diskHintGiB: 8
+    fullNodeGiB: 8
+    cpuCores: 1
+    memoryGiB: 2
+    snapshot: never
+clientConfig:
+  program: bitcoin-cash
+  format: ini
+  template: bitcoin.conf
+  envSections:
+    mainnet: main
+    testnet: test
+    regtest: regtest
+  bindings:
+    - key: datadir
+      source: disk_role_dir
+      role: blockchain
+      description: Bitcoin Cash data directory from Disks blockchain role
+    - key: blocksdir
+      source: disk_role_dir
+      role: index
+      optional: true
+      description: Optional separate blocks directory from Disks index role
+    - key: port
+      source: catalog_port
+      role: p2p
+      description: P2P listen port
+    - key: rpcport
+      source: catalog_port
+      role: rpc
+      description: JSON-RPC listen port
+    - key: rpcbind
+      source: literal
+      value: "127.0.0.1"
+      description: RPC bind address (localhost only)
+    - key: maxconnections
+      source: install_option
+      option: max_connections
+      default: "125"
+      description: Maximum peer connections
+    - key: txindex
+      source: install_option
+      option: txindex
+      default: "0"
+      description: Maintain a full transaction index (0/1)
+    - key: server
+      source: literal
+      value: "1"
+      description: Accept JSON-RPC commands

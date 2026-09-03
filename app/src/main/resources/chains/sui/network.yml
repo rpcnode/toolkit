@@ -1,0 +1,97 @@
+# Disk plan, host sizing. Snapshot required — Mysten formal R2 via sui-tool.
+# Directory name is the network id. Ports live in clients.yml beside this file.
+label: Sui
+diskRoles:
+  - id: state
+    label: State DB
+    media: nvme
+  - id: index
+    label: Index / auxiliary
+    media: ssd
+diskNotes:
+  - "sui-node db-path is the state role leaf (NVMe)."
+  - "Formal snapshots download straight into the state db-path (resumable via sui-tool)."
+  - "fullnode.yaml and genesis.blob live under the node_dir (not /etc/sui)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Sui Mainnet
+    diskHintGiB: 2048
+    fullNodeGiB: 2048
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: required
+    publicTip:
+      urls:
+        # Mysten fullnode.*.sui.io JSON-RPC often returns method-not-found; suiscan still works.
+        - https://rpc-mainnet.suiscan.xyz
+        - https://mainnet.sui.rpcpool.com
+        - https://sui-mainnet-endpoint.blockvision.org
+    snapshotTypes:
+      - id: formal
+        kind: full
+        label: Formal · Mysten R2
+        hint: Official formal checkpoint snapshot via sui-tool (~TB-scale mainnet DB)
+        diskGiB: 2048
+        default: true
+  - id: testnet
+    label: Sui Testnet
+    diskHintGiB: 512
+    fullNodeGiB: 512
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: required
+    publicTip:
+      urls:
+        - https://rpc-testnet.suiscan.xyz
+        - https://fullnode.testnet.sui.io:443
+    snapshotTypes:
+      - id: formal
+        kind: full
+        label: Formal · Mysten R2
+        hint: Official formal checkpoint snapshot via sui-tool
+        diskGiB: 512
+        default: true
+
+# Generated fullnode.yaml on Start (chains/sui). No conf patch — format: flags.
+# Capacity / pruning literals mirror Go RenderFullnodeYAML + unit LimitNOFILE.
+clientConfig:
+  program: sui-node
+  format: flags
+  bindings:
+    - key: db-path
+      source: disk_role_dir
+      role: state
+      description: sui-node db-path (Disks state role)
+    - key: index
+      source: disk_role_dir
+      role: index
+      description: Index / aux path (SSD)
+    - key: json-rpc-address
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port (127.0.0.1)
+    - key: metrics-address
+      source: catalog_port
+      role: metrics
+      description: Prometheus metrics port (127.0.0.1)
+    - key: p2p-listen
+      source: catalog_port
+      role: p2p
+      description: P2P listen port (0.0.0.0)
+    - key: enable-event-processing
+      source: literal
+      value: "true"
+      description: Enable event processing (fullnode.yaml)
+    - key: num-epochs-to-retain
+      source: literal
+      value: "18446744073709551615"
+      description: Full history — retain all epochs locally (archive fallback for older)
+    - key: archive-concurrency
+      source: literal
+      value: "5"
+      description: state-archive-read-config concurrency
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for sui-node

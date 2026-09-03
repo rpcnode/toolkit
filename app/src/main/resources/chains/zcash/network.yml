@@ -1,0 +1,80 @@
+label: Zcash
+diskRoles:
+  - id: blockchain
+    label: Blockchain data
+    media: ssd
+  - id: index
+    label: Index / auxiliary
+    media: ssd
+diskNotes:
+  - "Shielded params are fetched into node_dir/.zcash-params on first start (zcash-fetch-params)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Zcash Mainnet
+    diskHintGiB: 512
+    fullNodeGiB: 512
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://api.blockchair.com/zcash/stats
+  - id: testnet
+    label: Zcash Testnet
+    diskHintGiB: 64
+    fullNodeGiB: 64
+    cpuCores: 2
+    memoryGiB: 8
+    snapshot: never
+  - id: regtest
+    label: Zcash Regtest
+    diskHintGiB: 8
+    fullNodeGiB: 8
+    cpuCores: 1
+    memoryGiB: 4
+    snapshot: never
+clientConfig:
+  program: zcash
+  format: ini
+  template: zcash.conf
+  bindings:
+    - key: datadir
+      source: disk_role_dir
+      role: blockchain
+      description: Zcash data directory from Disks blockchain role
+    - key: blocksdir
+      source: disk_role_dir
+      role: index
+      optional: true
+      description: Optional separate blocks directory from Disks index role
+    - key: port
+      source: catalog_port
+      role: p2p
+      description: P2P listen port
+    - key: rpcport
+      source: catalog_port
+      role: rpc
+      description: JSON-RPC listen port
+    - key: rpcbind
+      source: literal
+      value: "127.0.0.1"
+      description: RPC bind address (localhost only)
+    - key: maxconnections
+      source: install_option
+      option: max_connections
+      default: "125"
+      description: Maximum peer connections
+    - key: txindex
+      source: install_option
+      option: txindex
+      default: "0"
+      description: Maintain a full transaction index (0/1)
+    - key: server
+      source: literal
+      value: "1"
+      description: Accept JSON-RPC commands
+    - key: i-am-aware-zcashd-will-be-replaced-by-zebrad-and-zallet-in-2025
+      source: literal
+      value: "1"
+      description: Required acknowledgment for zcashd 6.x — daemon exits without this option

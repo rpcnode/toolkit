@@ -1,0 +1,9 @@
+node_modules
+.next
+.idea
+out
+data
+.env
+.env.local
+rpcnode-cdn-site.env
+*.log

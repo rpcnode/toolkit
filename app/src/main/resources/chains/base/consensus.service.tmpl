@@ -1,0 +1,20 @@
+[Unit]
+Description={{description}}
+After=network-online.target {{reth_unit}}
+Wants=network-online.target
+Requires={{reth_unit}}
+
+[Service]
+Type=simple
+EnvironmentFile=-{{etc}}/consensus.env
+ExecStart={{wrapper}}
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=120
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE=1048576
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

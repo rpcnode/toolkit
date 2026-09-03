@@ -1,0 +1,70 @@
+# Bor + Heimdall-v2 from Polygon GitHub .deb releases.
+# Version discovery: bor from 0xPolygon/bor (PolygonClientReleaseResolver);
+# heimdall keeps its own GitHub source so tags stay independent.
+programs:
+  - env: mainnet
+    id: bor
+    source: { type: github, repo: 0xPolygon/bor }
+    artifacts:
+      - name: "bor-amd64.deb"
+        nameAarch64: "bor-arm64.deb"
+        urlTemplate: "https://github.com/0xPolygon/bor/releases/download/{tag}/bor-{tag}-amd64.deb"
+        urlTemplateAarch64: "https://github.com/0xPolygon/bor/releases/download/{tag}/bor-{tag}-arm64.deb"
+      - name: "bor-sentry-config.deb"
+        urlTemplate: "https://github.com/0xPolygon/bor/releases/download/{tag}/bor-mainnet-sentry-config_{tag}-all.deb"
+      - name: "bor-archive-config.deb"
+        urlTemplate: "https://github.com/0xPolygon/bor/releases/download/{tag}/bor-mainnet-archive-config_{tag}-all.deb"
+      - name: "genesis-mainnet.json"
+        urlTemplate: "https://github.com/0xPolygon/bor/releases/download/{tag}/genesis-mainnet-v1.json"
+    ports:
+      - { role: p2p, port: 30333, label: "Bor P2P", config: required }
+      - { role: http, port: 8548, label: "Bor HTTP RPC", config: required }
+      - { role: ws, port: 8549, label: "Bor WS RPC", config: required }
+      - { role: heimdall_p2p, port: 26656, label: "Heimdall P2P", config: required }
+      - { role: heimdall_rpc, port: 26657, label: "Heimdall CometBFT RPC", config: required }
+      - { role: heimdall_api, port: 1317, label: "Heimdall REST", config: required }
+  - env: mainnet
+    id: heimdall
+    source: { type: github, repo: 0xPolygon/heimdall-v2 }
+    artifacts:
+      - name: "heimdall-amd64.deb"
+        nameAarch64: "heimdall-arm64.deb"
+        urlTemplate: "https://github.com/0xPolygon/heimdall-v2/releases/download/{tag}/heimdall-{tag}-amd64.deb"
+        urlTemplateAarch64: "https://github.com/0xPolygon/heimdall-v2/releases/download/{tag}/heimdall-{tag}-arm64.deb"
+      - name: "heimdall-sentry-config.deb"
+        urlTemplate: "https://github.com/0xPolygon/heimdall-v2/releases/download/{tag}/heimdall-mainnet-sentry-config_{tag}-all.deb"
+      - name: "heimdall-genesis.json"
+        urlTemplate: "https://storage.googleapis.com/mainnet-heimdallv2-genesis/migrated_dump-genesis.json"
+  - env: amoy
+    id: bor
+    source: { type: github, repo: 0xPolygon/bor }
+    artifacts:
+      - name: "bor-amd64.deb"
+        nameAarch64: "bor-arm64.deb"
+        urlTemplate: "https://github.com/0xPolygon/bor/releases/download/{tag}/bor-{tag}-amd64.deb"
+        urlTemplateAarch64: "https://github.com/0xPolygon/bor/releases/download/{tag}/bor-{tag}-arm64.deb"
+      - name: "bor-sentry-config.deb"
+        urlTemplate: "https://github.com/0xPolygon/bor/releases/download/{tag}/bor-amoy-sentry-config_{tag}-all.deb"
+      - name: "bor-archive-config.deb"
+        urlTemplate: "https://github.com/0xPolygon/bor/releases/download/{tag}/bor-amoy-archive-config_{tag}-all.deb"
+      - name: "genesis-amoy.json"
+        urlTemplate: "https://github.com/0xPolygon/bor/releases/download/{tag}/genesis-amoy.json"
+    ports:
+      - { role: p2p, port: 30343, label: "Bor P2P", config: required }
+      - { role: http, port: 8558, label: "Bor HTTP RPC", config: required }
+      - { role: ws, port: 8559, label: "Bor WS RPC", config: required }
+      - { role: heimdall_p2p, port: 26756, label: "Heimdall P2P", config: required }
+      - { role: heimdall_rpc, port: 26757, label: "Heimdall CometBFT RPC", config: required }
+      - { role: heimdall_api, port: 1327, label: "Heimdall REST", config: required }
+  - env: amoy
+    id: heimdall
+    source: { type: github, repo: 0xPolygon/heimdall-v2 }
+    artifacts:
+      - name: "heimdall-amd64.deb"
+        nameAarch64: "heimdall-arm64.deb"
+        urlTemplate: "https://github.com/0xPolygon/heimdall-v2/releases/download/{tag}/heimdall-{tag}-amd64.deb"
+        urlTemplateAarch64: "https://github.com/0xPolygon/heimdall-v2/releases/download/{tag}/heimdall-{tag}-arm64.deb"
+      - name: "heimdall-sentry-config.deb"
+        urlTemplate: "https://github.com/0xPolygon/heimdall-v2/releases/download/{tag}/heimdall-amoy-sentry-config_{tag}-all.deb"
+      - name: "heimdall-genesis.json"
+        urlTemplate: "https://storage.googleapis.com/amoy-heimdallv2-genesis/migrated_dump-genesis.json"
