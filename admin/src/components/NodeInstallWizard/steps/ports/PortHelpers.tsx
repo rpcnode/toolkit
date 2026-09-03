@@ -11,10 +11,10 @@ import {
   ThemeIcon,
   Tooltip,
 } from '@mantine/core'
-import { IconAlertTriangle, IconCheck, IconHelp, IconX } from '@tabler/icons-react'
+import { IconCheck, IconHelp, IconX } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import type { CheckedCatalogPort } from '../../../../api'
-import { PORTS_CHECK_HELP, busyListenWhoisCommands } from '../../utils'
+import { PORTS_CHECK_HELP } from '../../utils'
 
 export function WizardStepHelp({ title, text }: { title: string; text: string }) {
   return (
@@ -138,6 +138,7 @@ export function PortCatalogAccordion({
               <PortCatalogRow
                 key={`${p.role}-${p.port}`}
                 port={p}
+                onKill={() => onKill(p)}
               />
             ))}
           </Stack>

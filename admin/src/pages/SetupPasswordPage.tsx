@@ -32,7 +32,7 @@ export function SetupPasswordPage() {
     setError(null)
     try {
       await api.setup(username.trim() || 'admin', password)
-      navigate({ name: 'home' })
+      navigate({ name: 'dashboard' })
     } catch (err) {
       setError(String((err as Error).message || err))
     } finally {

@@ -193,7 +193,7 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
   const [hostHistory, setHostHistory] = useState<MetricsPayload['history']>()
   const hostHistoryServerRef = useRef('')
   const [error, setError] = useState<string | null>(null)
-  const [workloadFetchIssue, setWorkloadFetchIssue] = useState<ApiCallResult<{ item?: Workload }> | null>(null)
+  const [workloadFetchIssue, setWorkloadFetchIssue] = useState<ApiCallResult<unknown> | null>(null)
   const [heightFetchIssue, setHeightFetchIssue] = useState<ApiCallResult<unknown> | null>(null)
   /** Wizard reached Finish — hide NODE SETUP even if SQLite status lags (Kotlin panel). */
   const [setupComplete, setSetupComplete] = useState(false)
@@ -476,7 +476,7 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
     if (!soft) setWorkloadReady(false)
     try {
       let hit: Workload | null = null
-      let fetchIssue: ApiCallResult<{ item?: Workload }> | null = null
+      let fetchIssue: ApiCallResult<unknown> | null = null
       const onePath = `/api/nodes/${encodeURIComponent(id)}`
       const one = await getJSONResult<{ item?: Workload }>(onePath)
       fetchIssue = one

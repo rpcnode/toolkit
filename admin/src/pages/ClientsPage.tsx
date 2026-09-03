@@ -74,7 +74,7 @@ function rowBusy(row: ClientRow, syncing: string | null, downloading: Set<string
   return syncing === k || syncing === 'all' || downloading.has(k)
 }
 
-function uniqueNames(xs: string[]): string[] {
+function uniqueNames(xs: Array<string | undefined | null>): string[] {
   const out: string[] = []
   const seen = new Set<string>()
   for (const x of xs) {
@@ -163,7 +163,7 @@ export function ClientsPage() {
   const [data, setData] = useState<ClientsPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [probing, setProbing] = useState(false)
-  const [syncing, setSyncing] = useState<string | null>(null)
+  const [syncing] = useState<string | null>(null)
   const [downloading, setDownloading] = useState<Set<string>>(() => new Set())
   const [awaiting, setAwaiting] = useState<Set<string>>(() => new Set())
   const [filterNetwork, setFilterNetwork] = useState<string | null>(null)

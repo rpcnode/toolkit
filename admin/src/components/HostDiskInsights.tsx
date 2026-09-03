@@ -181,14 +181,16 @@ function compactInsightNotes(insights: HostDiskInsight[]): { level: string; text
     const mount = detail.match(/on (\S+)/)?.[1]
     notes.push({
       level: 'good',
-      text: mount ? `data → ${mount.replace(/[.,]$/, '')}` : detail.split('.')[0] || rec.title,
+      text: mount
+        ? `data → ${mount.replace(/[.,]$/, '')}`
+        : detail.split('.')[0] || rec.title || '',
     })
   } else {
     const raw = insights.find((i) => i.code === 'raw_nvme')
     if (raw) {
       const detail = raw.detail || ''
       const mounts = detail.match(/^([^—]+)/)?.[1]?.trim()
-      notes.push({ level: 'good', text: mounts ? `NVMe ${mounts}` : raw.title })
+      notes.push({ level: 'good', text: mounts ? `NVMe ${mounts}` : raw.title || '' })
     }
   }
   for (const w of insights.filter((i) => i.level === 'warn')) {

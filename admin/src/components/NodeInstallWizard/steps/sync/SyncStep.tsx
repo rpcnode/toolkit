@@ -1,5 +1,4 @@
 import {
-  Accordion,
   ActionIcon,
   Alert,
   Badge,
@@ -7,59 +6,18 @@ import {
   Button,
   Code,
   Group,
-  Loader,
-  Modal,
   Progress,
-  Radio,
   Stack,
-  Switch,
   Text,
-  TextInput,
-  ThemeIcon,
   Title,
   Tooltip,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import {
-  IconAlertTriangle,
-  IconArrowRight,
-  IconCheck,
-  IconCopy,
-  IconDownload,
-  IconPlayerPlay,
-  IconPlayerStop,
-  IconRefresh,
-  IconX,
-} from '@tabler/icons-react'
+import { IconCopy, IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react'
 import { blockProps } from '../../../../lib/blockId'
 import { copyText } from '../../../../lib/copyText'
-import { formatSyncPct, pct } from '../../../../lib/format'
-import { isSolanaNetwork } from '../../../../lib/network'
-import {
-  nodeReadyForOps,
-  snapshotBlockMessage,
-  snapReady,
-  snapshotDownloadLive,
-} from '../../../../lib/nodeLifecycle'
-import { snapshotStartsViaNode } from '../../../../lib/setupLane'
-import { DiskLayoutPanel, DiskLayoutSection, diskLayoutTitleFor } from '../../../DiskLayoutPanel'
-import { HostDisksSection } from '../../../HostDiskInsights'
-import { InstallOptionsPicker, installOptionLabel } from '../../../InstallOptionsPicker'
-import { resolveSyncProgressPct } from '../../../SyncStatusCard'
-import { WizardStepHelp } from '../../WizardStepHelp'
-import {
-  PORTS_CHECK_HELP,
-  bindingForCatalogPortRole,
-  catalogPortConfigEnabled,
-  formatPortBusy,
-  formatSnapshotBytes,
-  formatSnapshotSpeed,
-  formatSolanaBuildPendingMessage,
-  heightProgressPct,
-  isCheckPortsTimeout,
-  optionalCatalogPorts,
-  portConfigInstallOptionKey,
-} from '../../utils'
+import { formatSyncPct } from '../../../../lib/format'
+import { nodeReadyForOps } from '../../../../lib/nodeLifecycle'
 import { useWizard, type WizardApi } from '../../wizardContext'
 
 

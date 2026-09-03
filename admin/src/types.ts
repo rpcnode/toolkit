@@ -337,6 +337,7 @@ export type StatusPayload = {
   }
   rpc?: {
     node_height?: number | null
+    network_height?: number | null
     node?: string
     /** Fullnode client version string when nested under rpc. */
     client_version?: string

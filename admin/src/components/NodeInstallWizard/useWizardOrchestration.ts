@@ -1,39 +1,4 @@
-import {
-  ActionIcon,
-  Accordion,
-  Alert,
-  Badge,
-  Box,
-  Button,
-  Code,
-  Group,
-  Loader,
-  Modal,
-  Popover,
-  Progress,
-  Radio,
-  Skeleton,
-  Stack,
-  Switch,
-  Text,
-  TextInput,
-  ThemeIcon,
-  Title,
-  Tooltip,
-} from '@mantine/core'
 import { notifications } from '@mantine/notifications'
-import {
-  IconAlertTriangle,
-  IconCheck,
-  IconCopy,
-  IconDownload,
-  IconHelp,
-  IconPlayerStop,
-  IconPlayerPlay,
-  IconRefresh,
-  IconArrowRight,
-  IconX,
-} from '@tabler/icons-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   api,
@@ -46,16 +11,12 @@ import {
   type HostNofileInfo,
   type HostMountInfo,
   type MultiDiskLayoutPlan,
-  type RegistryNode,
   type SnapshotSizeHint,
-  type Workload,
 } from '../../api'
-import type { StatusPayload } from '../../types'
 import { copyText } from '../../lib/copyText'
-import { blockProps } from '../../lib/blockId'
 import { normalizeDiskLayoutRoles } from '../../lib/diskLayoutRoles'
 import { agentVersionOutdated } from '../../lib/agentVersion'
-import { formatSyncPct, pct } from '../../lib/format'
+import { pct } from '../../lib/format'
 import { diskRolesFromNetworksCatalog, clientConfigFromNetworksCatalog, l1ParentFromNetworksCatalog, useNetworksCatalog } from '../../lib/networksCatalog'
 import {
   kotlinPanelOpsReady,
@@ -72,27 +33,21 @@ import {
   classifySetupError,
   retryActionForLane,
   setupLaneFailedId,
-  setupLaneRetryLabel,
   snapshotStartsViaNode,
   wizardStepFromFailedLane,
   type SetupLaneId,
 } from '../../lib/setupLane'
-import { isSolanaNetwork, isXrplNetwork, supportsIbdStep, workloadNeedsSnapshot } from '../../lib/network'
+import { isSolanaNetwork, isXrplNetwork, workloadNeedsSnapshot } from '../../lib/network'
 import { agentLogLines } from '../AgentLogsPanel'
-import { DiskLayoutPanel, DiskLayoutSection, diskLayoutTitleFor } from '../DiskLayoutPanel'
-import { diskPlacements } from '../NodeDiskSummary'
-import { HostDisksSection } from '../HostDiskInsights'
 import { type XrplHistoryMode } from '../XrplHistoryPicker'
 import {
-  InstallOptionsPicker,
   fallbackInstallGroups,
   installOptionLabel,
   parseInstallOptionGroups,
   type InstallOptionGroup,
 } from '../InstallOptionsPicker'
 import { resolveSyncProgressPct } from '../SyncStatusCard'
-import { InstallActivityPanel } from '../InstallActivityPanel'
-import { InstallProgressModal, type InstallProgressOutcome } from '../InstallProgressModal'
+import { type InstallProgressOutcome } from '../InstallProgressModal'
 import { portCheckStatus } from './steps/ports/PortHelpers'
 
 import type {
@@ -112,29 +67,19 @@ import {
 } from './steps'
 import {
   MULTI_DISK_NETWORKS,
-  PORTS_CHECK_HELP,
-  bindingForCatalogPortRole,
   busyListenWhoisCommands,
-  catalogPortConfigEnabled,
   catalogPortConfigPolicy,
   detectUnsupportedCapability,
   diskLayoutHasSelection,
   formatPortBusy,
-  formatSnapshotBytes,
-  formatSnapshotSpeed,
-  formatSolanaBuildPendingMessage,
   heightProgressPct,
-  isCheckPortsTimeout,
   isOnline,
   optionalCatalogPorts,
-  plannedPortsFromCatalog,
   portConfigInstallOptionKey,
   resolveClientConfigPreview,
   resolveInstallPorts,
   sleep,
   snapRunning,
-  snapshotCanDownload,
-  snapshotCanStop,
   stillSyncingInWizard,
   unusedFromInventory,
   usableDiskLayout,
