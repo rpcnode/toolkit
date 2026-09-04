@@ -2,8 +2,8 @@
 # Bump toolkit version, build JARs, tag, push, create GitHub Release with jars.
 #
 # Usage:
-#   ./scripts/release.sh              # bump patch from last commit (0.1.1 -> 0.1.2)
-#   ./scripts/release.sh 0.2.0        # set explicit version (retry allowed if tag missing)
+#   ./scripts/release.sh              # bump patch, or finish HEAD version if its tag is missing
+#   ./scripts/release.sh 0.2.0        # explicit version (retry OK if tag missing; no bump if already on HEAD)
 #   ./scripts/release.sh --dry-run    # print plan only
 #   ./scripts/release.sh 0.2.0 --no-push
 #
@@ -137,7 +137,12 @@ RESTORE_VER="$GIT_VER"
 if [[ -n "$EXPLICIT_VERSION" ]]; then
   VERSION="$EXPLICIT_VERSION"
 else
-  VERSION="$(bump_patch "$GIT_VER")"
+  # HEAD already bumped but tag never created (failed release) → finish that version.
+  if [[ -n "$GIT_VER" ]] && ! git rev-parse "v${GIT_VER}" >/dev/null 2>&1; then
+    VERSION="$GIT_VER"
+  else
+    VERSION="$(bump_patch "$GIT_VER")"
+  fi
 fi
 require_semver "$VERSION"
 TAG="v${VERSION}"
@@ -149,18 +154,26 @@ if git rev-parse "$TAG" >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ "$VERSION" == "$GIT_VER" ]]; then
-  echo "version $VERSION is already on HEAD; pass a newer version" >&2
-  exit 1
+NEED_VERSION_COMMIT=0
+if [[ "$VERSION" != "$GIT_VER" ]]; then
+  NEED_VERSION_COMMIT=1
+  echo "release $GIT_VER -> $VERSION (tag $TAG)"
+elif [[ "$FILE_VER" != "$VERSION" ]]; then
+  NEED_VERSION_COMMIT=1
+  echo "release $VERSION (tag $TAG) — sync version files then tag HEAD"
+else
+  echo "release $VERSION (tag $TAG) — version already on HEAD, tagging retry"
 fi
-
-echo "release $GIT_VER -> $VERSION (tag $TAG)"
 if [[ "$FILE_VER" == "$VERSION" && "$FILE_VER" != "$GIT_VER" ]]; then
   echo "retry: working tree already at $VERSION (previous attempt left version files bumped)"
 fi
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "dry-run: would set version, build jars, commit, tag, push, gh release create"
+  if [[ "$NEED_VERSION_COMMIT" -eq 1 ]]; then
+    echo "dry-run: would set version, build jars, commit, tag, push, gh release create"
+  else
+    echo "dry-run: would build jars, tag HEAD, push, gh release create (no version bump)"
+  fi
   exit 0
 fi
 
@@ -176,8 +189,10 @@ if ! gh auth status >/dev/null 2>&1; then
   exit 1
 fi
 
-set_server_version "$VERSION"
-VERSION_TOUCHED=1
+if [[ "$NEED_VERSION_COMMIT" -eq 1 ]]; then
+  set_server_version "$VERSION"
+  VERSION_TOUCHED=1
+fi
 
 echo "building jars…"
 (
@@ -202,8 +217,13 @@ cp -f "$SERVER_JAR" "$AGENT_JAR" "$CDN_JAR" "$DIST_DIR/"
   sha256sum rpcnode-server.jar rpcnode-agent.jar rpcnode-cdn.jar > "rpcnode-${TAG}.sha256"
 )
 
-git add "$BUILD_FILE" "$PANEL_VERSION_FILE"
-git commit -m "Release ${TAG}"
+if [[ "$NEED_VERSION_COMMIT" -eq 1 ]]; then
+  git add "$BUILD_FILE" "$PANEL_VERSION_FILE"
+  # Empty commit only if version files actually differ from HEAD index after add
+  if ! git diff --cached --quiet; then
+    git commit -m "Release ${TAG}"
+  fi
+fi
 git tag -a "$TAG" -m "RpcNode ${TAG}"
 RELEASE_COMMITTED=1
 
