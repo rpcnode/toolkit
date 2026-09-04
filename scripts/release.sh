@@ -2,10 +2,13 @@
 # Bump toolkit version, build JARs, tag, push, create GitHub Release with jars.
 #
 # Usage:
-#   ./scripts/release.sh              # bump patch (0.1.1 -> 0.1.2)
-#   ./scripts/release.sh 0.2.0        # set explicit version
+#   ./scripts/release.sh              # bump patch from last commit (0.1.1 -> 0.1.2)
+#   ./scripts/release.sh 0.2.0        # set explicit version (retry allowed if tag missing)
 #   ./scripts/release.sh --dry-run    # print plan only
 #   ./scripts/release.sh 0.2.0 --no-push
+#
+# On failure before the release commit, version files are restored to HEAD.
+# Re-run the same version to retry a failed attempt (no need to bump).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -13,13 +16,18 @@ APP_DIR="$ROOT/app"
 BUILD_FILE="$APP_DIR/build.gradle.kts"
 PANEL_VERSION_FILE="$ROOT/admin/PANEL_VERSION"
 DIST_DIR="$ROOT/dist/release"
+BUILD_REL="app/build.gradle.kts"
+PANEL_REL="admin/PANEL_VERSION"
 
 DRY_RUN=0
 NO_PUSH=0
 EXPLICIT_VERSION=""
+VERSION_TOUCHED=0
+RELEASE_COMMITTED=0
+RESTORE_VER=""
 
 usage() {
-  sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -46,6 +54,12 @@ read_server_version() {
   sed -n 's/^version = "\([^"]*\)".*/\1/p' "$BUILD_FILE" | head -1
 }
 
+read_git_version() {
+  git -C "$ROOT" show HEAD:"$BUILD_REL" 2>/dev/null \
+    | sed -n 's/^version = "\([^"]*\)".*/\1/p' \
+    | head -1
+}
+
 bump_patch() {
   local raw="$1" major minor patch
   IFS=. read -r major minor patch <<<"$raw"
@@ -68,40 +82,89 @@ require_semver() {
   }
 }
 
-CURRENT="$(read_server_version)"
-CURRENT="${CURRENT:-0.0.0}"
+# Only version files may be dirty (left over from a failed release attempt).
+assert_tree_ok_for_release() {
+  local bad=0
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    local path="${line:3}"
+    path="${path#\"}"
+    path="${path%\"}"
+    # handle "R  old -> new" / rename — take last field
+    if [[ "$line" =~ -\>\ (.+)$ ]]; then
+      path="${BASH_REMATCH[1]}"
+      path="${path#\"}"
+      path="${path%\"}"
+    fi
+    case "$path" in
+      "$BUILD_REL"|"$PANEL_REL") ;;
+      *)
+        echo "  $line" >&2
+        bad=1
+        ;;
+    esac
+  done < <(git -C "$ROOT" status --porcelain)
+  if [[ "$bad" -eq 1 ]]; then
+    echo "working tree has non-version changes; commit or stash them first" >&2
+    exit 1
+  fi
+}
+
+restore_version_if_needed() {
+  if [[ "$RELEASE_COMMITTED" -eq 1 ]]; then
+    return 0
+  fi
+  if [[ "$VERSION_TOUCHED" -ne 1 ]]; then
+    return 0
+  fi
+  if [[ -z "$RESTORE_VER" ]]; then
+    return 0
+  fi
+  set_server_version "$RESTORE_VER"
+  echo "release failed — restored version to $RESTORE_VER" >&2
+}
+
+trap restore_version_if_needed EXIT
+
+cd "$ROOT"
+
+FILE_VER="$(read_server_version)"
+FILE_VER="${FILE_VER:-0.0.0}"
+GIT_VER="$(read_git_version)"
+GIT_VER="${GIT_VER:-0.0.0}"
+RESTORE_VER="$GIT_VER"
+
 if [[ -n "$EXPLICIT_VERSION" ]]; then
   VERSION="$EXPLICIT_VERSION"
 else
-  VERSION="$(bump_patch "$CURRENT")"
+  VERSION="$(bump_patch "$GIT_VER")"
 fi
 require_semver "$VERSION"
 TAG="v${VERSION}"
 
-if [[ "$VERSION" == "$CURRENT" ]]; then
-  echo "version is already $CURRENT; pass a newer version" >&2
+if git rev-parse "$TAG" >/dev/null 2>&1; then
+  echo "tag already exists: $TAG" >&2
+  echo "if only the GitHub Release upload failed, run:" >&2
+  echo "  gh release upload \"$TAG\" dist/release/rpcnode-*.jar dist/release/rpcnode-${TAG}.sha256 --clobber" >&2
   exit 1
 fi
 
-cd "$ROOT"
+if [[ "$VERSION" == "$GIT_VER" ]]; then
+  echo "version $VERSION is already on HEAD; pass a newer version" >&2
+  exit 1
+fi
 
-echo "release $CURRENT -> $VERSION (tag $TAG)"
+echo "release $GIT_VER -> $VERSION (tag $TAG)"
+if [[ "$FILE_VER" == "$VERSION" && "$FILE_VER" != "$GIT_VER" ]]; then
+  echo "retry: working tree already at $VERSION (previous attempt left version files bumped)"
+fi
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "dry-run: would bump version, build jars, commit, tag, push, gh release create"
+  echo "dry-run: would set version, build jars, commit, tag, push, gh release create"
   exit 0
 fi
 
-if [[ -n "$(git status --porcelain)" ]]; then
-  echo "working tree is dirty; commit or stash first" >&2
-  git status --short >&2
-  exit 1
-fi
-
-if git rev-parse "$TAG" >/dev/null 2>&1; then
-  echo "tag already exists: $TAG" >&2
-  exit 1
-fi
+assert_tree_ok_for_release
 
 if ! command -v gh >/dev/null 2>&1; then
   echo "gh CLI is required to create the GitHub Release" >&2
@@ -114,6 +177,7 @@ if ! gh auth status >/dev/null 2>&1; then
 fi
 
 set_server_version "$VERSION"
+VERSION_TOUCHED=1
 
 echo "building jars…"
 (
@@ -141,6 +205,7 @@ cp -f "$SERVER_JAR" "$AGENT_JAR" "$CDN_JAR" "$DIST_DIR/"
 git add "$BUILD_FILE" "$PANEL_VERSION_FILE"
 git commit -m "Release ${TAG}"
 git tag -a "$TAG" -m "RpcNode ${TAG}"
+RELEASE_COMMITTED=1
 
 if [[ "$NO_PUSH" -eq 1 ]]; then
   echo "skipped push (--no-push). Create the release later with:"
