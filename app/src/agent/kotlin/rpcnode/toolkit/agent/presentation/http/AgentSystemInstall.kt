@@ -413,7 +413,7 @@ object AgentSystemInstall
     internal fun killOtherAgentProcesses(
         selfPid: Long = ProcessHandle.current().pid(),
         candidates: () -> Sequence<Pair<Long, String>> = {
-            ProcessHandle.allProcesses().mapNotNull { ph ->
+            ProcessHandle.allProcesses().iterator().asSequence().mapNotNull { ph ->
                 val cmd = ph.info().commandLine().orElse(null) ?: return@mapNotNull null
                 ph.pid() to cmd
             }

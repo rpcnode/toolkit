@@ -12,7 +12,7 @@ plugins {
 }
 
 group = "rpcnode"
-version = "0.1.4"
+version = "0.1.5"
 
 /** Host agent JAR (`rpcnode-agent.jar`). Separate from the server `version`. */
 val chainAgentVersion = "0.1.2"
