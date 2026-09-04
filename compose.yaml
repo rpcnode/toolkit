@@ -1,3 +1,4 @@
+# Ports: admin UI 8093, rpcnode-server 8094, snapshot CDN 8095.
 services:
   server:
     build:
@@ -7,9 +8,14 @@ services:
     image: rpcnode-server:local
     restart: unless-stopped
     environment:
+      # Blank = echo any Origin (admin :8093 → this API :8094). Unset = localhost only.
       PANEL_CORS_ORIGINS: ""
+      PANEL_PORT: "8094"
+    ports:
+      - "${RPCNODE_SERVER_PORT:-8094}:8094"
     volumes:
-      - rpcnode-data:/data
+      # Host dir: toolkit.db, panel.htpasswd, sessions, logs, install/
+      - ${RPCNODE_DATA:-./data}:/data
 
   admin:
     build:
@@ -59,5 +65,4 @@ services:
       - rpcnode-cdn-data:/data:ro
 
 volumes:
-  rpcnode-data:
   rpcnode-cdn-data:

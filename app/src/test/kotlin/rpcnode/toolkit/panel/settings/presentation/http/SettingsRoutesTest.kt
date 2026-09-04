@@ -34,7 +34,7 @@ class SettingsRoutesTest
         val body = Json.parseToJsonElement(client.get("/api/settings").bodyAsText()).jsonObject
         assertTrue(body["ok"]!!.jsonPrimitive.boolean)
         assertFalse(body["configured"]!!.jsonPrimitive.boolean)
-        assertEquals("http://127.0.0.1:8093", body["presets"]!!.jsonObject["local"]!!.jsonPrimitive.content)
+        assertEquals("http://127.0.0.1:8094", body["presets"]!!.jsonObject["local"]!!.jsonPrimitive.content)
     }
 
     @Test

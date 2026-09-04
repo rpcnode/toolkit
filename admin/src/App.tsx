@@ -12,7 +12,7 @@ import { NetworksPage } from './pages/NetworksPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { ClientsPage } from './pages/ClientsPage'
 import { parseRoute, nodeIdToEnv, navigate } from './lib/router'
-import { api, type AuthStatus } from './api'
+import { api, API_ORIGIN_READY_EVENT, hasResolvedApiOrigin, type AuthStatus } from './api'
 import { loadNetworksCatalog } from './lib/networksCatalog'
 import { blockProps } from './lib/blockId'
 
@@ -46,6 +46,12 @@ export function App() {
   }, [])
 
   const refresh = useCallback(async () => {
+    if (!hasResolvedApiOrigin()) {
+      setAuth({ ok: false, authenticated: false })
+      setSetupNeeded(true)
+      setBootLoading(false)
+      return
+    }
     try {
       const [st, su] = await Promise.all([
         api.authStatus(),
@@ -70,6 +76,14 @@ export function App() {
   }, [refresh, locationKey])
 
   useEffect(() => {
+    function onApiReady() {
+      void refresh()
+    }
+    window.addEventListener(API_ORIGIN_READY_EVENT, onApiReady)
+    return () => window.removeEventListener(API_ORIGIN_READY_EVENT, onApiReady)
+  }, [refresh])
+
+  useEffect(() => {
     if (!auth?.authenticated) {
       setCatalogReady(false)
       return
@@ -92,11 +106,11 @@ export function App() {
       navigate({ name: 'setup' })
       return
     }
-    if (auth.authenticated && !setupNeeded && (path === '/login' || isSetupPath(path))) {
+    if (auth.authenticated && !setupNeeded && path === '/login') {
       navigate({ name: 'dashboard' })
       return
     }
-    if (!setupNeeded && !auth.authenticated && path !== '/login') {
+    if (!setupNeeded && !auth.authenticated && path !== '/login' && !isSetupPath(path)) {
       navigate({ name: 'login' })
     }
   }, [auth, setupNeeded, bootLoading])
@@ -112,7 +126,7 @@ export function App() {
     )
   }
 
-  if (setupNeeded) {
+  if (setupNeeded || isSetupPath(window.location.pathname)) {
     return <SetupWizardPage />
   }
 

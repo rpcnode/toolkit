@@ -13,12 +13,13 @@ RUN useradd --system --create-home --home-dir /data rpcnode \
 FROM base AS server
 COPY --from=builder --chown=rpcnode:rpcnode /workspace/app/build/libs/rpcnode-server.jar /opt/rpcnode/lib/rpcnode-server.jar
 COPY --from=builder --chown=rpcnode:rpcnode /workspace/app/build/libs/rpcnode-agent.jar /opt/rpcnode/install/binaries/rpcnode-agent.jar
-COPY --chown=rpcnode:rpcnode app/docker-entrypoint.sh /usr/local/bin/rpcnode-server
+COPY --chmod=755 --chown=rpcnode:rpcnode app/docker-entrypoint.sh /usr/local/bin/rpcnode-server
 
-USER rpcnode
+# Entrypoint starts as root so a host bind-mount of ./data can be chowned, then drops to rpcnode.
+USER root
 WORKDIR /data
 ENV PANEL_LISTEN=0.0.0.0 \
-    PANEL_PORT=8093 \
+    PANEL_PORT=8094 \
     TOOLKIT_DB=/data/database/toolkit.db \
     PANEL_HTPASSWD=/data/database/panel.htpasswd \
     PANEL_SESSIONS=/data/database/panel-sessions.json \
@@ -30,7 +31,7 @@ ENV PANEL_LISTEN=0.0.0.0 \
     XDG_DATA_HOME=/data/share \
     XDG_STATE_HOME=/data/state
 
-EXPOSE 8093
+EXPOSE 8094
 ENTRYPOINT ["/usr/local/bin/rpcnode-server"]
 
 FROM base AS cdn

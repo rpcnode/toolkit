@@ -13,7 +13,7 @@ actor Browser
 
 component "admin React SPA\npages + api.ts" as Admin
 
-package "rpcnode-server (src/main :8093)" {
+package "rpcnode-server (src/main :8094)" {
   component "Application.kt" as AppMain
   component "panel Routes.kt" as Routes
   component "Toolkit.kt" as Toolkit

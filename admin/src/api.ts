@@ -1,15 +1,89 @@
 import type { StatusPayload } from './types'
 
-const DEFAULT_API = 'http://127.0.0.1:8093'
 const SESSION_KEY = 'rpcnode_session'
 const SESSION_EXP_KEY = 'rpcnode_session_exp'
+const API_ORIGIN_KEY = 'rpcnode_api_origin'
+export const API_ORIGIN_READY_EVENT = 'rpcnode-api-ready'
 
-export function apiBase(): string {
-  const raw = import.meta.env.VITE_API_URL
-  if (raw === '') {
+export function getApiOriginOverride(): string {
+  try {
+    return (localStorage.getItem(API_ORIGIN_KEY) || '').trim().replace(/\/$/, '')
+  } catch {
     return ''
   }
-  return (raw ?? DEFAULT_API).trim().replace(/\/$/, '')
+}
+
+/** Browser API target after the setup origin step. Changing origin drops the old session. */
+export function setApiOriginOverride(origin: string) {
+  const next = origin.trim().replace(/\/$/, '')
+  const prev = getApiOriginOverride()
+  try {
+    if (next) localStorage.setItem(API_ORIGIN_KEY, next)
+    else localStorage.removeItem(API_ORIGIN_KEY)
+  } catch {
+    /* private mode */
+  }
+  if (prev && prev !== next) {
+    forgetSession()
+  }
+}
+
+export function clearApiOriginOverride() {
+  try {
+    localStorage.removeItem(API_ORIGIN_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Resolve the panel API origin.
+ * Chosen server (localStorage) → explicit VITE_API_URL → same origin.
+ * Never falls back to 127.0.0.1:8094 — first-run setup must pick the server first.
+ */
+export function apiBase(): string {
+  const override = getApiOriginOverride()
+  if (override) return override
+  const raw = import.meta.env.VITE_API_URL
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    return raw.trim().replace(/\/$/, '')
+  }
+  return ''
+}
+
+/** True when the UI already knows which server to call (or has a session on same-origin). */
+export function hasResolvedApiOrigin(): boolean {
+  if (getApiOriginOverride()) return true
+  const raw = import.meta.env.VITE_API_URL
+  if (typeof raw === 'string' && raw.trim() !== '') return true
+  return !!sessionToken()
+}
+
+export async function probeServer(origin: string): Promise<{ ok: boolean; origin: string; detail?: string }> {
+  const base = origin.trim().replace(/\/$/, '')
+  if (!base) {
+    return { ok: false, origin: base, detail: 'empty origin' }
+  }
+  try {
+    new URL(base)
+  } catch {
+    return { ok: false, origin: base, detail: 'need http(s) origin, e.g. http://10.0.0.2:8094' }
+  }
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 8000)
+  try {
+    const res = await fetch(`${base}/healthz`, { cache: 'no-store', signal: ctrl.signal })
+    const data = (await res.json().catch(() => ({}))) as { alive?: boolean }
+    if (!res.ok || data.alive === false) {
+      return { ok: false, origin: base, detail: `HTTP ${res.status}` }
+    }
+    return { ok: true, origin: base }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { ok: false, origin: base, detail: msg === 'The user aborted a request.' ? 'timeout' : msg }
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 function apiUrl(path: string): string {
@@ -1023,6 +1097,7 @@ export type RegistryUpsertInput = {
 }
 
 export const api = {
+  probeServer,
   authStatus: () => getJSON<AuthStatus>('/api/auth/status'),
   setupStatus: () => getJSON<SetupStatus>('/api/setup/status'),
   login: async (username: string, password: string) => {

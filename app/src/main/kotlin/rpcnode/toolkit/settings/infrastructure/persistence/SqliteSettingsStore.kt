@@ -102,6 +102,18 @@ class SqliteSettingsStore(
         }
     }
 
+    override suspend fun setupStage(): String? = withContext(Dispatchers.IO) {
+        synchronized(lock) {
+            db.getSetting(KEY_SETUP_STAGE)?.trim()?.ifEmpty { null }
+        }
+    }
+
+    override suspend fun setSetupStage(stage: String) = withContext(Dispatchers.IO) {
+        synchronized(lock) {
+            db.setSetting(KEY_SETUP_STAGE, stage.trim())
+        }
+    }
+
     private fun writeTokenFile(token: String)
     {
         val parent = githubTokenFile.parent
@@ -133,5 +145,6 @@ class SqliteSettingsStore(
         const val KEY_ORIGIN = "install_origin"
         const val KEY_SNAPSHOT_CDN = "snapshot_cdn_origin"
         const val KEY_GITHUB_ENC = "github_token_enc"
+        const val KEY_SETUP_STAGE = "setup_stage"
     }
 }

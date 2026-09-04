@@ -142,7 +142,6 @@ import rpcnode.toolkit.servers.application.update.UpdateServerUseCase
 import rpcnode.toolkit.servers.domain.repository.ServerMetricsRepository
 import rpcnode.toolkit.servers.domain.repository.ServerRepository
 import rpcnode.toolkit.settings.application.get.GetSettingsUseCase
-import rpcnode.toolkit.settings.application.get.InstallStampReader
 import rpcnode.toolkit.settings.application.get.UrlProbe
 import rpcnode.toolkit.settings.application.save.GitHubTokenCheck
 import rpcnode.toolkit.settings.application.save.GitHubTokenChecker
@@ -165,8 +164,13 @@ import rpcnode.toolkit.notifications.domain.model.TelegramBotToken
 import rpcnode.toolkit.notifications.domain.model.TelegramChat
 import rpcnode.toolkit.notifications.domain.model.TelegramChatMemberStatus
 import rpcnode.toolkit.notifications.infrastructure.persistence.SqliteNotificationSettingsStore
+import rpcnode.toolkit.setup.application.check.RunSetupCheckUseCase
 import rpcnode.toolkit.setup.application.create.CreateAdminUseCase
+import rpcnode.toolkit.setup.application.finish.FinishSetupUseCase
+import rpcnode.toolkit.setup.application.stage.SetSetupStageUseCase
 import rpcnode.toolkit.setup.application.status.GetSetupStatusUseCase
+import rpcnode.toolkit.settings.application.get.InstallStampReader
+import rpcnode.toolkit.settings.infrastructure.persistence.FileInstallStampWriter
 import rpcnode.toolkit.shared.infrastructure.persistence.ToolkitDatabase
 import rpcnode.toolkit.wiring.Toolkit
 
@@ -225,6 +229,7 @@ internal fun testToolkit(
         panelVersion = "test",
         installStamp = InstallStampReader { null },
     )
+    val installStampWriter = FileInstallStampWriter(dir.resolve("panel.install"))
     val notificationSettingsStore = SqliteNotificationSettingsStore(
         db = db,
         secrets = AesGcmSecretBox(dir.resolve("panel.notify.key")),
@@ -410,6 +415,19 @@ internal fun testToolkit(
         getAuthStatus = GetAuthStatusUseCase(sessions),
         getSetupStatus = GetSetupStatusUseCase(credentials),
         createAdmin = CreateAdminUseCase(credentials, sessions),
+        runSetupCheck = RunSetupCheckUseCase(
+            store = settingsStore,
+            probe = urlProbe,
+            installFiles = DiskInstallFiles(dir.resolve("install")),
+            dbPath = dir.resolve("toolkit.db"),
+        ),
+        setSetupStage = SetSetupStageUseCase(settingsStore),
+        finishSetup = FinishSetupUseCase(
+            store = settingsStore,
+            reader = InstallStampReader { null },
+            writer = installStampWriter,
+            panelVersion = "test",
+        ),
         login = LoginUseCase(credentials, sessions),
         logout = LogoutUseCase(sessions),
 

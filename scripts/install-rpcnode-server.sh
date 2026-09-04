@@ -21,7 +21,7 @@ PORT_FILE="${SERVER_PORT_FILE:-/etc/rpcnode/rpcnode-server.port}"
 UNIT_NAME="${RPCNODE_SERVER_UNIT:-rpcnode-server.service}"
 UNIT_PATH="/etc/systemd/system/${UNIT_NAME}"
 # Keep in sync with ServerConfig PANEL_PORT.
-PORT="${PANEL_PORT:-8093}"
+PORT="${PANEL_PORT:-8094}"
 LISTEN="${PANEL_LISTEN:-0.0.0.0}"
 JAVA_MIN="${JAVA_MIN:-25}"
 JAVA_HOME_DIR="${JAVA_HOME_DIR:-$DEST_DIR/jdk}"
@@ -63,7 +63,7 @@ rpcnode-server
 
 Env: RPCNODE_INSTALL_MODE=install|update|uninstall
      RPCNODE_SERVER_JAR  path to rpcnode-server.jar (optional)
-     PANEL_PORT          listen port (default 8093)
+     PANEL_PORT          listen port (default 8094; admin UI is 8093)
      PANEL_LISTEN        bind address (default 0.0.0.0)
 EOF
 }
@@ -462,10 +462,11 @@ print_done() {
   listen   ${LISTEN}:${PORT}
   db       ${DATA_DIR}/toolkit.db
 
-  Panel URL :  ${url}
+  API URL   :  ${url}
   Setup     :  ${url}/setup
 
-Admin UI is the Vite app on :5173 (VITE_API_URL=${url}).
+Admin UI (rpcnode-admin) is :8093. This server is :8094.
+Vite dev: :5173 with VITE_API_URL=${url}.
 First visit /setup if no admin user exists yet.
 
 EOF

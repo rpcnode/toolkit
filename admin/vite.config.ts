@@ -22,8 +22,8 @@ function readPanelVersion(): string {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_')
-  const sameOrigin = env.VITE_API_URL === ''
-  const proxyTarget = 'http://127.0.0.1:8093'
+  const sameOrigin = !env.VITE_API_URL
+  const proxyTarget = 'http://127.0.0.1:8094'
 
   return {
     plugins: [react()],

@@ -5,6 +5,11 @@ fun interface InstallStampReader
     fun read(): InstallStamp?
 }
 
+fun interface InstallStampWriter
+{
+    fun write(stamp: InstallStamp)
+}
+
 data class InstallStamp(
     val version: String,
     val installedAt: String,

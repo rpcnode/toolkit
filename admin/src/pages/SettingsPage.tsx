@@ -4,12 +4,20 @@ import { useEffect, useState } from 'react'
 import { api, type PanelSettings } from '../api'
 import { AppChrome, PageHint } from '../components/AppChrome'
 import { ThemeToggle } from '../components/ThemeToggle'
-import { ChannelOriginFields, ORIGIN_LOCAL } from '../components/ChannelOriginFields'
+import { ChannelOriginFields } from '../components/ChannelOriginFields'
 import { ChannelLinks } from '../components/ChannelLinks'
 import { blockProps } from '../lib/blockId'
+import {
+  advertisedOrigin,
+  CDN_LISTEN_PORT,
+  isLoopbackHost,
+  originHost,
+  SERVER_LISTEN_PORT,
+  suggestedAdvertisedHost,
+} from '../lib/advertisedOrigin'
 
 export function SettingsPage() {
-  const [origin, setOrigin] = useState(ORIGIN_LOCAL)
+  const [origin, setOrigin] = useState('')
   const [snapshotCdnOrigin, setSnapshotCdnOrigin] = useState('')
   const [saved, setSaved] = useState<PanelSettings | null>(null)
   const [loading, setLoading] = useState(true)
@@ -27,8 +35,9 @@ export function SettingsPage() {
     try {
       const s = await api.panelSettings()
       setSaved(s)
+      const host = suggestedAdvertisedHost(s.install_origin, s.presets?.panel)
       if (s.install_origin) setOrigin(s.install_origin)
-      else setOrigin(s.presets?.local || ORIGIN_LOCAL)
+      else setOrigin(host ? advertisedOrigin(host, SERVER_LISTEN_PORT) : '')
       setSnapshotCdnOrigin(s.snapshot_cdn_origin || s.snapshot_cdn?.origin || '')
     } catch (err) {
       setError(String((err as Error).message || err))
@@ -109,6 +118,8 @@ export function SettingsPage() {
     }
   }
 
+  const suggestHost = suggestedAdvertisedHost(origin, saved?.presets?.panel)
+
   return (
     <AppChrome
       block="settings"
@@ -151,16 +162,44 @@ export function SettingsPage() {
 
         <Card {...blockProps('settings.install-origin')}>
           <Stack gap="sm">
-            <Title order={4}>Install origin</Title>
+            <Title order={4}>Server</Title>
             <Text size="sm" c="dimmed">
-              Where agents download the jar and clients. Default is{' '}
-              <Code>{ORIGIN_LOCAL}</Code>. Stored in <Code>database/toolkit.db</Code>.
+              rpcnode-server origin other hosts and containers use to fetch the jar
+              and clients. In Docker do not use <Code>127.0.0.1</Code> — that is the
+              container itself. Put the Docker host IP or DNS and the published
+              port (<Code>:8094</Code>, or <Code>:8093</Code> through admin nginx).
+              Stored in <Code>database/toolkit.db</Code>.
             </Text>
             {error && (
               <Alert color="red" title="Settings">
                 {error}
               </Alert>
             )}
+            {!loading && suggestHost ? (
+              <Text size="sm" c="dimmed">
+                From this browser that is{' '}
+                <Code>{advertisedOrigin(suggestHost, SERVER_LISTEN_PORT)}</Code>
+                {' · '}
+                <Button
+                  size="compact-xs"
+                  variant="light"
+                  onClick={() => {
+                    setOrigin(advertisedOrigin(suggestHost, SERVER_LISTEN_PORT))
+                    if (!snapshotCdnOrigin || isLoopbackHost(originHost(snapshotCdnOrigin))) {
+                      setSnapshotCdnOrigin(advertisedOrigin(suggestHost, CDN_LISTEN_PORT))
+                    }
+                  }}
+                >
+                  Use host
+                </Button>
+              </Text>
+            ) : null}
+            {isLoopbackHost(originHost(origin)) ? (
+              <Alert color="yellow" title="127.0.0.1 will not work from Docker">
+                Another container hitting 127.0.0.1 talks to itself. Use the Docker host
+                IP or DNS and published port 8094.
+              </Alert>
+            ) : null}
             {!loading && (
               <ChannelOriginFields origin={origin} onChange={setOrigin} presets={saved?.presets} />
             )}
@@ -205,8 +244,8 @@ export function SettingsPage() {
             ) : null}
             <TextInput
               label="Snapshot CDN origin"
-              description="Example: http://127.0.0.1:8095 — leave blank to disable"
-              placeholder="http://127.0.0.1:8095"
+              description="Published CDN origin, e.g. http://10.0.0.2:8095 — not 127.0.0.1 in Docker. Blank = official mirrors only."
+              placeholder="http://<host>:8095"
               value={snapshotCdnOrigin}
               onChange={(e) => setSnapshotCdnOrigin(e.currentTarget.value.trim())}
               disabled={loading || savingSnapshotCdn}

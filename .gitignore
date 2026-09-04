@@ -3,14 +3,16 @@ admin/.env
 admin/node_modules/
 admin/dist/
 .cursor
+.idea
+.DS_Store
 
 # Keep GitHub Actions publishable
 !.github/
 !.github/workflows/
 !.github/workflows/**
 
-# local release staging
-dist/
+# Docker bind-mount for rpcnode-server (toolkit.db, panel.htpasswd, …)
+/data/
 
 # app (also listed in app/.gitignore)
 app/build/

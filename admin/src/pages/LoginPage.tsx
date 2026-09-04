@@ -85,9 +85,9 @@ export function LoginPage({ onAuthed }: LoginPageProps) {
               </SetupCmd>
             </div>
             <p className="setup-note">
-              first start?{' '}
+              first start / forgot?{' '}
               <button type="button" className="setup-link" onClick={() => navigate({ name: 'setup' })}>
-                create admin
+                set password
               </button>
               {'  ·  '}
               <a className="setup-link" href={RPCNODE} target="_blank" rel="noopener noreferrer">

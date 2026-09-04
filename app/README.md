@@ -44,10 +44,10 @@ rpcnode.toolkit.wiring                               composition root
 Operator starts the server from IntelliJ IDEA. Agents do **not** `./gradlew run` or restart `java`.
 
 ```bash
-# http://127.0.0.1:8093/api/auth/status
+# http://127.0.0.1:8094/api/auth/status
 # React UI: ../admin  VITE_API_URL → this process
 ```
 
-`PANEL_LISTEN`, `PANEL_PORT`, `TOOLKIT_DB`, `PANEL_HTPASSWD`, `PANEL_SESSIONS`, `PANEL_CORS_ORIGINS` (default Vite `:5173`).
+`PANEL_LISTEN`, `PANEL_PORT` (default **8094**), `TOOLKIT_DB`, `PANEL_HTPASSWD`, `PANEL_SESSIONS`, `PANEL_CORS_ORIGINS` (unset = Vite/admin localhost; blank = allow any Origin so admin `:8093` can call server `:8094`). Admin UI is `:8093`.
 
-Admin: `VITE_API_URL` in `../admin/.env` (default `http://127.0.0.1:8093`).
+Admin first-run: enter the server origin, then the password. `VITE_API_URL` in `../admin/.env` is optional.

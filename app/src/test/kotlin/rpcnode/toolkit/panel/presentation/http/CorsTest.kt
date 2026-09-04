@@ -60,6 +60,20 @@ class CorsTest
     }
 
     @Test
+    fun empty_allowlist_echoes_any_origin() = testApplication {
+        val cfg = ServerConfig(
+            corsOrigins = emptyList(),
+        )
+        application { module(cfg) }
+        val response = client.get("/healthz") {
+            header(HttpHeaders.Origin, "http://10.0.0.2:8093")
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("http://10.0.0.2:8093", response.headers[HttpHeaders.AccessControlAllowOrigin])
+        assertEquals("true", response.headers[HttpHeaders.AccessControlAllowCredentials])
+    }
+
+    @Test
     fun other_origin_has_no_allow_origin() = testApplication {
         val cfg = ServerConfig(
             corsOrigins = listOf("http://127.0.0.1:5173"),

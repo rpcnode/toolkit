@@ -8,8 +8,7 @@ import rpcnode.toolkit.auth.domain.repository.SessionStore
 
 sealed interface CreateAdminResult
 {
-    data class Created(val session: Session) : CreateAdminResult
-    data object AlreadyConfigured : CreateAdminResult
+    data class Created(val session: Session, val updated: Boolean) : CreateAdminResult
     data object PasswordTooShort : CreateAdminResult
     data object InvalidUsername : CreateAdminResult
     data class WriteFailed(val reason: String) : CreateAdminResult
@@ -22,10 +21,6 @@ class CreateAdminUseCase(
 {
     suspend operator fun invoke(rawUsername: String, password: String): CreateAdminResult
     {
-        if (credentials.hasUsers())
-        {
-            return CreateAdminResult.AlreadyConfigured
-        }
         if (!PanelPassword.isLongEnough(password))
         {
             return CreateAdminResult.PasswordTooShort
@@ -33,8 +28,9 @@ class CreateAdminUseCase(
         val username = Username.parseOrAdmin(rawUsername) ?: return CreateAdminResult.InvalidUsername
         return try
         {
+            val updated = credentials.hasUsers()
             credentials.create(username, password)
-            CreateAdminResult.Created(sessions.create(username))
+            CreateAdminResult.Created(sessions.create(username), updated = updated)
         }
         catch (e: Exception)
         {

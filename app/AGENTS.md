@@ -23,4 +23,4 @@ shared.infrastructure.persistence   toolkit.db
 
 Identity is `NetworkId`, never a port number.
 
-**Do not start Java.** The operator runs the server from IntelliJ IDEA. ❌ `./gradlew run` ❌ kill/restart `java` on `:8093`.
+**Do not start Java.** The operator runs the server from IntelliJ IDEA. ❌ `./gradlew run` ❌ kill/restart `java` on `:8094`.

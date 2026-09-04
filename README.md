@@ -108,14 +108,40 @@ cd rpcnode-vX.Y.Z
 docker compose up -d --build
 ```
 
-The panel is then available at `http://127.0.0.1:8093`. The interface and API
-share the same origin. Server data, accounts, sessions, logs, downloaded
-clients, and the agent JAR are stored in the named `rpcnode-data` Docker volume.
+Published ports (do not give both the same number):
 
-To use a different external port, set `RPCNODE_PORT`:
+| Service | Default | Override |
+| --- | --- | --- |
+| **Admin UI** (`rpcnode-admin`) | **8093** | `RPCNODE_PORT` |
+| **Server API** (`rpcnode-server`) | **8094** | `RPCNODE_SERVER_PORT` |
+| Snapshot CDN | **8095** | `CDN_HTTP_PORT` |
+
+```text
+http://127.0.0.1:8093   admin UI
+http://127.0.0.1:8094   rpcnode-server  (API, /install, /healthz)
+```
+
+The browser can stay on `:8093`: admin nginx proxies `/api` and `/install` to
+the server on `:8094`. First-run setup asks for the **server origin**
+(`http://<host>:8094`), checks `/healthz`, then creates the admin password —
+it does not call `127.0.0.1:8094` before you pick a host. Agents and other
+containers must use the **Docker host IP or DNS** plus the published port —
+`127.0.0.1` inside another container is that container itself, not
+`rpcnode-server`.
+
+Server data lives on the host at `./data` (override with `RPCNODE_DATA`):
+
+```text
+./data/database/toolkit.db
+./data/database/panel.htpasswd
+./data/database/panel-sessions.json
+./data/install/          # agent JAR, client tarballs
+./data/logs/server.log
+```
 
 ```bash
-RPCNODE_PORT=8080 docker compose up -d --build
+RPCNODE_PORT=8080 docker compose up -d --build          # admin UI
+RPCNODE_SERVER_PORT=8094 docker compose up -d --build   # server API (default)
 ```
 
 Start the snapshot CDN and its public site with a separate profile:
@@ -132,12 +158,16 @@ Its default HTTP address is `http://127.0.0.1:8095`; change the port with
 docker compose exec cdn menu
 ```
 
-Connect a node server by downloading the agent from the panel's public address:
+Connect a node host by downloading the agent from **rpcnode-server** (`:8094`).
+From another machine or container use the Docker host IP or DNS, not
+`127.0.0.1`:
 
 ```bash
-curl -fsSL -o rpcnode-agent.jar http://127.0.0.1:8093/install/binaries/rpcnode-agent.jar \
+curl -fsSL -o rpcnode-agent.jar http://<docker-host>:8094/install/binaries/rpcnode-agent.jar \
   && sudo java -jar rpcnode-agent.jar install
 ```
+
+Through the admin UI proxy the same file is also at `http://<docker-host>:8093/install/binaries/rpcnode-agent.jar`.
 
 Full user and operations documentation is available at
 [toolkit.rpcnode.dev](https://toolkit.rpcnode.dev/).
@@ -174,8 +204,8 @@ npm run dev
 
 The admin panel is available at `http://127.0.0.1:5173`. Start the backend from
 IntelliJ IDEA with `rpcnode.toolkit.panel.presentation.http.ApplicationKt`; it
-listens on `http://127.0.0.1:8093` by default. Set the API address with
-`VITE_API_URL` in `admin/.env`.
+listens on `http://127.0.0.1:8094` by default. First-run setup asks for that
+origin, then the admin password. `VITE_API_URL` in `admin/.env` is optional.
 
 To work on the snapshot site:
 
@@ -206,13 +236,17 @@ Install the server on the control-plane host:
 sudo ./scripts/install-rpcnode-server.sh --install
 ```
 
-An agent host is the server that will run nodes. Download the agent from the
-panel and install it on that host:
+An agent host is the machine that will run nodes. Download the agent from
+**rpcnode-server** on **:8094** (not the admin UI on :8093) and install it
+there. From another host use that machine's IP or DNS:
 
 ```bash
-curl -fsSL -o rpcnode-agent.jar http://127.0.0.1:8093/install/binaries/rpcnode-agent.jar \
+curl -fsSL -o rpcnode-agent.jar http://<control-host>:8094/install/binaries/rpcnode-agent.jar \
   && sudo java -jar rpcnode-agent.jar install
 ```
+
+`install-rpcnode-server.sh` listens on **8094** (`PANEL_PORT`). The admin
+container stays on **8093**.
 
 For a dedicated snapshot CDN, copy `rpcnode-cdn.jar` to the CDN host, install
 it, then select mirrors through its menu:

@@ -10,7 +10,7 @@ value class InstallOrigin private constructor(val value: String)
 
     companion object
     {
-        const val LOCAL = "http://127.0.0.1:8093"
+        const val LOCAL = "http://127.0.0.1:8094"
         const val PROD = "https://toolkit.rpcnode.dev"
 
         fun parse(raw: String): Parse

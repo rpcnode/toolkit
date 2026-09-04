@@ -56,7 +56,7 @@ function buildAgentURL(hostOrURL: string): string {
 export function AddServerModal({ opened, onClose, onAdded }: Props) {
   const [active, setActive] = useState(0)
   const [panelUrl, setPanelUrl] = useState(() => apiBase())
-  const [installCmd, setInstallCmd] = useState(() => agentInstallOneLiner(apiBase() || 'http://127.0.0.1:8093'))
+  const [installCmd, setInstallCmd] = useState(() => agentInstallOneLiner(apiBase() || 'http://127.0.0.1:8094'))
   const [installCopied, setInstallCopied] = useState(false)
   const installCopiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(

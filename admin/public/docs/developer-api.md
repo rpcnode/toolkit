@@ -4,7 +4,7 @@ Stable HTTP JSON API for integrations: node health, metrics, update status, aler
 
 **Base URL = node agent port** (not the ops panel): `http://<host>:<agent_port>` (often same as public Go RPC when combined).  
 
-Ops SPA runs on the **standalone panel** (`docker-compose.panel.yml`, `:8093`) and proxies here with `AGENT_API_TOKEN`.
+Ops SPA is **rpcnode-admin** (`:8093`). REST API is **rpcnode-server** (`:8094`, `PANEL_PORT`). Admin nginx proxies `/api` to the server.
 
 Public chain RPC (catch-all) shares the listen port with `/api/v1/*` — chain paths need no auth; agent JSON paths use the token.
 
@@ -16,21 +16,22 @@ Each env is a separate **agent** stack (per network/env). The panel is one contr
 
 | Example | Public Go RPC / agent | Upstream node (loopback) | Panel (control host) |
 |---------|----------------------|--------------------------|----------------------|
-| tron/mainnet | `:39090` | `:18090` | `:8093` (standalone) |
-| bitcoin/mainnet | `:39390` | `:8332` | `:8093` (standalone) |
-| solana/mainnet | `:39590` | `:8899` | `:8093` (standalone) |
+| tron/mainnet | `:39090` | `:18090` | UI `:8093` / API `:8094` |
+| bitcoin/mainnet | `:39390` | `:8332` | UI `:8093` / API `:8094` |
+| solana/mainnet | `:39590` | `:8899` | UI `:8093` / API `:8094` |
 
-Connect / RPC clients use the public Go RPC base. Panel humans use `http://127.0.0.1:8093/` (`PANEL_PORT`).
+Connect / RPC clients use the public Go RPC base. Humans open the admin UI at `http://127.0.0.1:8093/`. API and `/install` are on **rpcnode-server** `http://127.0.0.1:8094/` (`PANEL_PORT`).
 
 ## Auth
 
 | Method | Header / creds | When |
 |--------|----------------|------|
-| Panel session | Cookie `rpcnode_session` **or** `Authorization: Bearer <token>` after `POST /api/auth/login` on **panel** `:8093` (TTL **30 days**) | Humans (SPA + curl/API inspect) |
+| Panel session | Cookie `rpcnode_session` **or** `Authorization: Bearer <token>` after `POST /api/auth/login` on **rpcnode-server** `:8094` (TTL **30 days**; or `:8093` via admin proxy) | Humans (SPA + curl/API inspect) |
 | Panel HTTP Basic | `-u user:pass` against panel htpasswd | Non-browser API tools (legacy) |
 | Agent API key | `X-Api-Token` **or** `Authorization: Bearer` | Panel → agent / machines — `AGENT_API_TOKEN` |
 
-Panel first start: empty htpasswd → open `http://127.0.0.1:8093/setup`.  
+Panel first start: empty htpasswd → open `http://127.0.0.1:8093/setup` (admin UI).  
+API origin for agents is **rpcnode-server** `:8094`. From Docker use the host IP or DNS, not `127.0.0.1`.
 Server install (control host), from the repo root after `./scripts/build-rpcnode-server.sh`:
 
 ```bash
@@ -71,16 +72,16 @@ TOKEN=$(./scripts/panel-token.sh)
 
 # Same JSON the UI uses for node detail / lifecycle / sync
 curl -sS -H "Authorization: Bearer $TOKEN" \
-  "http://127.0.0.1:8093/api/status.json?node=<NODE_UUID>" | jq .
+  "http://127.0.0.1:8094/api/status.json?node=<NODE_UUID>" | jq .
 
-curl -sS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8093/api/workloads | jq .
-curl -sS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8093/api/nodes | jq .
+curl -sS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8094/api/workloads | jq .
+curl -sS -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8094/api/nodes | jq .
 ```
 
 ```bash
 # Panel (control plane) — login returns { token, expires_at } (+ Set-Cookie for SPA)
-curl -s http://127.0.0.1:8093/api/auth/status | jq .
-curl -s -X POST http://127.0.0.1:8093/api/auth/login \
+curl -s http://127.0.0.1:8094/api/auth/status | jq .
+curl -s -X POST http://127.0.0.1:8094/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"secret"}' | jq '{ok, token, expires_at}'
 

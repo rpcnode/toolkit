@@ -26,7 +26,7 @@ flowchart TB
     Admin["admin/ React SPA"]
   end
 
-  subgraph panel["rpcnode-server :8093"]
+  subgraph panel["rpcnode-server :8094"]
     Ktor["Ktor routes<br/>panel/*/presentation/http"]
     TK["Toolkit<br/>wiring/Toolkit.kt"]
     UC["Use cases<br/>*/application/*"]
@@ -158,6 +158,9 @@ Panel entrypoint: **`panel/presentation/http/Application.kt`**.
 | GET | `/healthz` | — | `HealthRoutes.kt` |
 | GET | `/api/setup/status` | `GetSetupStatusUseCase` | `SetupRoutes.kt` |
 | POST | `/api/setup` | `CreateAdminUseCase` | `SetupRoutes.kt` |
+| GET | `/api/setup/check` | `RunSetupCheckUseCase` | `SetupRoutes.kt` |
+| POST | `/api/setup/stage` | `SetSetupStageUseCase` | `SetupRoutes.kt` |
+| POST | `/api/setup/finish` | `FinishSetupUseCase` | `SetupRoutes.kt` |
 | GET | `/api/auth/status` | `GetAuthStatusUseCase` | `AuthRoutes.kt` |
 | POST | `/api/auth/login` | `LoginUseCase` | `AuthRoutes.kt` |
 | POST | `/api/auth/logout` | `LogoutUseCase` | `AuthRoutes.kt` |

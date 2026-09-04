@@ -116,7 +116,7 @@ fun Application.settingsApiRoutes(toolkit: Toolkit)
                         HttpStatusCode.BadRequest,
                         AuthErrorResponse(
                             error = "install_origin_required",
-                            message = "Need an http(s) origin, e.g. http://127.0.0.1:8093",
+                            message = "Need an http(s) origin, e.g. http://127.0.0.1:8094",
                         ),
                     )
                 SaveSettingsResult.OriginInvalid ->
@@ -124,7 +124,7 @@ fun Application.settingsApiRoutes(toolkit: Toolkit)
                         HttpStatusCode.BadRequest,
                         AuthErrorResponse(
                             error = "install_origin_invalid",
-                            message = "Need an http(s) origin, e.g. http://127.0.0.1:8093",
+                            message = "Need an http(s) origin, e.g. http://127.0.0.1:8094",
                         ),
                     )
                 SaveSettingsResult.SnapshotCdnOriginInvalid ->
@@ -163,7 +163,7 @@ fun Application.settingsApiRoutes(toolkit: Toolkit)
 
 internal fun ApplicationCall.panelPublicOrigin(): String
 {
-    val host = request.headers[HttpHeaders.Host]?.trim().orEmpty().ifEmpty { "127.0.0.1:8093" }
+    val host = request.headers[HttpHeaders.Host]?.trim().orEmpty().ifEmpty { "127.0.0.1:8094" }
     val proto = if (request.headers["X-Forwarded-Proto"].equals("https", ignoreCase = true))
     {
         "https"

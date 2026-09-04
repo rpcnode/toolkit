@@ -11,6 +11,7 @@ internal class FakeSettingsStore : SettingsStore
     private var origin: InstallOrigin? = null
     private var snapshotCdn: SnapshotCdnOrigin? = null
     private var token: StoredGitHubToken = StoredGitHubToken.Absent
+    private var stage: String? = null
 
     override suspend fun installOrigin(): InstallOrigin? = origin
 
@@ -41,5 +42,12 @@ internal class FakeSettingsStore : SettingsStore
     override suspend fun clearGithubToken()
     {
         this.token = StoredGitHubToken.Absent
+    }
+
+    override suspend fun setupStage(): String? = stage
+
+    override suspend fun setSetupStage(stage: String)
+    {
+        this.stage = stage
     }
 }

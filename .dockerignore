@@ -8,3 +8,4 @@
 app/database
 admin/.env
 cdn-site/data
+data

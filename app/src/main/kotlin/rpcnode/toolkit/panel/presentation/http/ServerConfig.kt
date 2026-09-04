@@ -5,7 +5,7 @@ import java.nio.file.Path
 
 data class ServerConfig(
     val listen: String = System.getenv("PANEL_LISTEN") ?: "127.0.0.1",
-    val port: Int = System.getenv("PANEL_PORT")?.toIntOrNull() ?: 8093,
+    val port: Int = System.getenv("PANEL_PORT")?.toIntOrNull() ?: DEFAULT_PORT,
     val dbPath: String = System.getenv("TOOLKIT_DB") ?: "database/toolkit.db",
     val htpasswdPath: String = System.getenv("PANEL_HTPASSWD") ?: "database/panel.htpasswd",
     val sessionsPath: String = System.getenv("PANEL_SESSIONS") ?: "database/panel-sessions.json",
@@ -19,7 +19,13 @@ data class ServerConfig(
     val notifyKey: String? = System.getenv("RPCNODE_NOTIFY_KEY")?.trim()?.ifEmpty { null },
     /** IDEA run configs set `RPCNODE_DEV=1`: HTTP call log + DEBUG for our packages. */
     val dev: Boolean = rpcnodeDev(),
-)
+) {
+    companion object
+    {
+        /** rpcnode-server listen port. Admin UI stays on 8093; CDN on 8095. */
+        const val DEFAULT_PORT = 8094
+    }
+}
 
 fun rpcnodeDev(raw: String? = System.getenv("RPCNODE_DEV")): Boolean
 {
@@ -70,12 +76,21 @@ internal fun installOriginFromEnv(): String?
         .trimEnd('/')
 }
 
+/**
+ * Unset → localhost Vite / admin defaults.
+ * Blank (`PANEL_CORS_ORIGINS=""`) → allow any Origin (self-hosted: admin :8093 → server :8094).
+ */
 internal fun corsOriginsFromEnv(): List<String>
 {
     val raw = System.getenv("PANEL_CORS_ORIGINS")
     if (raw == null)
     {
-        return listOf("http://127.0.0.1:5173", "http://localhost:5173")
+        return listOf(
+            "http://127.0.0.1:5173",
+            "http://localhost:5173",
+            "http://127.0.0.1:8093",
+            "http://localhost:8093",
+        )
     }
     if (raw.isBlank())
     {

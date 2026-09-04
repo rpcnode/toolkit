@@ -28,11 +28,14 @@ class CreateAdminUseCaseTest
     }
 
     @Test
-    fun second_setup_rejected() = runTest {
+    fun second_setup_updates_password() = runTest {
         val credentials = FakeCredentials()
         val useCase = CreateAdminUseCase(credentials, MemorySessionStore())
         useCase("admin", "secret-password")
-        assertIs<CreateAdminResult.AlreadyConfigured>(useCase("other", "secret-password"))
+        val second = assertIs<CreateAdminResult.Created>(useCase("admin", "new-secret-password"))
+        assertTrue(second.updated)
+        val user = Username.parseOrAdmin("admin")!!
+        assertTrue(credentials.verify(user, "new-secret-password"))
     }
 
     @Test

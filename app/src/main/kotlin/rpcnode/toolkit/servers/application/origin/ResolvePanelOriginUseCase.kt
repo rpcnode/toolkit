@@ -8,7 +8,7 @@ import rpcnode.toolkit.settings.domain.repository.SettingsStore
 class ResolvePanelOriginUseCase(
     private val store: SettingsStore,
     private val envOrigin: String? = null,
-    private val panelPort: Int = 8093,
+    private val panelPort: Int = 8094,
 )
 {
     suspend operator fun invoke(explicit: String, requestOrigin: String): String
@@ -30,7 +30,7 @@ class ResolvePanelOriginUseCase(
         return rewriteDevProxy(parsed)
     }
 
-    /** Admin Vite (:5173) is not the panel — the agent must hit :8093. */
+    /** Admin Vite (:5173) is not the panel — the agent must hit rpcnode-server (:8094). */
     private fun rewriteDevProxy(url: String): String
     {
         val uri = try

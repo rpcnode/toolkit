@@ -1,10 +1,12 @@
-# Admin
+# Toolkit Admin
 
-React + Vite + Mantine. API origin is `VITE_API_URL` (see `.env.example`).
+React + Vite + Mantine. First-run setup asks for the **server** (`http://host:8094`),
+probes `/healthz`, then sets the admin password. `VITE_API_URL` is optional
+(see `.env.example`).
 
 ```
-VITE_API_URL=http://127.0.0.1:8093   # default
-VITE_API_URL=                        # same origin; Vite proxies to :8093
+VITE_API_URL=                        # same origin; Vite proxies to :8094
+VITE_API_URL=http://127.0.0.1:8094   # skip the origin prompt (local Ktor)
 ```
 
 ```bash

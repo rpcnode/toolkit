@@ -18,14 +18,11 @@ import io.ktor.server.response.respond
  */
 fun Application.installServerCors(origins: List<String>)
 {
-    if (origins.isEmpty())
-    {
-        return
-    }
+    val allowAny = origins.isEmpty()
     val allowed = origins.toSet()
     intercept(ApplicationCallPipeline.Setup) {
         val origin = call.request.header(HttpHeaders.Origin) ?: return@intercept
-        if (!originAllowed(origin, allowed))
+        if (!allowAny && !originAllowed(origin, allowed))
         {
             if (call.request.httpMethod == HttpMethod.Options)
             {

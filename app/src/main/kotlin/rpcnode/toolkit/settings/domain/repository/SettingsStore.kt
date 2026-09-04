@@ -15,4 +15,6 @@ interface SettingsStore
     suspend fun githubToken(): StoredGitHubToken
     suspend fun setGithubToken(token: GitHubToken)
     suspend fun clearGithubToken()
+    suspend fun setupStage(): String?
+    suspend fun setSetupStage(stage: String)
 }

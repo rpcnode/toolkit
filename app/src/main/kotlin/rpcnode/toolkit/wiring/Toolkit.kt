@@ -172,6 +172,7 @@ import rpcnode.toolkit.settings.infrastructure.http.HttpUrlProbe
 import rpcnode.toolkit.settings.infrastructure.persistence.AesGcmSecretBox
 import rpcnode.toolkit.settings.infrastructure.persistence.DiskInstallFiles
 import rpcnode.toolkit.settings.infrastructure.persistence.FileInstallStampReader
+import rpcnode.toolkit.settings.infrastructure.persistence.FileInstallStampWriter
 import rpcnode.toolkit.settings.infrastructure.persistence.SqliteSettingsStore
 import rpcnode.toolkit.notifications.application.ClearTelegramBotUseCase
 import rpcnode.toolkit.notifications.application.ConfigureTelegramBotUseCase
@@ -183,7 +184,10 @@ import rpcnode.toolkit.notifications.application.SendTelegramTestUseCase
 import rpcnode.toolkit.notifications.application.SetTelegramNotificationsEnabledUseCase
 import rpcnode.toolkit.notifications.infrastructure.http.HttpTelegramBotApi
 import rpcnode.toolkit.notifications.infrastructure.persistence.SqliteNotificationSettingsStore
+import rpcnode.toolkit.setup.application.check.RunSetupCheckUseCase
 import rpcnode.toolkit.setup.application.create.CreateAdminUseCase
+import rpcnode.toolkit.setup.application.finish.FinishSetupUseCase
+import rpcnode.toolkit.setup.application.stage.SetSetupStageUseCase
 import rpcnode.toolkit.setup.application.status.GetSetupStatusUseCase
 import rpcnode.toolkit.shared.infrastructure.persistence.ToolkitDatabase
 
@@ -209,6 +213,9 @@ class Toolkit(
     val getAuthStatus: GetAuthStatusUseCase,
     val getSetupStatus: GetSetupStatusUseCase,
     val createAdmin: CreateAdminUseCase,
+    val runSetupCheck: RunSetupCheckUseCase,
+    val setSetupStage: SetSetupStageUseCase,
+    val finishSetup: FinishSetupUseCase,
     val login: LoginUseCase,
     val logout: LogoutUseCase,
 
@@ -305,6 +312,9 @@ class Toolkit(
                     envKeyBase64 = cfg.notifyKey,
                 ),
             )
+            val installStampPath = dataDir.resolve("panel.install")
+            val installStampReader = FileInstallStampReader(installStampPath)
+            val installStampWriter = FileInstallStampWriter(installStampPath)
             val getSettings = GetSettingsUseCase(
                 store = settingsStore,
                 probe = urlProbe,
@@ -312,7 +322,7 @@ class Toolkit(
                 envOrigin = cfg.installOriginOverride,
                 envSnapshotCdnOrigin = cfg.snapshotCdnOriginOverride,
                 panelVersion = cfg.panelVersion,
-                installStamp = FileInstallStampReader(dataDir.resolve("panel.install")),
+                installStamp = installStampReader,
             )
             val notificationSettingsStore = SqliteNotificationSettingsStore(
                 db = db,
@@ -592,6 +602,19 @@ class Toolkit(
                 getAuthStatus = GetAuthStatusUseCase(sessions),
                 getSetupStatus = GetSetupStatusUseCase(credentials),
                 createAdmin = CreateAdminUseCase(credentials, sessions),
+                runSetupCheck = RunSetupCheckUseCase(
+                    store = settingsStore,
+                    probe = urlProbe,
+                    installFiles = DiskInstallFiles(Path.of(cfg.installDir)),
+                    dbPath = Path.of(cfg.dbPath),
+                ),
+                setSetupStage = SetSetupStageUseCase(settingsStore),
+                finishSetup = FinishSetupUseCase(
+                    store = settingsStore,
+                    reader = installStampReader,
+                    writer = installStampWriter,
+                    panelVersion = cfg.panelVersion,
+                ),
                 login = LoginUseCase(credentials, sessions),
                 logout = LogoutUseCase(sessions),
 
