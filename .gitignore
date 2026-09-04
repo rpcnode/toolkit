@@ -14,6 +14,9 @@ admin/dist/
 # Docker bind-mount for rpcnode-server (toolkit.db, panel.htpasswd, …)
 /data/
 
+# Local release staging (scripts/release.sh → dist/release/*.jar)
+/dist/
+
 # app (also listed in app/.gitignore)
 app/build/
 app/.gradle/

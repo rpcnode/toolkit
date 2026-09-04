@@ -98,6 +98,7 @@ assert_tree_ok_for_release() {
     fi
     case "$path" in
       "$BUILD_REL"|"$PANEL_REL") ;;
+      dist|dist/*) ;;
       *)
         echo "  $line" >&2
         bad=1
