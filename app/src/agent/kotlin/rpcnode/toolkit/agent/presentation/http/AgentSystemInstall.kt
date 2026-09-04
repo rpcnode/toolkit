@@ -199,56 +199,68 @@ object AgentSystemInstall
         }
         adoptLegacy(paths, out)
         freeAgentPort(paths, run, out, sleepMs)
-        Files.createDirectories(paths.jarFile.parent)
-        Files.createDirectories(paths.envFile.parent)
-        out("copying $src → ${paths.jarFile}")
-        Files.copy(src, paths.jarFile, StandardCopyOption.REPLACE_EXISTING)
-        writePort(paths.portFile, paths.port)
-        val token = ensureToken(paths.tokenFile)
-        Files.writeString(
-            paths.envFile,
-            envFileBody(paths.port, paths.tokenFile, paths.rangeFile, paths.sysctlConf),
-        )
-        setMode(paths.envFile, "rw-------")
-        Files.writeString(
-            paths.unitPath,
-            unitFileBody(javaBin, paths.jarFile, paths.envFile, paths.destDir),
-        )
-        dropLegacy(paths, run)
-        unmaskUnit(paths, run)
-        if (run(listOf("systemctl", "daemon-reload")) != 0)
+        var stillMasked = true
+        try
         {
-            err("systemctl daemon-reload failed")
-            return 1
+            Files.createDirectories(paths.jarFile.parent)
+            Files.createDirectories(paths.envFile.parent)
+            out("copying $src → ${paths.jarFile}")
+            Files.copy(src, paths.jarFile, StandardCopyOption.REPLACE_EXISTING)
+            writePort(paths.portFile, paths.port)
+            val token = ensureToken(paths.tokenFile)
+            Files.writeString(
+                paths.envFile,
+                envFileBody(paths.port, paths.tokenFile, paths.rangeFile, paths.sysctlConf),
+            )
+            setMode(paths.envFile, "rw-------")
+            Files.writeString(
+                paths.unitPath,
+                unitFileBody(javaBin, paths.jarFile, paths.envFile, paths.destDir),
+            )
+            dropLegacy(paths, run)
+            unmaskUnit(paths, run)
+            stillMasked = false
+            if (run(listOf("systemctl", "daemon-reload")) != 0)
+            {
+                err("systemctl daemon-reload failed")
+                return 1
+            }
+            if (run(listOf("systemctl", "enable", paths.unitName)) != 0)
+            {
+                err("systemctl enable ${paths.unitName} failed")
+                return 1
+            }
+            if (run(listOf("systemctl", "restart", paths.unitName)) != 0)
+            {
+                err("systemctl restart ${paths.unitName} failed")
+                run(listOf("journalctl", "-u", paths.unitName, "-n", "40", "--no-pager"))
+                return 1
+            }
+            if (!waitHealthy(paths.port, token))
+            {
+                err("rpcnode-agent API health check failed: http://127.0.0.1:${paths.port}/healthz")
+                run(listOf("journalctl", "-u", paths.unitName, "-n", "40", "--no-pager"))
+                return 1
+            }
+            val ip = hostIp().ifBlank { "127.0.0.1" }
+            out("unit ${paths.unitName} started")
+            out("jar  ${paths.jarFile}")
+            out("port ${paths.port}")
+            println()
+            println("  Agent URL :  http://$ip:${paths.port}")
+            println("  Agent key :  $token")
+            println()
+            println("paste those into the admin (Servers → Add server).")
+            println()
+            return 0
         }
-        if (run(listOf("systemctl", "enable", paths.unitName)) != 0)
+        finally
         {
-            err("systemctl enable ${paths.unitName} failed")
-            return 1
+            if (stillMasked)
+            {
+                unmaskUnit(paths, run)
+            }
         }
-        if (run(listOf("systemctl", "restart", paths.unitName)) != 0)
-        {
-            err("systemctl restart ${paths.unitName} failed")
-            run(listOf("journalctl", "-u", paths.unitName, "-n", "40", "--no-pager"))
-            return 1
-        }
-        if (!waitHealthy(paths.port, token))
-        {
-            err("rpcnode-agent API health check failed: http://127.0.0.1:${paths.port}/healthz")
-            run(listOf("journalctl", "-u", paths.unitName, "-n", "40", "--no-pager"))
-            return 1
-        }
-        val ip = hostIp().ifBlank { "127.0.0.1" }
-        out("unit ${paths.unitName} started")
-        out("jar  ${paths.jarFile}")
-        out("port ${paths.port}")
-        println()
-        println("  Agent URL :  http://$ip:${paths.port}")
-        println("  Agent key :  $token")
-        println()
-        println("paste those into the admin (Servers → Add server).")
-        println()
-        return 0
     }
 
     fun update(
@@ -386,12 +398,64 @@ object AgentSystemInstall
             run(listOf("systemctl", "mask", "--runtime", "chain-agent.service"))
             run(listOf("systemctl", "stop", "chain-agent.service"))
         }
-        run(listOf("systemctl", "reset-failed", paths.unitName))
-        run(listOf("pkill", "-f", "rpcnode-agent\\.jar"))
-        run(listOf("pkill", "-f", "chain-agent\\.jar"))
-        run(listOf("pkill", "-f", "rpcnode\\.toolkit\\.agent\\.presentation\\.http\\.AgentMainKt"))
+        // Quiet: unit may not be loaded yet on a fresh host.
+        run(listOf("sh", "-c", "systemctl reset-failed ${paths.unitName} >/dev/null 2>&1 || true"))
+        // Never pkill -f the jar name: that matches `java -jar rpcnode-agent.jar install`
+        // and kills the installer itself (left units runtime-masked, no unit file written).
+        killOtherAgentProcesses()
         sleepMs(500)
         out("port ${paths.port} ready")
+    }
+
+    /**
+     * Stop other JVMs running the agent jar / main, but never the current install/update process.
+     */
+    internal fun killOtherAgentProcesses(
+        selfPid: Long = ProcessHandle.current().pid(),
+        candidates: () -> Sequence<Pair<Long, String>> = {
+            ProcessHandle.allProcesses().mapNotNull { ph ->
+                val cmd = ph.info().commandLine().orElse(null) ?: return@mapNotNull null
+                ph.pid() to cmd
+            }
+        },
+        destroyPid: (Long) -> Unit = { pid ->
+            ProcessHandle.of(pid).ifPresent { handle ->
+                try
+                {
+                    handle.destroy()
+                }
+                catch (_: Exception)
+                {
+                    // best-effort
+                }
+            }
+        },
+    )
+    {
+        val markers = listOf(
+            "rpcnode-agent.jar",
+            "chain-agent.jar",
+            "rpcnode.toolkit.agent.presentation.http.AgentMainKt",
+        )
+        for ((pid, cmd) in candidates())
+        {
+            if (pid == selfPid)
+            {
+                continue
+            }
+            if (markers.none { marker -> cmd.contains(marker) })
+            {
+                continue
+            }
+            try
+            {
+                destroyPid(pid)
+            }
+            catch (_: Exception)
+            {
+                // best-effort
+            }
+        }
     }
 
     private fun unmaskUnit(paths: Paths, run: (List<String>) -> Int)

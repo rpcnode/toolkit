@@ -99,6 +99,8 @@ class AgentSystemInstallTest
         assertTrue(Files.readString(paths.unitPath).contains("-jar ${paths.jarFile}"))
         assertTrue(ran.any { it == listOf("systemctl", "enable", "rpcnode-agent.service") })
         assertTrue(ran.any { it == listOf("systemctl", "restart", "rpcnode-agent.service") })
+        assertTrue(ran.none { it.firstOrNull() == "pkill" })
+        assertTrue(ran.any { it == listOf("systemctl", "unmask", "rpcnode-agent.service") })
     }
 
     @Test
@@ -168,5 +170,25 @@ class AgentSystemInstallTest
         )
         assertEquals(0, code)
         assertEquals("keep-me-token", Files.readString(tokenFile).trim())
+    }
+
+    @Test
+    fun kill_other_agent_skips_self_pid()
+    {
+        val destroyed = mutableListOf<Long>()
+        AgentSystemInstall.killOtherAgentProcesses(
+            selfPid = 1L,
+            candidates = {
+                sequenceOf(
+                    1L to "java -jar /tmp/rpcnode-agent.jar install",
+                    2L to "/opt/rpcnode/jdk/bin/java -jar /opt/rpcnode/lib/rpcnode-agent.jar",
+                    3L to "java -jar /opt/rpcnode/lib/chain-agent.jar",
+                    4L to "java -cp out rpcnode.toolkit.agent.presentation.http.AgentMainKt",
+                    5L to "java -jar something-else.jar",
+                )
+            },
+            destroyPid = { destroyed += it },
+        )
+        assertEquals(listOf(2L, 3L, 4L), destroyed)
     }
 }
