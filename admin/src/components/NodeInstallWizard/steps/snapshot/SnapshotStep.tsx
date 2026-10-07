@@ -44,7 +44,6 @@ function View({
     setStopSnapshotOpen,
     stopSnapshotPolling,
     continueFromSnapshot,
-    goBackToClientsOrEarlier,
     goBackToHostDepsOrEarlier,
     workload,
     error,

@@ -4,7 +4,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import rpcnode.toolkit.settings.application.get.InstallFiles
 import rpcnode.toolkit.settings.application.get.UrlProbe
-import rpcnode.toolkit.settings.application.get.snapshotCdnReachable
 import rpcnode.toolkit.settings.domain.repository.SettingsStore
 
 data class SetupCheckItem(
@@ -20,6 +19,10 @@ data class SetupCheckResult(
     val checks: List<SetupCheckItem>,
 )
 
+/**
+ * First-run probe: server origin, sqlite, agent jar. The snapshot CDN is deliberately not part of it —
+ * it is optional and is set (and probed) later on the Settings page.
+ */
 class RunSetupCheckUseCase(
     private val store: SettingsStore,
     private val probe: UrlProbe,
@@ -33,7 +36,6 @@ class RunSetupCheckUseCase(
             serverCheck(),
             sqliteCheck(),
             binariesCheck(),
-            cdnCheck(),
         )
         return SetupCheckResult(
             ready = checks.filter { it.required }.all { it.ok },
@@ -87,29 +89,6 @@ class RunSetupCheckUseCase(
             ok = ok,
             required = false,
             detail = if (ok) "rpcnode-agent.jar" else "optional — copy on first start",
-        )
-    }
-
-    private suspend fun cdnCheck(): SetupCheckItem
-    {
-        val origin = store.snapshotCdnOrigin()?.value?.trimEnd('/')
-        if (origin.isNullOrBlank())
-        {
-            return SetupCheckItem(
-                id = "cdn",
-                label = "snapshot cdn",
-                ok = true,
-                required = false,
-                detail = "not set",
-            )
-        }
-        val ok = probe.snapshotCdnReachable(origin)
-        return SetupCheckItem(
-            id = "cdn",
-            label = "snapshot cdn",
-            ok = ok,
-            required = false,
-            detail = if (ok) origin else "unreachable $origin",
         )
     }
 }

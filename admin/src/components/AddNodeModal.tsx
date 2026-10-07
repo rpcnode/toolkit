@@ -18,7 +18,7 @@ import {
 } from '../api'
 import { SearchableKeyboardList } from './SearchableKeyboardList'
 import { isModEnter } from '../lib/keyboard'
-import { hasAddableNetworkEnvs, networksWithClients } from '../lib/clientNetworks'
+import { networksWithClients } from '../lib/clientNetworks'
 import {
   envsForNetwork,
   networkOneEnvPerHost,

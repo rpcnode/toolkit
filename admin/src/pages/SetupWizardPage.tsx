@@ -4,7 +4,6 @@ import {
   api,
   getApiOriginOverride,
   setApiOriginOverride,
-  type NetworkCatalogItem,
   type PanelSettings,
   type SetupCheck,
 } from '../api'
@@ -24,7 +23,6 @@ const STEPS = [
   { id: 'origin', file: 'origin', hint: 'server first' },
   { id: 'admin', file: 'admin', hint: 'human, not the agent' },
   { id: 'probe', file: 'probe', hint: 'panel / db / binaries' },
-  { id: 'nets', file: 'nets', hint: 'optional' },
 ] as const
 
 const STEP_DOC = [
@@ -57,15 +55,6 @@ const STEP_DOC = [
       '// gray = local panel files, optional',
       '',
       'required: server, sqlite',
-    ],
-  },
-  {
-    title: 'nets',
-    lines: [
-      '// enable only when client files are on disk',
-      '// download happens on Clients first',
-      '',
-      'for (n in catalog) pick(n)',
     ],
   },
 ]
@@ -136,8 +125,6 @@ export function SetupWizardPage() {
   const [settings, setSettings] = useState<PanelSettings | null>(null)
   const [checks, setChecks] = useState<SetupCheck[]>([])
   const [checkReady, setCheckReady] = useState(false)
-  const [networks, setNetworks] = useState<NetworkCatalogItem[]>([])
-  const [picked, setPicked] = useState<Record<string, 'install' | 'skip' | ''>>({})
   const [hasAdmin, setHasAdmin] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -257,45 +244,12 @@ export function SetupWizardPage() {
     }
   }
 
-  async function goNetworks() {
+  /** Last step: no CDN and no network picking here — both are configured later in the panel. */
+  async function finishSetup() {
     if (!checkReady) {
       setError('finish required probes first')
       return
     }
-    setBusy(true)
-    setError(null)
-    try {
-      await api.setupStage('networks')
-      const all = await api.networksAll()
-      setNetworks(all.items || [])
-      setStep(3)
-    } catch (err) {
-      setError(String((err as Error).message || err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function applyNetwork(id: string, action: 'install' | 'skip') {
-    setPicked((p) => ({ ...p, [id]: action }))
-    if (action === 'skip') {
-      await api.networkAction(id, 'skip')
-      return
-    }
-    const n = networks.find((x) => x.id === id)
-    if (!n?.files_ready) {
-      setError('Download the client on Clients first (GitHub token in Settings).')
-      setPicked((p) => {
-        const next = { ...p }
-        delete next[id]
-        return next
-      })
-      return
-    }
-    await api.networkAction(id, 'enable')
-  }
-
-  async function finish() {
     setBusy(true)
     setError(null)
     try {
@@ -324,7 +278,7 @@ export function SetupWizardPage() {
     <SetupShell
       block="setup"
       title="setup"
-      index={`${String(step + 1).padStart(2, '0')} / 04  ${meta.file}`}
+      index={`${String(step + 1).padStart(2, '0')} / ${String(STEPS.length).padStart(2, '0')}  ${meta.file}`}
       status={settings?.install?.version ? `panel.install  ·  ${settings.install.version}` : 'panel.install  ·  pending'}
       left={
         <>
@@ -422,39 +376,7 @@ export function SetupWizardPage() {
                 <SetupCmd ghost busy={busy} onClick={() => void runCheck()}>
                   probe
                 </SetupCmd>
-                <SetupCmd disabled={!checkReady} onClick={() => void goNetworks()}>
-                  continue
-                </SetupCmd>
-              </div>
-            </div>
-          )}
-
-          {step === 3 && (
-            <div className="setup-block" {...blockProps('setup.step.networks')}>
-              <ul className="setup-nets">
-                {networks.map((n) => {
-                  const on = picked[n.id] === 'install' || n.enabled
-                  const tag = n.files_ready || n.enabled ? 'disk' : picked[n.id] === 'skip' ? 'skip' : '—'
-                  return (
-                    <li key={n.id}>
-                      <button
-                        type="button"
-                        className={`setup-net${on ? ' is-on' : ''}`}
-                        onClick={() => void applyNetwork(n.id, on ? 'skip' : 'install')}
-                      >
-                        <span className="setup-net__box">{on ? 'x' : ' '}</span>
-                        <span className="setup-net__id">{n.id}</span>
-                        <span className="setup-net__tag">{tag}</span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-              <div className="setup-actions">
-                <SetupCmd ghost onClick={() => setStep(2)}>
-                  back
-                </SetupCmd>
-                <SetupCmd busy={busy} onClick={() => void finish()}>
+                <SetupCmd busy={busy} disabled={!checkReady} onClick={() => void finishSetup()}>
                   write panel.install
                 </SetupCmd>
               </div>
@@ -482,7 +404,7 @@ export function SetupWizardPage() {
               ))}
             </pre>
           )}
-          {settings && (step === 2 || step === 3) && (
+          {settings && step === 2 && (
             <div className="setup-tape">
               <ChannelLinks links={settings?.links} scripts={settings?.scripts} panelScripts={settings?.panel_scripts} />
             </div>

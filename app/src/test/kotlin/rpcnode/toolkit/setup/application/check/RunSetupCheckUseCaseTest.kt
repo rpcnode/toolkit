@@ -51,30 +51,13 @@ class RunSetupCheckUseCaseTest
     }
 
     @Test
-    fun cdn_optional_when_unset() = runTest {
+    fun snapshot_cdn_is_not_part_of_the_first_run_probe() = runTest {
         val dir = Files.createTempDirectory("setup-check")
         val db = dir.resolve("toolkit.db")
         Files.writeString(db, "")
         val store = FakeSettingsStore()
         store.setInstallOrigin((InstallOrigin.parse("http://10.0.0.2:8094") as InstallOrigin.Parse.Ok).origin)
-        val useCase = RunSetupCheckUseCase(
-            store = store,
-            probe = UrlProbe { url -> !url.contains(":8095") },
-            installFiles = InstallFiles { true },
-            dbPath = db,
-        )
-        val result = useCase()
-        assertTrue(result.ready)
-        assertTrue(result.checks.first { it.id == "cdn" }.ok)
-    }
-
-    @Test
-    fun cdn_reports_down_when_set() = runTest {
-        val dir = Files.createTempDirectory("setup-check")
-        val db = dir.resolve("toolkit.db")
-        Files.writeString(db, "")
-        val store = FakeSettingsStore()
-        store.setInstallOrigin((InstallOrigin.parse("http://10.0.0.2:8094") as InstallOrigin.Parse.Ok).origin)
+        // a CDN that is set but down must neither be listed nor block the setup
         store.setSnapshotCdnOrigin((SnapshotCdnOrigin.parse("http://10.0.0.2:8095") as SnapshotCdnOrigin.Parse.Ok).origin)
         val useCase = RunSetupCheckUseCase(
             store = store,
@@ -84,6 +67,6 @@ class RunSetupCheckUseCaseTest
         )
         val result = useCase()
         assertTrue(result.ready)
-        assertFalse(result.checks.first { it.id == "cdn" }.ok)
+        assertEquals(listOf("server", "sqlite", "binaries"), result.checks.map { it.id })
     }
 }

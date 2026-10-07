@@ -62,7 +62,6 @@ function View({
     l1ParentLoading,
     applyL1ParentChoice,
     wantsL1ParentPicker,
-    goBackToClientsOrEarlier,
     goBackToHostDepsOrEarlier,
     setUiStep,
     agentAckedStep,
