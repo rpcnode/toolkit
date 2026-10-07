@@ -3,7 +3,8 @@
 #
 #   sudo ./scripts/install-rpcnode-server.sh
 #
-# Copies the local rpcnode-server.jar. Shares /opt/rpcnode with the agent installer.
+# Installs rpcnode-server.jar: $RPCNODE_SERVER_JAR, else app/build/libs/, else the published GitHub
+# release (tag of this checkout, then latest). Shares /opt/rpcnode with the agent installer.
 set -euo pipefail
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) echo "$(basename "$0") is Linux/systemd only: run it on the target host (or in WSL with systemd)." >&2; exit 1 ;;
@@ -65,7 +66,8 @@ rpcnode-server
   --help
 
 Env: RPCNODE_INSTALL_MODE=install|update|uninstall
-     RPCNODE_SERVER_JAR  path to rpcnode-server.jar (optional)
+     RPCNODE_SERVER_JAR  path to rpcnode-server.jar (optional; default: build/libs, else GitHub release)
+     RPCNODE_VERSION     release to download when no local jar, e.g. 0.1.8 (default: this checkout)
      PANEL_PORT          listen port (default 8094; admin UI is 8093)
      PANEL_LISTEN        bind address (default 0.0.0.0)
 EOF
@@ -380,9 +382,51 @@ local_jar() {
   return 1
 }
 
+RELEASE_REPO="${RPCNODE_RELEASE_REPO:-rpcnode/toolkit}"
+FETCHED_DIR=""
+
+# Version of this checkout (app/build.gradle.kts), or RPCNODE_VERSION (e.g. 0.1.8 or v0.1.8).
+checkout_version() {
+  local v="${RPCNODE_VERSION:-}"
+  if [ -z "$v" ] && [ -f "$REPO_ROOT/app/build.gradle.kts" ]; then
+    v="$(sed -n 's/^version = "\([^"]*\)".*/\1/p' "$REPO_ROOT/app/build.gradle.kts" | head -1)"
+  fi
+  printf '%s\n' "${v#v}"
+}
+
+# Download a release asset (rpcnode-server.jar / rpcnode-agent.jar) to $FETCHED_DIR and print its path.
+# Tries the tag matching this checkout first, then the latest release.
+fetch_release_asset() {
+  local name="$1" ver url out
+  ensure_curl
+  [ -d "$FETCHED_DIR" ] || die "internal: FETCHED_DIR not prepared"
+  out="$FETCHED_DIR/$name"
+  [ -s "$out" ] && { printf '%s\n' "$out"; return 0; }
+  ver="$(checkout_version)"
+  for url in \
+    "${ver:+https://github.com/${RELEASE_REPO}/releases/download/v${ver}/${name}}" \
+    "https://github.com/${RELEASE_REPO}/releases/latest/download/${name}"
+  do
+    [ -n "$url" ] || continue
+    log "downloading $url" >&2
+    if curl -fSL --retry 3 --connect-timeout 20 -o "$out" "$url" 2>/dev/null && [ -s "$out" ]; then
+      printf '%s\n' "$out"
+      return 0
+    fi
+    rm -f "$out"
+  done
+  return 1
+}
+
 install_jar() {
   local src
-  src="$(local_jar)" || die "missing rpcnode-server.jar — build with: (cd \"$REPO_ROOT/app\" && ./gradlew buildFatJar)"
+  if ! src="$(local_jar)"; then
+    log "no local rpcnode-server.jar — using the published release"
+    FETCHED_DIR="$(mktemp -d)"
+    src="$(fetch_release_asset rpcnode-server.jar)" || die "no local jar and could not download rpcnode-server.jar from github.com/${RELEASE_REPO} releases.
+  Put the jar next to this script's repo and set RPCNODE_SERVER_JAR=/path/rpcnode-server.jar,
+  or build it: (cd \"$REPO_ROOT/app\" && ./gradlew buildFatJar)"
+  fi
   [ -f "$src" ] || die "missing $src"
   mkdir -p "$LIB_DIR"
   log "copying $src"
@@ -391,10 +435,22 @@ install_jar() {
 
 stage_install_dir() {
   mkdir -p "$INSTALL_DIR/binaries"
+  local staged="$INSTALL_DIR/binaries/rpcnode-agent.jar" agent=""
   if [ -f "$REPO_ROOT/app/public/install/binaries/rpcnode-agent.jar" ]; then
-    log "staging agent jar into $INSTALL_DIR/binaries"
-    cp -f "$REPO_ROOT/app/public/install/binaries/rpcnode-agent.jar" "$INSTALL_DIR/binaries/rpcnode-agent.jar"
+    agent="$REPO_ROOT/app/public/install/binaries/rpcnode-agent.jar"
+  elif [ -f "$REPO_ROOT/app/build/libs/rpcnode-agent.jar" ]; then
+    agent="$REPO_ROOT/app/build/libs/rpcnode-agent.jar"
+  elif [ ! -s "$staged" ]; then
+    # Panel serves /install/binaries/rpcnode-agent.jar to new hosts: without it agents cannot be installed.
+    [ -d "$FETCHED_DIR" ] || FETCHED_DIR="$(mktemp -d)"
+    agent="$(fetch_release_asset rpcnode-agent.jar || true)"
+    [ -n "$agent" ] || log "WARNING: no rpcnode-agent.jar — hosts cannot be installed from the panel until it is in $INSTALL_DIR/binaries"
   fi
+  if [ -n "$agent" ]; then
+    log "staging agent jar into $INSTALL_DIR/binaries"
+    cp -f "$agent" "$staged"
+  fi
+  [ -z "$FETCHED_DIR" ] || rm -rf "$FETCHED_DIR"
 }
 
 write_env_and_unit() {
