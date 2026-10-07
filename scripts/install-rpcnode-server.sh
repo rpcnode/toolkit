@@ -63,6 +63,9 @@ rpcnode-server
   --install     install / reinstall
   --update      replace the jar, keep database
   --uninstall   stop the unit and remove server files (keeps toolkit.db)
+  --purge       remove EVERYTHING of the panel: also database, admin password, sessions,
+                settings and the client/agent files it serves. Asks first (-y to skip).
+                Does not touch the agent, nodes or chain data on any host.
   --help
 
 Env: RPCNODE_INSTALL_MODE=install|update|uninstall
@@ -70,15 +73,21 @@ Env: RPCNODE_INSTALL_MODE=install|update|uninstall
      RPCNODE_VERSION     release to download when no local jar, e.g. 0.1.8 (default: this checkout)
      PANEL_PORT          listen port (default 8094; admin UI is 8093)
      PANEL_LISTEN        bind address (default 0.0.0.0)
+     PANEL_CORS_ORIGINS  browser origins allowed to call the API; empty = any (admin UI on :8093).
+                         Kept across --update if already in the env file.
 EOF
 }
 
+PURGE=0
+ASSUME_YES=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
     --install) INSTALL_ACTION=install; shift ;;
     --update|--reinstall) INSTALL_ACTION=update; shift ;;
     --uninstall) INSTALL_ACTION=uninstall; shift ;;
+    --purge|--remove-all) INSTALL_ACTION=uninstall; PURGE=1; shift ;;
+    -y|--yes) ASSUME_YES=1; shift ;;
     *) die "unknown argument: $1 (see --help)" ;;
   esac
 done
@@ -456,6 +465,15 @@ stage_install_dir() {
 write_env_and_unit() {
   mkdir -p "$(dirname "$ENV_FILE")" "$DATA_DIR"
   umask 077
+  # PANEL_CORS_ORIGINS (blank = any origin, needed when the admin UI runs on another port/host)
+  # is an operator setting: take it from this run's environment, else keep what the old file had,
+  # so --update does not silently drop it.
+  local cors_line=""
+  if [ "${PANEL_CORS_ORIGINS+set}" = set ]; then
+    cors_line="PANEL_CORS_ORIGINS=${PANEL_CORS_ORIGINS}"
+  elif [ -f "$ENV_FILE" ]; then
+    cors_line="$(grep -E '^PANEL_CORS_ORIGINS=' "$ENV_FILE" | tail -1 || true)"
+  fi
   cat > "$ENV_FILE" <<EOF
 PANEL_LISTEN=${LISTEN}
 PANEL_PORT=${PORT}
@@ -464,6 +482,7 @@ PANEL_HTPASSWD=/etc/rpcnode/panel.htpasswd
 PANEL_SESSIONS=${DATA_DIR}/panel-sessions.json
 PANEL_INSTALL_DIR=${INSTALL_DIR}
 EOF
+  [ -z "$cors_line" ] || printf '%s\n' "$cors_line" >> "$ENV_FILE"
   chmod 600 "$ENV_FILE"
   cat > "$UNIT_PATH" <<EOF
 [Unit]
@@ -555,6 +574,10 @@ do_update() {
 }
 
 do_uninstall() {
+  if [ "$PURGE" = 1 ]; then
+    do_purge
+    return
+  fi
   log "removing rpcnode-server"
   if command -v systemctl >/dev/null 2>&1; then
     systemctl stop "$UNIT_NAME" 2>/dev/null || true
@@ -568,6 +591,64 @@ do_uninstall() {
 
   rpcnode-server removed (database kept in ${DATA_DIR}).
   Re-install:  sudo $SCRIPT_DIR/install-rpcnode-server.sh
+  Remove everything including the database:  sudo $SCRIPT_DIR/install-rpcnode-server.sh --purge
+
+EOF
+}
+
+# Refuse system directories: a wrong env override must never turn --purge into rm -rf /etc.
+safe_purge_dir() {
+  case "$1" in
+    ""|/|/bin|/boot|/dev|/etc|/home|/lib|/lib64|/opt|/proc|/root|/run|/sbin|/srv|/sys|/tmp|/usr|/var|/var/lib|/var/www)
+      return 1 ;;
+  esac
+  case "$1" in /*) return 0 ;; *) return 1 ;; esac
+}
+
+do_purge() {
+  local htpasswd="/etc/rpcnode/panel.htpasswd" d
+  for d in "$DATA_DIR" "$INSTALL_DIR"; do
+    safe_purge_dir "$d" || die "refusing to purge '$d' (not a dedicated directory)"
+  done
+  cat <<EOF
+
+  This permanently deletes rpcnode-server and ALL of its state:
+
+    service        $UNIT_PATH
+    program        $JAR_FILE
+    config         $ENV_FILE, $PORT_FILE
+    admin account  $htpasswd
+    database etc.  $DATA_DIR   (toolkit.db: servers, nodes, settings, sessions, tokens)
+    served files   $INSTALL_DIR   (client files and the agent jar)
+
+  Not touched: agents, nodes and chain data on managed hosts, the shared Java in $DEST_DIR.
+
+EOF
+  if [ "$ASSUME_YES" != 1 ]; then
+    have_tty || die "--purge needs confirmation: run it in a terminal or add -y"
+    local answer=""
+    printf '  Type "purge" to continue: ' >/dev/tty
+    read -r answer </dev/tty || answer=""
+    if [ "$answer" != "purge" ]; then
+      log "cancelled — nothing was removed"
+      return 0
+    fi
+  fi
+  log "purging rpcnode-server"
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl stop "$UNIT_NAME" 2>/dev/null || true
+    systemctl disable "$UNIT_NAME" 2>/dev/null || true
+  fi
+  rm -f "$UNIT_PATH" "$JAR_FILE" "$ENV_FILE" "$PORT_FILE" "$htpasswd"
+  rm -rf -- "$DATA_DIR" "$INSTALL_DIR"
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload 2>/dev/null || true
+  fi
+  rmdir "$LIB_DIR" "$DEST_DIR" /etc/rpcnode 2>/dev/null || true
+  cat <<EOF
+
+  rpcnode-server and its data are gone.
+  Fresh install:  sudo $SCRIPT_DIR/install-rpcnode-server.sh --install
 
 EOF
 }
