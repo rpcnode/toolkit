@@ -245,8 +245,72 @@ curl -fsSL -o rpcnode-agent.jar http://<control-host>:8094/install/binaries/rpcn
   && sudo java -jar rpcnode-agent.jar install
 ```
 
-`install-rpcnode-server.sh` listens on **8094** (`PANEL_PORT`). The admin
-container stays on **8093**.
+`install-rpcnode-server.sh` listens on **8094** (`PANEL_PORT`). The admin UI
+stays on **8093** (Docker container, or pm2 — see below). When there is no
+local `app/build/libs/rpcnode-server.jar`, the installer downloads the jar of
+this checkout's version from GitHub Releases (`RPCNODE_VERSION=0.1.8` picks
+another one).
+
+### Admin UI without Docker (pm2)
+
+The admin UI is a static React build. `admin/server.mjs` serves it and proxies
+`/api`, `/install` and `/healthz` to **rpcnode-server** — the same job nginx
+does in the Docker image — so one process on **:8093** is enough. It has no
+dependencies besides Node.js 22.12+.
+
+```bash
+cd admin
+npm ci
+npm run build                # writes admin/dist
+sudo npm install -g pm2      # once
+
+pm2 start ecosystem.config.cjs
+pm2 save                     # remember the process list
+pm2 startup                  # prints one command — run it to start on boot
+```
+
+It listens on `0.0.0.0:8093`, so it is reachable from other machines once the
+port is open:
+
+```bash
+sudo ufw allow 8093/tcp      # or the equivalent in your firewall / security group
+```
+
+Settings (environment of the pm2 process, defaults in `ecosystem.config.cjs`):
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `ADMIN_HOST` | `0.0.0.0` | Bind address. `127.0.0.1` keeps it local (e.g. behind your own reverse proxy / TLS). |
+| `ADMIN_PORT` | `8093` | Listen port. |
+| `PANEL_URL` | `http://127.0.0.1:8094` | Where rpcnode-server runs. |
+
+**First-run setup** asks for the server origin, and the browser then talks to
+it directly. Enter `http://<host>:8094` (the address agents use too) and let
+the panel accept the admin's origin: add this line to
+`/etc/rpcnode/rpcnode-server.env` and restart the server (the installer does not
+set it, and without it the browser blocks the calls with a CORS error):
+
+```bash
+echo 'PANEL_CORS_ORIGINS=' | sudo tee -a /etc/rpcnode/rpcnode-server.env
+sudo systemctl restart rpcnode-server
+```
+
+An empty value means "any origin" (as in `compose.yaml`); use
+`PANEL_CORS_ORIGINS=http://<host>:8093` to allow only the admin. Alternatively
+enter the admin's own address (`http://<host>:8093`) as the server: requests
+then go through the proxy on the same origin and no CORS setting is needed.
+
+Update after `git pull`: `npm ci && npm run build` — no restart is needed,
+the server reads `dist/` on every request. Other commands:
+
+```bash
+pm2 status                   # is it running
+pm2 logs rpcnode-admin       # proxy errors show up here (502 panel_unreachable)
+pm2 restart rpcnode-admin    # after changing PANEL_URL / ADMIN_PORT
+```
+
+`server.mjs` speaks plain HTTP. For HTTPS put nginx/Caddy in front and set
+`ADMIN_HOST=127.0.0.1`.
 
 For a dedicated snapshot CDN, copy `rpcnode-cdn.jar` to the CDN host, install
 it, then select mirrors through its menu:

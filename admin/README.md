@@ -16,3 +16,15 @@ npm install && npm run dev
 ```
 
 The server is started from IntelliJ (not `./gradlew run`). Ktor must allow the Vite origin (`PANEL_CORS_ORIGINS`, default `http://127.0.0.1:5173` and `http://localhost:5173`).
+
+## Run without Docker (pm2)
+
+`server.mjs` serves `dist/` and proxies `/api`, `/install`, `/healthz` to the panel
+(`PANEL_URL`, default `http://127.0.0.1:8094`), listening on `0.0.0.0:8093`:
+
+```bash
+npm ci && npm run build
+pm2 start ecosystem.config.cjs && pm2 save
+```
+
+See "Admin UI without Docker (pm2)" in the root README (firewall, first-run origin, CORS).
