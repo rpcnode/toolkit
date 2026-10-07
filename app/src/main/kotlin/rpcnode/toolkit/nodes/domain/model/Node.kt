@@ -37,6 +37,10 @@ data class Node(
     val clientLatest: String = "",
     /** True when [clientVersion] ≠ pin latest (computed with [clientLatest]). */
     val clientUpdateAvailable: Boolean = false,
+    /** Last live "Test" result: `pass` | `fail` | empty = never run. */
+    val liveTestStatus: String = "",
+    val liveTestAt: String = "",
+    val liveTestError: String = "",
     val createdAt: String,
     val updatedAt: String,
 )

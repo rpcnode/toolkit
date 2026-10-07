@@ -7,6 +7,7 @@ import rpcnode.toolkit.networks.application.snapshot.PreferCdnSnapshotUseCase
 import rpcnode.toolkit.networks.application.snapshot.defaultSnapshotType
 import rpcnode.toolkit.networks.application.snapshot.snapshotTypeFromInstallOptions
 import rpcnode.toolkit.networks.domain.repository.NetworkFactsRepository
+import rpcnode.toolkit.nodes.application.config.EnsureNodeClients
 import rpcnode.toolkit.nodes.application.disks.decodeNodeDiskLayout
 import rpcnode.toolkit.nodes.application.options.SaveNodeInstallOptionsResult
 import rpcnode.toolkit.nodes.application.options.SaveNodeInstallOptionsUseCase
@@ -41,6 +42,7 @@ class StartNodeSnapshotUseCase(
     private val preferSnapshot: PreferCdnSnapshotUseCase,
     private val resolveDestDir: ResolveSnapshotDestDirUseCase,
     private val startOnHost: StartSnapshotOnHost,
+    private val ensureClients: EnsureNodeClients? = null,
     private val clock: () -> String = { Instant.now().toString() },
 )
 {
@@ -56,6 +58,12 @@ class StartNodeSnapshotUseCase(
         {
             return StartNodeSnapshotResult.NoSnapshot
         }
+
+        // Clients were synced for this type/dir. The type picked now can move node_dir (Lite leaf)
+        // and change the patched config (e.g. TRON transHistory on for full/archive, off for lite).
+        val destBefore = resolveDestDir(node)?.trim()
+        val typeBefore = snapshotTypeFromInstallOptions(node.installOptionsJson)
+            ?: defaultSnapshotType(facts, node.network, node.env.value)
 
         val requested = snapshotType?.trim()?.lowercase().orEmpty()
         val typeToPersist = requested.ifBlank {
@@ -88,6 +96,11 @@ class StartNodeSnapshotUseCase(
         if (dest.isNullOrBlank())
         {
             return StartNodeSnapshotResult.MissingDest
+        }
+        if (ensureClients != null && clientsNeedResync(typeBefore, typeId, destBefore, dest))
+        {
+            // Best effort: Start re-syncs again if the client is still missing there.
+            ensureClients.ensure(id.value, node.installOptionsJson.ifBlank { null })
         }
 
         val resolved = when (
@@ -154,4 +167,21 @@ private fun snapshotsRoleDir(diskLayoutJson: String): String?
     val layout = decodeNodeDiskLayout(diskLayoutJson) ?: return null
     return layout.roles.firstOrNull { it.id == "snapshots" && it.dir.isNotBlank() }?.dir?.trim()
         ?: layout.snapshotsDir.trim().takeIf { it.isNotBlank() }
+}
+
+/**
+ * Clients were synced for the type/dir known at the Clients step. Picking another snapshot type
+ * (full / lite / archive …) changes the patched config, and a type with a dest leaf (Lite) also
+ * moves node_dir — either way the host copy is stale.
+ */
+internal fun clientsNeedResync(
+    typeBefore: String?,
+    typeNow: String,
+    destBefore: String?,
+    destNow: String,
+): Boolean
+{
+    val typeChanged = !typeBefore.isNullOrBlank() && !typeBefore.equals(typeNow, ignoreCase = true)
+    val destChanged = !destBefore.isNullOrBlank() && destBefore.trim() != destNow.trim()
+    return typeChanged || destChanged
 }

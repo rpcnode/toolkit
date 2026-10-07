@@ -80,7 +80,20 @@ export async function probeServer(origin: string): Promise<{ ok: boolean; origin
     return { ok: true, origin: base }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    return { ok: false, origin: base, detail: msg === 'The user aborted a request.' ? 'timeout' : msg }
+    if (msg === 'The user aborted a request.') {
+      return { ok: false, origin: base, detail: 'timeout' }
+    }
+    // Firefox: CORS failure looks like NetworkError even when /healthz returns 200.
+    if (/networkerror|failed to fetch|load failed/i.test(msg)) {
+      return {
+        ok: false,
+        origin: base,
+        detail:
+          `${msg} (usually CORS — restart the panel so it allows this Vite origin, ` +
+          `or open admin on :5173 / set PANEL_CORS_ORIGINS="")`,
+      }
+    }
+    return { ok: false, origin: base, detail: msg }
   } finally {
     clearTimeout(timer)
   }
@@ -533,6 +546,13 @@ function withAgentTarget(url: string, opts?: AgentTarget): string {
   if (opts.network) u.searchParams.set('network', opts.network)
   if (opts.env) u.searchParams.set('env', opts.env)
   return u.pathname + u.search
+}
+
+/** Node config lives under the node: the panel reads/writes the file on the host through its agent. */
+function nodeConfigUrl(target?: string | AgentTarget): string {
+  const t = asAgentTarget(target)
+  if (t?.node) return `/api/nodes/${encodeURIComponent(t.node)}/config`
+  return withAgentTarget('/api/v1/node/config', t)
 }
 
 function asAgentTarget(target?: string | AgentTarget): AgentTarget | undefined {
@@ -1280,6 +1300,48 @@ export const api = {
       error?: string
       message?: string
     }>(`/api/nodes/${encodeURIComponent(id)}/client-config/apply`, body),
+  /** Planned OS packages + Java majors for the Host deps wizard step. */
+  nodeHostDepsPlan: (id: string) =>
+    getJSON<{
+      ok?: boolean
+      node_id?: string
+      deps?: Array<{
+        id: string
+        kind: string
+        name?: string
+        java_major?: number
+        label?: string
+      }>
+      count?: number
+      error?: string
+      message?: string
+    }>(`/api/nodes/${encodeURIComponent(id)}/host-deps`),
+  /** Probe host then install missing deps (background job). */
+  nodeHostDepsStart: (id: string) =>
+    postJSON<{
+      ok?: boolean
+      node_id?: string
+      job_id?: string
+      deps?: Array<{ id: string; kind: string; name?: string; java_major?: number; label?: string }>
+      ready?: boolean
+      error?: string
+      message?: string
+    }>(`/api/nodes/${encodeURIComponent(id)}/host-deps/start`, {}),
+  nodeHostDepsProgress: (id: string, jobId: string) =>
+    getJSON<{
+      ok?: boolean
+      job_id?: string
+      phase?: string
+      detail?: string
+      pct?: number
+      current_id?: string
+      items?: Array<{ id: string; status: string; detail?: string }>
+      ready?: boolean
+      failed?: boolean
+      error?: string
+      log_tail?: string[]
+      message?: string
+    }>(`/api/nodes/${encodeURIComponent(id)}/host-deps/progress?job_id=${encodeURIComponent(jobId)}`),
   /** Save install_options only, then start chain process on host (client must already be synced after Disks). */
   workloadsStartNode: (
     id: string,
@@ -1336,6 +1398,17 @@ export const api = {
       error?: string
       message?: string
     }>(`/api/nodes/${encodeURIComponent(id)}/client-version`),
+  /** Dash / LTC / Doge / BCH JSON-RPC user + password from host `.toolkit/rpc-auth.env`. */
+  workloadsNodeRpcAuth: (id: string) =>
+    getJSON<{
+      ok?: boolean
+      node_id?: string
+      user?: string
+      password?: string
+      path?: string
+      error?: string
+      message?: string
+    }>(`/api/nodes/${encodeURIComponent(id)}/rpc-auth`),
   /** systemctl stop for the node unit on the host (Sync step). */
   workloadsNodeProcessStop: (id: string) =>
     postJSON<{
@@ -1818,7 +1891,7 @@ export const api = {
     }>(withAgentTarget('/api/v1/node/start', asAgentTarget(target))),
 
   nodeConfig: (target?: string | AgentTarget) =>
-    getJSON<NodeConfigResponse>(withAgentTarget('/api/v1/node/config', asAgentTarget(target))),
+    getJSON<NodeConfigResponse>(nodeConfigUrl(target)),
   nodeConfigSave: (
     target: string | AgentTarget | undefined,
     body: {
@@ -1827,14 +1900,11 @@ export const api = {
       documents: Array<{ id: string; content: string; fields?: Record<string, string> }>
     },
   ) =>
-    putJSON<NodeConfigSaveResponse>(
-      withAgentTarget('/api/v1/node/config', asAgentTarget(target)),
-      body,
-    ),
+    putJSON<NodeConfigSaveResponse>(nodeConfigUrl(target), body),
 
   networks: () => getJSON<NetworksPayload>('/api/networks'),
   networksAll: () => getJSON<NetworksPayload>('/api/networks?all=1'),
-  /** Live probe for Start clientConfig.bindings[].test_connect (eth_rpc / beacon_genesis). */
+  /** Live probe for Start clientConfig.bindings[].test_connect (eth_rpc / beacon_genesis / tron_http). */
   networksTestConnect: (body: { kind: string; url: string }) =>
     postJSON<{
       ok?: boolean

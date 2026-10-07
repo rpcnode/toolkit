@@ -18,7 +18,7 @@ import {
 } from '../api'
 import { SearchableKeyboardList } from './SearchableKeyboardList'
 import { isModEnter } from '../lib/keyboard'
-import { hasClientNetworkEnvs, networksWithClients } from '../lib/clientNetworks'
+import { hasAddableNetworkEnvs, networksWithClients } from '../lib/clientNetworks'
 import {
   envsForNetwork,
   networkOneEnvPerHost,
@@ -63,7 +63,7 @@ export function AddNodeModal({ opened, onClose, onAdded }: Props) {
   const NETWORK_SELECT_DATA = [...networkOptions(availableNetworks)].sort((a, b) =>
     a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }),
   )
-  const noClients = !clientsLoading && !hasClientNetworkEnvs(clientRows)
+  const noClients = !clientsLoading && availableNetworks.length === 0
   const envOptions = network ? envsForNetwork(network, availableNetworks) : []
 
   useEffect(() => {
@@ -355,10 +355,19 @@ export function AddNodeModal({ opened, onClose, onAdded }: Props) {
             {clientsError}
           </Alert>
         ) : noClients ? (
-          <Alert color="yellow" title="No clients">
-            Add a client first. Add node only lists networks and environments that already appear on
-            Clients.
+          <Alert color="yellow" title="No networks ready">
+            Add a network on Networks, then download its client on Clients. Add node only lists
+            networks you enabled that already have a client.
             <Group mt="sm">
+              <Button
+                variant="default"
+                onClick={() => {
+                  onClose()
+                  navigate({ name: 'networks' })
+                }}
+              >
+                Go to Networks
+              </Button>
               <Button
                 color="teal"
                 onClick={() => {

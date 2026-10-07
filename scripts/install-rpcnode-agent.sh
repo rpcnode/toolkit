@@ -9,6 +9,9 @@
 #   sudo ./scripts/install-rpcnode-agent.sh update
 #   sudo ./scripts/install-rpcnode-agent.sh uninstall
 set -euo pipefail
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) echo "$(basename "$0") is Linux/systemd only: run it on the target host (or in WSL with systemd)." >&2; exit 1 ;;
+esac
 export LC_ALL=C LANG=C
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

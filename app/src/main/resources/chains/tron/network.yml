@@ -118,6 +118,10 @@ clientConfig:
       source: catalog_port
       role: grpc_fullnode
       description: FullNode gRPC port
+    - path: node.rpc.solidityPort
+      source: catalog_port
+      role: grpc_solidity
+      description: Solidity gRPC port (without it java-tron binds its default 50061 in every env)
     - path: node.rpc.PBFTPort
       source: catalog_port
       role: grpc_pbft
@@ -145,3 +149,17 @@ clientConfig:
       option: max_http_connections
       default: "50"
       description: Maximum concurrent HTTP API connections
+    # Panel-only probe (path `_panel.*` is not written into HOCON). Check an upstream FullNode
+    # HTTP API — version via wallet/getnodeinfo, height via wallet/getnowblock.
+    - path: _panel.fullnode_url
+      source: install_option
+      option: fullnode_url
+      default: ""
+      description: URL full node (not eth-jsonrpc)
+      testConnect:
+        kind: tron_http
+        label: Check version
+        help: |
+          TRON FullNode HTTP root — not eth-jsonrpc. QuickNode: https://…quiknode.pro/TOKEN without /jsonrpc
+          (gateway serves /wallet/…). Panel probes {url}/wallet/getnodeinfo (codeVersion) and
+          {url}/wallet/getnowblock (height). Local Nile example: http://192.168.0.59:18091

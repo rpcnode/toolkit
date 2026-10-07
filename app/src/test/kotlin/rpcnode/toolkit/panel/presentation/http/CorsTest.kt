@@ -85,4 +85,30 @@ class CorsTest
         assertEquals(HttpStatusCode.OK, response.status)
         assertEquals(null, response.headers[HttpHeaders.AccessControlAllowOrigin])
     }
+
+    @Test
+    fun vite_alternate_port_allowed_when_loopback_listed() = testApplication {
+        val cfg = ServerConfig(
+            corsOrigins = listOf("http://127.0.0.1:5173"),
+        )
+        application { module(cfg) }
+        val response = client.get("/healthz") {
+            header(HttpHeaders.Origin, "http://127.0.0.1:5174")
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("http://127.0.0.1:5174", response.headers[HttpHeaders.AccessControlAllowOrigin])
+    }
+
+    @Test
+    fun loopback_origin_allowed_even_when_allowlist_is_remote_only() = testApplication {
+        val cfg = ServerConfig(
+            corsOrigins = listOf("https://admin.example"),
+        )
+        application { module(cfg) }
+        val response = client.get("/healthz") {
+            header(HttpHeaders.Origin, "http://127.0.0.1:5175")
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("http://127.0.0.1:5175", response.headers[HttpHeaders.AccessControlAllowOrigin])
+    }
 }

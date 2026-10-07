@@ -62,6 +62,10 @@ clientConfig:
       source: literal
       value: "127.0.0.1"
       description: RPC bind address (localhost only)
+    - key: rpcallowip
+      source: literal
+      value: "127.0.0.1"
+      description: Allow JSON-RPC from localhost (Go proxy / CLI)
     - key: maxconnections
       source: install_option
       option: max_connections

@@ -188,6 +188,17 @@ export function useWizardOrchestration({
   const [clientsFiles, setClientsFiles] = useState<string[]>([])
   const [clientsPath, setClientsPath] = useState<string | null>(null)
   const clientsAutoStarted = useRef(false)
+  const [hostDepsPlan, setHostDepsPlan] = useState<{
+    deps?: Array<{ id: string; kind: string; name?: string; java_major?: number; label?: string }>
+  } | null>(null)
+  const [hostDepsPlanLoading, setHostDepsPlanLoading] = useState(false)
+  const [hostDepsPlanError, setHostDepsPlanError] = useState<string | null>(null)
+  const [hostDepsProgress, setHostDepsProgress] = useState<Awaited<
+    ReturnType<typeof api.nodeHostDepsProgress>
+  > | null>(null)
+  const [hostDepsStarting, setHostDepsStarting] = useState(false)
+  const [hostDepsJobId, setHostDepsJobId] = useState<string | null>(null)
+  const hostDepsPollTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const diskSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [xrplHistory, setXrplHistory] = useState<XrplHistoryMode>('weeks')
   const [installGroups, setInstallGroups] = useState<InstallOptionGroup[]>([])
@@ -1717,6 +1728,109 @@ export function useWizardOrchestration({
     manualBackToClients.current = false
     manualBackToDisks.current = false
     manualBackToNodeType.current = false
+    await setWlStatus('needs_host_deps')
+    setUiStep('host_deps')
+    agentAckedStep.current = 'host_deps'
+    void loadHostDepsPlan()
+  }
+
+  async function loadHostDepsPlan() {
+    if (!workload?.id) return
+    setHostDepsPlanLoading(true)
+    setHostDepsPlanError(null)
+    try {
+      const res = await api.nodeHostDepsPlan(workload.id)
+      if (res.ok === false) {
+        throw new Error(res.message || res.error || 'Could not load host deps plan')
+      }
+      setHostDepsPlan(res)
+    } catch (e) {
+      setHostDepsPlanError(String((e as Error).message || e))
+      setHostDepsPlan(null)
+    } finally {
+      setHostDepsPlanLoading(false)
+    }
+  }
+
+  function stopHostDepsPolling() {
+    if (hostDepsPollTimer.current) {
+      clearInterval(hostDepsPollTimer.current)
+      hostDepsPollTimer.current = null
+    }
+  }
+
+  async function pollHostDepsOnce(jobId: string) {
+    if (!workload?.id) return
+    try {
+      const res = await api.nodeHostDepsProgress(workload.id, jobId)
+      setHostDepsProgress(res)
+      if (res.ready || res.failed) {
+        stopHostDepsPolling()
+        void onRefresh()
+      }
+    } catch {
+      // keep polling
+    }
+  }
+
+  function startHostDepsPolling(jobId: string) {
+    stopHostDepsPolling()
+    void pollHostDepsOnce(jobId)
+    hostDepsPollTimer.current = setInterval(() => {
+      void pollHostDepsOnce(jobId)
+    }, 2000)
+  }
+
+  async function startHostDepsInstall() {
+    if (!workload?.id || hostDepsStarting) return
+    setHostDepsStarting(true)
+    setError(null)
+    setHostDepsProgress(null)
+    try {
+      const res = await api.nodeHostDepsStart(workload.id)
+      if (res.ok === false) {
+        throw new Error(res.message || res.error || 'Host deps install failed')
+      }
+      if (res.ready) {
+        setHostDepsProgress({
+          ok: true,
+          ready: true,
+          phase: 'complete',
+          detail: res.message || 'All present',
+          pct: 100,
+          items: (hostDepsPlan?.deps || []).map((d) => ({
+            id: d.id,
+            status: 'present',
+            detail: 'already present',
+          })),
+        })
+        await setWlStatus('host_deps_complete')
+        void onRefresh()
+        return
+      }
+      const jobId = String(res.job_id || '').trim()
+      if (!jobId) {
+        throw new Error('No job_id from host deps start')
+      }
+      setHostDepsJobId(jobId)
+      await setWlStatus('host_deps_running')
+      startHostDepsPolling(jobId)
+    } catch (e) {
+      setError(String((e as Error).message || e))
+      await setWlStatus('host_deps_error')
+    } finally {
+      setHostDepsStarting(false)
+    }
+  }
+
+  async function continueFromHostDeps() {
+    if (!workload?.id) return
+    const ready =
+      hostDepsProgress?.ready === true ||
+      workload.status === 'host_deps_complete' ||
+      (hostDepsPlan?.deps?.length === 0 && !hostDepsPlanError)
+    if (!ready) return
+    stopHostDepsPolling()
     if (allowSnap) {
       await setWlStatus('needs_snapshot')
       setUiStep('snapshot')
@@ -1736,6 +1850,16 @@ export function useWizardOrchestration({
     manualBackToClients.current = true
     agentAckedStep.current = 'clients'
     setUiStep('clients')
+  }
+
+  function goBackToHostDepsOrEarlier() {
+    manualBackToPorts.current = false
+    manualBackToDisks.current = false
+    manualBackToNodeType.current = false
+    manualBackToClients.current = false
+    agentAckedStep.current = 'host_deps'
+    setUiStep('host_deps')
+    void loadHostDepsPlan()
   }
 
   function goBackToNodeTypeOrDisks() {
@@ -1762,6 +1886,17 @@ export function useWizardOrchestration({
     void syncClientsToHost()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sync once per enter; Retry calls syncClientsToHost directly
   }, [active, workload?.id, clientsSynced, clientsSyncing])
+
+  // Load host deps plan when entering the step; resume polling if job running.
+  useEffect(() => {
+    if (active !== 'host_deps' || !workload?.id) return
+    void loadHostDepsPlan()
+    if (workload.status === 'host_deps_running' && hostDepsJobId) {
+      startHostDepsPolling(hostDepsJobId)
+    }
+    return () => stopHostDepsPolling()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, workload?.id])
 
   async function loadSnapshotPlan() {
     if (!workload?.id) return
@@ -2990,10 +3125,18 @@ export function useWizardOrchestration({
     confirmKillHolder,
     confirmStopSnapshot,
     continueFromClients,
+    continueFromHostDeps,
     continueFromDisks,
     continueFromNodeType,
     continueFromSnapshot,
     continueFromStart,
+    hostDepsJobId,
+    hostDepsPlan,
+    hostDepsPlanError,
+    hostDepsPlanLoading,
+    hostDepsProgress,
+    hostDepsStarting,
+    startHostDepsInstall,
     testConnectBusy,
     testConnectConfig,
     testConnectResult,
@@ -3033,6 +3176,7 @@ export function useWizardOrchestration({
     failedLane,
     failedWizard,
     goBackToClientsOrEarlier,
+    goBackToHostDepsOrEarlier,
     goBackToNodeTypeOrDisks,
     goToDisksStep,
     hostSysctl,

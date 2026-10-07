@@ -23,10 +23,18 @@ import rpcnode.toolkit.nodes.application.config.ApplyNodeClientConfigResult
 import rpcnode.toolkit.nodes.application.height.GetNodeHeightResult
 import rpcnode.toolkit.nodes.application.logs.GetNodeLogsResult
 import rpcnode.toolkit.nodes.application.version.GetNodeClientVersionResult
+import rpcnode.toolkit.nodes.application.rpcauth.GetNodeRpcAuthResult
+import rpcnode.toolkit.nodes.application.hostdeps.GetNodeHostDepsPlanResult
+import rpcnode.toolkit.nodes.application.hostdeps.GetNodeHostDepsProgressResult
+import rpcnode.toolkit.nodes.application.hostdeps.StartNodeHostDepsResult
 import rpcnode.toolkit.nodes.application.process.ControlNodeProcessResult
 import rpcnode.toolkit.nodes.application.start.StartNodeResult
 import rpcnode.toolkit.nodes.application.update.ClientUpdateInfo
 import rpcnode.toolkit.nodes.application.update.GetNodeClientUpdateResult
+import rpcnode.toolkit.nodes.application.nodeconfig.GetNodeConfigResult
+import rpcnode.toolkit.nodes.application.nodeconfig.SaveNodeConfigDocument
+import rpcnode.toolkit.nodes.application.nodeconfig.SaveNodeConfigResult
+import rpcnode.toolkit.nodes.application.test.RunNodeLiveTestResult
 import rpcnode.toolkit.nodes.application.update.RollbackNodeClientResult
 import rpcnode.toolkit.nodes.application.update.UpdateNodeClientResult
 import rpcnode.toolkit.servers.application.probe.InvalidAgentKey
@@ -72,11 +80,105 @@ data class NodeItemResponse(
     @SerialName("client_version") val clientVersion: String = "",
     @SerialName("client_latest") val clientLatest: String = "",
     @SerialName("client_update_available") val clientUpdateAvailable: Boolean = false,
+    @SerialName("live_test_status") val liveTestStatus: String = "",
+    @SerialName("live_test_at") val liveTestAt: String = "",
+    @SerialName("live_test_error") val liveTestError: String = "",
     @SerialName("needs_snapshot") val needsSnapshot: Boolean = false,
     @SerialName("disk_layout") val diskLayout: JsonElement? = null,
     @SerialName("install_options") val installOptions: JsonElement? = null,
     @SerialName("created_at") val createdAt: String = "",
     @SerialName("updated_at") val updatedAt: String = "",
+)
+
+@Serializable
+data class NodeConfigFieldResponse(
+    val key: String,
+    val label: String = "",
+    val help: String = "",
+    val type: String = "string",
+    val group: String = "",
+    val protected: Boolean = false,
+)
+
+@Serializable
+data class NodeConfigDocumentResponse(
+    val id: String,
+    val path: String,
+    val format: String,
+    val title: String,
+    val description: String = "",
+    val content: String = "",
+    val writable: Boolean = false,
+    @SerialName("restart_required") val restartRequired: Boolean = false,
+    val missing: Boolean = false,
+    val fields: List<NodeConfigFieldResponse> = emptyList(),
+    @SerialName("protected_keys") val protectedKeys: List<String> = emptyList(),
+)
+
+@Serializable
+data class NodeConfigResponse(
+    val ok: Boolean = true,
+    val network: String = "",
+    val env: String = "",
+    @SerialName("etc_dir") val etcDir: String = "",
+    val documents: List<NodeConfigDocumentResponse> = emptyList(),
+    val restart: String = "soft_stop_start",
+    val note: String = "",
+    val error: String? = null,
+    val message: String? = null,
+)
+
+@Serializable
+data class NodeConfigSaveDocumentBody(
+    val id: String = "",
+    val content: String = "",
+)
+
+@Serializable
+data class NodeConfigSaveBody(
+    val confirm: Boolean = false,
+    val restart: Boolean? = null,
+    val documents: List<NodeConfigSaveDocumentBody> = emptyList(),
+)
+
+@Serializable
+data class NodeConfigSaveResponse(
+    val ok: Boolean = true,
+    val written: List<String> = emptyList(),
+    val restart: Boolean = false,
+    val accepted: Boolean = false,
+    val message: String? = null,
+    val error: String? = null,
+)
+
+@Serializable
+data class NodeLiveTestBody(
+    @SerialName("node_id") val nodeId: String = "",
+    @SerialName("server_id") val serverId: String = "",
+    val network: String = "",
+    val env: String = "",
+)
+
+@Serializable
+data class NodeLiveTestCheckResponse(
+    val id: String,
+    val title: String,
+    val ok: Boolean,
+    val detail: String = "",
+    val error: String = "",
+)
+
+@Serializable
+data class NodeLiveTestResponse(
+    val ok: Boolean,
+    val network: String = "",
+    val env: String = "",
+    val error: String = "",
+    val message: String = "",
+    @SerialName("live_test_status") val liveTestStatus: String = "",
+    @SerialName("live_test_at") val liveTestAt: String = "",
+    @SerialName("live_test_error") val liveTestError: String = "",
+    val checks: List<NodeLiveTestCheckResponse> = emptyList(),
 )
 
 @Serializable
@@ -263,6 +365,70 @@ data class NodeClientVersionResponse(
     @SerialName("client_version") val clientVersion: String = "",
     val path: String = "",
     val error: String? = null,
+    val message: String? = null,
+)
+
+@Serializable
+data class NodeRpcAuthResponse(
+    val ok: Boolean = true,
+    @SerialName("node_id") val nodeId: String = "",
+    val user: String = "",
+    val password: String = "",
+    val path: String = "",
+    val error: String? = null,
+    val message: String? = null,
+)
+
+@Serializable
+data class NodeHostDepItemResponse(
+    val id: String = "",
+    val kind: String = "package",
+    val name: String = "",
+    @SerialName("java_major") val javaMajor: Int = 0,
+    val label: String = "",
+)
+
+@Serializable
+data class NodeHostDepsPlanResponse(
+    val ok: Boolean = true,
+    @SerialName("node_id") val nodeId: String = "",
+    val deps: List<NodeHostDepItemResponse> = emptyList(),
+    val count: Int = 0,
+    val error: String? = null,
+    val message: String? = null,
+)
+
+@Serializable
+data class NodeHostDepsStartResponse(
+    val ok: Boolean = true,
+    @SerialName("node_id") val nodeId: String = "",
+    @SerialName("job_id") val jobId: String = "",
+    val deps: List<NodeHostDepItemResponse> = emptyList(),
+    val ready: Boolean = false,
+    val error: String? = null,
+    val message: String? = null,
+)
+
+@Serializable
+data class NodeHostDepProgressItemResponse(
+    val id: String = "",
+    val status: String = "",
+    val detail: String = "",
+)
+
+@Serializable
+data class NodeHostDepsProgressResponse(
+    val ok: Boolean = true,
+    @SerialName("job_id") val jobId: String = "",
+    val phase: String = "",
+    val detail: String = "",
+    val pct: Int = 0,
+    @SerialName("current_id") val currentId: String = "",
+    val items: List<NodeHostDepProgressItemResponse> = emptyList(),
+    val ready: Boolean = false,
+    val failed: Boolean = false,
+    val error: String = "",
+    @SerialName("log_tail") val logTail: List<String> = emptyList(),
     val message: String? = null,
 )
 
@@ -668,6 +834,170 @@ fun Application.nodesApiRoutes(toolkit: Toolkit)
             }
         }
 
+        get("/api/nodes/{id}/config") {
+            val id = call.parameters["id"].orEmpty()
+            when (val result = toolkit.getNodeConfig(id))
+            {
+                is GetNodeConfigResult.Ok ->
+                {
+                    val v = result.view
+                    call.respond(
+                        NodeConfigResponse(
+                            network = v.network,
+                            env = v.env,
+                            etcDir = v.etcDir,
+                            note = v.note,
+                            documents = v.documents.map { d ->
+                                NodeConfigDocumentResponse(
+                                    id = d.id,
+                                    path = d.path,
+                                    format = d.format,
+                                    title = d.title,
+                                    description = d.description,
+                                    content = d.content,
+                                    writable = d.writable,
+                                    restartRequired = d.restartRequired,
+                                    missing = d.missing,
+                                    fields = d.fields.map {
+                                        NodeConfigFieldResponse(it.key, it.label, it.help, it.type, it.group, it.protected)
+                                    },
+                                    protectedKeys = d.protectedKeys,
+                                )
+                            },
+                        ),
+                    )
+                }
+                GetNodeConfigResult.NotFound ->
+                    call.respond(HttpStatusCode.NotFound, NodeConfigResponse(ok = false, error = "not_found"))
+                GetNodeConfigResult.ServerNotFound ->
+                    call.respond(HttpStatusCode.NotFound, NodeConfigResponse(ok = false, error = "server_not_found"))
+                GetNodeConfigResult.NoDiskLayout ->
+                    call.respond(
+                        HttpStatusCode.Conflict,
+                        NodeConfigResponse(
+                            ok = false,
+                            error = "no_disk_layout",
+                            message = "Save the disk layout (install wizard) first — the config lives in the node directory",
+                        ),
+                    )
+                GetNodeConfigResult.InvalidAgentKey ->
+                    call.respond(
+                        HttpStatusCode.Unauthorized,
+                        NodeConfigResponse(ok = false, error = InvalidAgentKey.ERROR, message = InvalidAgentKey.MESSAGE),
+                    )
+                is GetNodeConfigResult.AgentUnreachable ->
+                    call.respond(
+                        HttpStatusCode.BadGateway,
+                        NodeConfigResponse(
+                            ok = false,
+                            error = "agent_unreachable",
+                            message = result.detail.ifBlank { "Host agent did not answer" },
+                        ),
+                    )
+            }
+        }
+
+        put("/api/nodes/{id}/config") {
+            val id = call.parameters["id"].orEmpty()
+            val body = call.receive<NodeConfigSaveBody>()
+            val result = toolkit.saveNodeConfig(
+                id,
+                confirm = body.confirm,
+                restart = body.restart ?: true,
+                documents = body.documents.map { SaveNodeConfigDocument(it.id, it.content) },
+            )
+            fun fail(status: HttpStatusCode, error: String, message: String) =
+                NodeConfigSaveResponse(ok = false, error = error, message = message) to status
+            val (payload, status) = when (result)
+            {
+                is SaveNodeConfigResult.Saved ->
+                    NodeConfigSaveResponse(
+                        written = result.written,
+                        restart = result.restarted,
+                        accepted = result.restarted,
+                        message = result.message,
+                    ) to HttpStatusCode.OK
+                SaveNodeConfigResult.NotFound -> fail(HttpStatusCode.NotFound, "not_found", "Node not found")
+                SaveNodeConfigResult.ServerNotFound -> fail(HttpStatusCode.NotFound, "server_not_found", "Server not found")
+                SaveNodeConfigResult.NoDiskLayout ->
+                    fail(HttpStatusCode.Conflict, "no_disk_layout", "Save the disk layout (install wizard) first")
+                SaveNodeConfigResult.ConfirmRequired ->
+                    fail(HttpStatusCode.BadRequest, "confirm_required", "Set confirm=true after the UI confirmation")
+                SaveNodeConfigResult.NoDocuments -> fail(HttpStatusCode.BadRequest, "documents_required", "documents required")
+                SaveNodeConfigResult.InvalidAgentKey ->
+                    fail(HttpStatusCode.Unauthorized, InvalidAgentKey.ERROR, InvalidAgentKey.MESSAGE)
+                is SaveNodeConfigResult.UnknownDocument ->
+                    fail(HttpStatusCode.BadRequest, "unknown_document", "unknown document id: ${result.id}")
+                is SaveNodeConfigResult.NotWritable ->
+                    fail(HttpStatusCode.Forbidden, "not_writable", "document not writable: ${result.id}")
+                is SaveNodeConfigResult.EmptyContent ->
+                    fail(HttpStatusCode.BadRequest, "empty_content", "${result.id}: empty content")
+                is SaveNodeConfigResult.TooLarge ->
+                    fail(HttpStatusCode.PayloadTooLarge, "too_large", "${result.id}: content larger than 2 MiB")
+                is SaveNodeConfigResult.AgentUnreachable ->
+                    fail(HttpStatusCode.BadGateway, "agent_unreachable", result.detail.ifBlank { "Host agent did not answer" })
+                is SaveNodeConfigResult.WriteFailed ->
+                    fail(HttpStatusCode.BadGateway, "write_failed", result.detail)
+            }
+            call.respond(status, payload)
+        }
+
+        post("/api/nodes/test") {
+            val body = call.receive<NodeLiveTestBody>()
+            when (val result = toolkit.runNodeLiveTest(body.nodeId, body.serverId, body.network, body.env))
+            {
+                is RunNodeLiveTestResult.Done ->
+                {
+                    val r = result.report
+                    call.respond(
+                        NodeLiveTestResponse(
+                            ok = r.ok,
+                            network = r.network,
+                            env = r.env,
+                            error = r.error,
+                            liveTestStatus = if (r.ok) "pass" else "fail",
+                            liveTestAt = r.at,
+                            liveTestError = r.error,
+                            checks = r.checks.map {
+                                NodeLiveTestCheckResponse(it.id, it.title, it.ok, it.detail, it.error)
+                            },
+                        ),
+                    )
+                }
+                RunNodeLiveTestResult.NotFound ->
+                    call.respond(HttpStatusCode.NotFound, NodeLiveTestResponse(ok = false, error = "not_found"))
+                RunNodeLiveTestResult.ServerNotFound ->
+                    call.respond(HttpStatusCode.NotFound, NodeLiveTestResponse(ok = false, error = "server_not_found"))
+                RunNodeLiveTestResult.NoDiskLayout ->
+                    call.respond(
+                        HttpStatusCode.Conflict,
+                        NodeLiveTestResponse(
+                            ok = false,
+                            error = "no_disk_layout",
+                            message = "Save the disk layout (install wizard) before testing the node",
+                        ),
+                    )
+                RunNodeLiveTestResult.InvalidAgentKey ->
+                    call.respond(
+                        HttpStatusCode.Unauthorized,
+                        NodeLiveTestResponse(
+                            ok = false,
+                            error = InvalidAgentKey.ERROR,
+                            message = InvalidAgentKey.MESSAGE,
+                        ),
+                    )
+                is RunNodeLiveTestResult.AgentUnreachable ->
+                    call.respond(
+                        HttpStatusCode.BadGateway,
+                        NodeLiveTestResponse(
+                            ok = false,
+                            error = "agent_unreachable",
+                            message = result.detail.ifBlank { "Host agent did not answer" },
+                        ),
+                    )
+            }
+        }
+
         get("/api/nodes") {
             val items = toolkit.listNodes().map { it.toResponse(toolkit.networkFacts) }
             call.respond(NodesListResponse(items = items, count = items.size))
@@ -784,6 +1114,191 @@ fun Application.nodesApiRoutes(toolkit: Toolkit)
                         NodeClientVersionResponse(
                             ok = false,
                             error = InvalidAgentKey.ERROR,
+                            message = InvalidAgentKey.MESSAGE,
+                        ),
+                    )
+            }
+        }
+
+        get("/api/nodes/{id}/rpc-auth") {
+            val id = call.parameters["id"].orEmpty()
+            when (val result = toolkit.getNodeRpcAuth(id))
+            {
+                is GetNodeRpcAuthResult.Ok ->
+                    call.respond(
+                        NodeRpcAuthResponse(
+                            nodeId = result.view.nodeId,
+                            user = result.view.user,
+                            password = result.view.password,
+                            path = result.view.path,
+                        ),
+                    )
+                GetNodeRpcAuthResult.NotApplicable ->
+                    call.respond(
+                        NodeRpcAuthResponse(
+                            ok = true,
+                            nodeId = id,
+                            error = "not_applicable",
+                            message = "This network uses cookie auth (no rpcuser/rpcpassword)",
+                        ),
+                    )
+                GetNodeRpcAuthResult.NotFound ->
+                    call.respond(HttpStatusCode.NotFound, NodeRpcAuthResponse(ok = false, error = "not_found"))
+                GetNodeRpcAuthResult.ServerNotFound ->
+                    call.respond(
+                        HttpStatusCode.NotFound,
+                        NodeRpcAuthResponse(ok = false, error = "server_not_found"),
+                    )
+                GetNodeRpcAuthResult.AgentUnreachable ->
+                    call.respond(
+                        HttpStatusCode.BadGateway,
+                        NodeRpcAuthResponse(
+                            ok = false,
+                            error = "agent_unreachable",
+                            message = "Host agent did not answer",
+                        ),
+                    )
+                GetNodeRpcAuthResult.InvalidAgentKey ->
+                    call.respond(
+                        HttpStatusCode.Unauthorized,
+                        NodeRpcAuthResponse(
+                            ok = false,
+                            error = InvalidAgentKey.ERROR,
+                            message = InvalidAgentKey.MESSAGE,
+                        ),
+                    )
+            }
+        }
+
+        get("/api/nodes/{id}/host-deps") {
+            val id = call.parameters["id"].orEmpty()
+            when (val result = toolkit.buildNodeHostDepsPlan(id))
+            {
+                is GetNodeHostDepsPlanResult.Ok ->
+                    call.respond(
+                        NodeHostDepsPlanResponse(
+                            nodeId = result.plan.nodeId,
+                            deps = result.plan.deps.map {
+                                NodeHostDepItemResponse(
+                                    id = it.id,
+                                    kind = it.kind,
+                                    name = it.name,
+                                    javaMajor = it.javaMajor,
+                                    label = it.label,
+                                )
+                            },
+                            count = result.plan.deps.size,
+                        ),
+                    )
+                GetNodeHostDepsPlanResult.NotFound ->
+                    call.respond(HttpStatusCode.NotFound, NodeHostDepsPlanResponse(ok = false, error = "not_found"))
+            }
+        }
+
+        post("/api/nodes/{id}/host-deps/start") {
+            val id = call.parameters["id"].orEmpty()
+            when (val result = toolkit.startNodeHostDeps(id))
+            {
+                is StartNodeHostDepsResult.Ok ->
+                    call.respond(
+                        NodeHostDepsStartResponse(
+                            nodeId = id,
+                            jobId = result.jobId,
+                            deps = result.deps.map {
+                                NodeHostDepItemResponse(
+                                    id = it.id,
+                                    kind = it.kind,
+                                    name = it.name,
+                                    javaMajor = it.javaMajor,
+                                    label = it.label,
+                                )
+                            },
+                        ),
+                    )
+                StartNodeHostDepsResult.NothingToInstall ->
+                    call.respond(
+                        NodeHostDepsStartResponse(
+                            nodeId = id,
+                            ready = true,
+                            message = "All host dependencies already present",
+                        ),
+                    )
+                StartNodeHostDepsResult.NotFound ->
+                    call.respond(HttpStatusCode.NotFound, NodeHostDepsStartResponse(ok = false, error = "not_found"))
+                StartNodeHostDepsResult.ServerNotFound ->
+                    call.respond(
+                        HttpStatusCode.NotFound,
+                        NodeHostDepsStartResponse(ok = false, error = "server_not_found"),
+                    )
+                StartNodeHostDepsResult.AgentUnreachable ->
+                    call.respond(
+                        HttpStatusCode.BadGateway,
+                        NodeHostDepsStartResponse(
+                            ok = false,
+                            error = "agent_unreachable",
+                            message = "Host agent did not answer",
+                        ),
+                    )
+                StartNodeHostDepsResult.InvalidAgentKey ->
+                    call.respond(
+                        HttpStatusCode.Unauthorized,
+                        NodeHostDepsStartResponse(
+                            ok = false,
+                            error = InvalidAgentKey.ERROR,
+                            message = InvalidAgentKey.MESSAGE,
+                        ),
+                    )
+            }
+        }
+
+        get("/api/nodes/{id}/host-deps/progress") {
+            val id = call.parameters["id"].orEmpty()
+            val jobId = call.request.queryParameters["job_id"].orEmpty()
+            when (val result = toolkit.getNodeHostDepsProgress(id, jobId))
+            {
+                is GetNodeHostDepsProgressResult.Ok ->
+                    call.respond(
+                        NodeHostDepsProgressResponse(
+                            jobId = result.progress.jobId,
+                            phase = result.progress.phase,
+                            detail = result.progress.detail,
+                            pct = result.progress.pct,
+                            currentId = result.progress.currentId,
+                            items = result.progress.items.map {
+                                NodeHostDepProgressItemResponse(
+                                    id = it.id,
+                                    status = it.status,
+                                    detail = it.detail,
+                                )
+                            },
+                            ready = result.progress.ready,
+                            failed = result.progress.failed,
+                            error = result.progress.error,
+                            logTail = result.progress.logTail,
+                        ),
+                    )
+                GetNodeHostDepsProgressResult.NotFound ->
+                    call.respond(HttpStatusCode.NotFound, NodeHostDepsProgressResponse(ok = false, message = "not_found"))
+                GetNodeHostDepsProgressResult.ServerNotFound ->
+                    call.respond(
+                        HttpStatusCode.NotFound,
+                        NodeHostDepsProgressResponse(ok = false, message = "server_not_found"),
+                    )
+                GetNodeHostDepsProgressResult.JobNotFound ->
+                    call.respond(
+                        HttpStatusCode.NotFound,
+                        NodeHostDepsProgressResponse(ok = false, jobId = jobId, message = "job not found"),
+                    )
+                GetNodeHostDepsProgressResult.AgentUnreachable ->
+                    call.respond(
+                        HttpStatusCode.BadGateway,
+                        NodeHostDepsProgressResponse(ok = false, message = "agent_unreachable"),
+                    )
+                GetNodeHostDepsProgressResult.InvalidAgentKey ->
+                    call.respond(
+                        HttpStatusCode.Unauthorized,
+                        NodeHostDepsProgressResponse(
+                            ok = false,
                             message = InvalidAgentKey.MESSAGE,
                         ),
                     )
@@ -1088,6 +1603,9 @@ private fun Node.toResponse(facts: NetworkFactsRepository) = NodeItemResponse(
     clientVersion = clientVersion,
     clientLatest = clientLatest,
     clientUpdateAvailable = clientUpdateAvailable,
+    liveTestStatus = liveTestStatus,
+    liveTestAt = liveTestAt,
+    liveTestError = liveTestError,
     needsSnapshot = nodeNeedsSnapshot(this, facts),
     diskLayout = parseDiskLayoutJson(diskLayoutJson),
     installOptions = parseDiskLayoutJson(installOptionsJson),

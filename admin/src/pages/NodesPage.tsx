@@ -39,6 +39,7 @@ import {
   type RPCProxyStats,
   type NodeNetStats,
   type ClientUpdateInfo,
+  type ClientRow,
 } from '../api'
 import { fmtMbps } from '../lib/format'
 import { isModN, isTypingTarget, modNLabel } from '../lib/keyboard'
@@ -75,7 +76,7 @@ import {
 import { ClientUpdateModal } from '../components/ClientUpdateModal'
 import { formatClientVersion } from '../lib/format'
 import { isNoSnapshotNetwork } from '../lib/network'
-import { hasClientNetworkEnvs } from '../lib/clientNetworks'
+import { hasAddableNetworkEnvs } from '../lib/clientNetworks'
 import { getNetworks, networkLabel, useNetworksCatalog } from '../lib/networksCatalog'
 import { navigate } from '../lib/router'
 import { blockProps, blockData, blockAttrs } from '../lib/blockId'
@@ -535,6 +536,11 @@ export function NodesPage() {
   const [knownServers, setKnownServers] = useState<{ value: string; label: string }[]>([])
   const [addOpen, setAddOpen] = useState(false)
   const [hasClients, setHasClients] = useState(false)
+  const [clientRows, setClientRows] = useState<ClientRow[]>([])
+
+  useEffect(() => {
+    setHasClients(hasAddableNetworkEnvs(networks, clientRows))
+  }, [networks, clientRows])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -597,7 +603,7 @@ export function NodesPage() {
         api.registryList().catch(() => null),
         api.clients().catch(() => null),
       ])
-      setHasClients(hasClientNetworkEnvs(clients?.rows || []))
+      setClientRows(clients?.rows || [])
 
       const servers = new Map<string, RegistryNode>()
       for (const s of registry?.items || []) {
@@ -632,7 +638,8 @@ export function NodesPage() {
           agentReachable: w.agent_reachable ?? null,
           clientVersion: w.client_version || '',
           clientLatest: w.client_latest || '',
-          clientUpdateAvailable: !!w.client_update_available,
+          clientUpdateAvailable:
+            typeof w.client_update_available === 'boolean' ? w.client_update_available : undefined,
           rpcProxy: w.rpc_proxy || null,
           nodeNet: w.node_net || null,
           createdAt: w.created_at || '',
@@ -966,7 +973,7 @@ export function NodesPage() {
             label={
               hasClients
                 ? `Add node (${modNLabel()})`
-                : 'Add a client first — Add node only lists Clients networks and envs'
+                : 'Enable a network on Networks and download its client first'
             }
           >
             <span>
@@ -1084,7 +1091,7 @@ export function NodesPage() {
                 <Text size="sm" c="dimmed">
                   {hasClients
                     ? 'Register a server, then Add node: network → env → server. The node is saved awaiting ports; install is the next step.'
-                    : 'Add a client first. Add node only lists networks and environments that already appear on Clients.'}
+                    : 'Enable a network on Networks, then download its client on Clients. Add node only lists that intersection.'}
                 </Text>
                 <Group>
                   {hasClients ? (
@@ -1322,9 +1329,13 @@ function NodeCardView({
   const clientLabel = formatClientVersion(clientVersion) || '—'
   const clientLatestLabel = formatClientVersion(clientLatest)
   const clientKnown = clientLabel !== '—'
+  // Trust API pin compare; string ≠ only when the flag was never set (legacy rows).
   const clientOutdated =
-    !!clientUpdateAvailable ||
-    (clientKnown && !!clientLatestLabel && clientLabel !== clientLatestLabel)
+    clientUpdateAvailable === true ||
+    (clientUpdateAvailable == null &&
+      clientKnown &&
+      !!clientLatestLabel &&
+      clientLabel !== clientLatestLabel)
   const clientCurrent = clientKnown && !clientOutdated
   const clientColor = clientOutdated ? 'orange' : clientCurrent ? 'teal' : 'dimmed'
   const [clientInfo, setClientInfo] = useState<ClientUpdateInfo | null>(null)

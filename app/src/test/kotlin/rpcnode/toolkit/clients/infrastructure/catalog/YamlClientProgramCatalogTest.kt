@@ -93,7 +93,7 @@ class YamlClientProgramCatalogTest
                 "http_solidity" to 18190,
                 "http_pbft" to 18191,
                 "grpc_fullnode" to 50051,
-                "grpc_solidity" to 50061,
+                "grpc_solidity" to 50081,
                 "grpc_pbft" to 50071,
                 "metrics" to 9527,
             ),
@@ -119,7 +119,7 @@ class YamlClientProgramCatalogTest
         val tron = catalog.programsFor(NetworkId.TRON, EnvId.MAINNET).single()
         val tronByRole = tron.ports.associateBy { it.role }
         assertEquals(PortConfigPolicy.REQUIRED, tronByRole["p2p"]?.configPolicy)
-        assertEquals(PortConfigPolicy.NONE, tronByRole["grpc_solidity"]?.configPolicy)
+        assertEquals(PortConfigPolicy.REQUIRED, tronByRole["grpc_solidity"]?.configPolicy)
         assertEquals(PortConfigPolicy.NONE, tronByRole["metrics"]?.configPolicy)
     }
 

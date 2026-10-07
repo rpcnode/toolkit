@@ -1,6 +1,19 @@
 # Disk plan, host sizing. Snapshot required via Agave (cluster download), not toolkit aria2.
 # Directory name is the network id. Ports live in clients.yml beside this file.
 label: Solana
+hostPackages:
+  - bzip2
+  - git
+  - build-essential
+  - pkg-config
+  - libudev-dev
+  - llvm
+  - libclang-dev
+  - clang
+  - cmake
+  - protobuf-compiler
+  - libssl-dev
+  - libprotobuf-dev
 diskRoles:
   - id: ledger
     label: Ledger

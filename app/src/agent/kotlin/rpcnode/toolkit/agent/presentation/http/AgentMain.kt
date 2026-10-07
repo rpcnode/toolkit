@@ -22,14 +22,21 @@ import rpcnode.toolkit.agent.application.enroll.EnrollPanelUseCase
 import rpcnode.toolkit.agent.application.enroll.ProbePanel
 import rpcnode.toolkit.agent.application.enroll.UnenrollPanelUseCase
 import rpcnode.toolkit.agent.application.metrics.CollectHostMetricsUseCase
+import rpcnode.toolkit.agent.application.hostdeps.GetHostDepsProgressUseCase
+import rpcnode.toolkit.agent.application.hostdeps.HostDepsJobStore
+import rpcnode.toolkit.agent.application.hostdeps.ProbeHostDepsUseCase
+import rpcnode.toolkit.agent.application.hostdeps.StartHostDepsInstallUseCase
 import rpcnode.toolkit.agent.application.node.ChainNodeRuntime
 import rpcnode.toolkit.agent.application.node.ControlNodeUnitUseCase
 import rpcnode.toolkit.agent.application.node.GetNodeClientVersionUseCase
 import rpcnode.toolkit.agent.application.node.GetNodeProcessLogsUseCase
+import rpcnode.toolkit.agent.application.node.GetNodeRpcAuthUseCase
+import rpcnode.toolkit.agent.application.node.ListLocalNodesUseCase
 import rpcnode.toolkit.agent.application.node.NodeHeightPusher
 import rpcnode.toolkit.agent.application.node.PushNodeHeightsUseCase
 import rpcnode.toolkit.agent.application.node.RemoveNodeHostUseCase
 import rpcnode.toolkit.agent.application.node.StartNodeProcessUseCase
+import rpcnode.toolkit.agent.application.node.TestNodeUseCase
 import rpcnode.toolkit.agent.application.ports.CheckPortsUseCase
 import rpcnode.toolkit.agent.application.push.HostMetricsPusher
 import rpcnode.toolkit.agent.application.push.PushHostMetricsUseCase
@@ -59,6 +66,7 @@ import rpcnode.toolkit.agent.infrastructure.log.applyDevLogLevels
 import rpcnode.toolkit.agent.infrastructure.log.installAgentFileLog
 import rpcnode.toolkit.agent.infrastructure.net.TcpPortProbe
 import rpcnode.toolkit.agent.infrastructure.node.FileRunningNodeRegistry
+import rpcnode.toolkit.agent.infrastructure.node.HostLocalNodesInventory
 import rpcnode.toolkit.agent.infrastructure.proc.LsblkHostDiskProbe
 import rpcnode.toolkit.agent.infrastructure.proc.LinuxHostMetrics
 import rpcnode.toolkit.agent.infrastructure.proc.runningAsRoot
@@ -205,6 +213,10 @@ private fun runAgentServer()
     )
     val nodeEvents = HttpPanelNodeEventsClient()
     val runningNodes = FileRunningNodeRegistry(dirs.configDir().resolve("running-nodes.json"))
+    val hostDepsJobs = HostDepsJobStore()
+    val probeHostDeps = ProbeHostDepsUseCase()
+    val startHostDepsInstall = StartHostDepsInstallUseCase(store = hostDepsJobs, scope = pushScope)
+    val getHostDepsProgress = GetHostDepsProgressUseCase(hostDepsJobs)
     val bitcoreStarter = BitcoreNodeProcessStarter()
     val chainRuntimes = mapOf(
         "tron" to ChainNodeRuntime(
@@ -340,8 +352,14 @@ private fun runAgentServer()
                 startNode = startNode,
                 getNodeLogs = GetNodeProcessLogsUseCase(runningNodes),
                 getNodeClientVersion = GetNodeClientVersionUseCase(runningNodes, enrollment),
+                getNodeRpcAuth = GetNodeRpcAuthUseCase(runningNodes),
+                listLocalNodes = ListLocalNodesUseCase(HostLocalNodesInventory(runningNodes)),
+                probeHostDeps = probeHostDeps,
+                startHostDepsInstall = startHostDepsInstall,
+                getHostDepsProgress = getHostDepsProgress,
                 controlNodeUnit = ControlNodeUnitUseCase(runningNodes),
                 removeNodeHost = RemoveNodeHostUseCase(runningNodes),
+                testNode = TestNodeUseCase(runningNodes, chainRuntimes),
             )
         }.start(wait = true)
     }
@@ -397,8 +415,14 @@ fun Application.module(
     startNode: StartNodeProcessUseCase? = null,
     getNodeLogs: GetNodeProcessLogsUseCase? = null,
     getNodeClientVersion: GetNodeClientVersionUseCase? = null,
+    getNodeRpcAuth: GetNodeRpcAuthUseCase? = null,
+    listLocalNodes: ListLocalNodesUseCase? = null,
+    probeHostDeps: ProbeHostDepsUseCase? = null,
+    startHostDepsInstall: StartHostDepsInstallUseCase? = null,
+    getHostDepsProgress: GetHostDepsProgressUseCase? = null,
     controlNodeUnit: ControlNodeUnitUseCase? = null,
     removeNodeHost: RemoveNodeHostUseCase? = null,
+    testNode: TestNodeUseCase? = null,
 )
 {
     installHttpCallLogging()
@@ -429,7 +453,13 @@ fun Application.module(
         startNode = startNode,
         getNodeLogs = getNodeLogs,
         getNodeClientVersion = getNodeClientVersion,
+        getNodeRpcAuth = getNodeRpcAuth,
+        listLocalNodes = listLocalNodes,
+        probeHostDeps = probeHostDeps,
+        startHostDepsInstall = startHostDepsInstall,
+        getHostDepsProgress = getHostDepsProgress,
         controlNodeUnit = controlNodeUnit,
         removeNodeHost = removeNodeHost,
+        testNode = testNode,
     )
 }

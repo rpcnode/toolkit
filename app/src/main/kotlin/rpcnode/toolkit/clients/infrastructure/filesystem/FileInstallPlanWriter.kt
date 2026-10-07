@@ -36,10 +36,12 @@ class FileInstallPlanWriter : InstallPlanWriter
             },
         )
         plan.launch?.let { launch ->
-            root["launch"] = linkedMapOf(
+            val m = linkedMapOf<String, Any?>(
                 "kind" to launch.kind,
                 "entry" to launch.entry,
             )
+            launch.javaMajor?.let { m["java_major"] = it }
+            root["launch"] = m
         }
         Files.writeString(dir.resolve("install-plan.yml"), yaml.dump(root))
         Unit

@@ -68,8 +68,16 @@ private fun parseFacts(yamlText: String): NetworkFacts
         diskMedia = (root["diskMedia"] as? String)?.trim()?.lowercase()?.ifEmpty { null },
         diskNotes = (root["diskNotes"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
         oneEnvPerHost = root["oneEnvPerHost"] as? Boolean ?: false,
+        hostPackages = parseHostPackages(root["hostPackages"]),
         clientConfig = parseClientConfigFacts(root["clientConfig"]),
     )
+}
+
+private fun parseHostPackages(raw: Any?): List<String>
+{
+    val list = raw as? List<*> ?: return emptyList()
+    return list.mapNotNull { (it as? String)?.trim()?.takeIf { s -> s.isNotEmpty() } }
+        .distinct()
 }
 
 private fun parseEnvFacts(raw: Any?): NetworkEnvFacts?

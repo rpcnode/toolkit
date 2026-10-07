@@ -5,6 +5,7 @@ export const STEPS_TRON: { id: WizardStepId; label: string; blurb: string }[] = 
   { id: 'ports', label: 'Check ports', blurb: 'Tip catalog ports' },
   { id: 'disks', label: 'Disks', blurb: 'Layout & file limits' },
   { id: 'clients', label: 'Clients', blurb: 'Sync binaries to host' },
+  { id: 'host_deps', label: 'Host deps', blurb: 'OS packages & Java' },
   { id: 'snapshot', label: 'Snapshot', blurb: 'Download chain data' },
   { id: 'start', label: 'Start', blurb: 'Launch node' },
   { id: 'sync', label: 'Sync', blurb: 'Catch up to tip' },
@@ -15,6 +16,7 @@ export const STEPS_NO_SNAP: { id: WizardStepId; label: string; blurb: string }[]
   { id: 'ports', label: 'Check ports', blurb: 'Tip catalog ports' },
   { id: 'disks', label: 'Disks', blurb: 'Layout & file limits' },
   { id: 'clients', label: 'Clients', blurb: 'Sync binaries to host' },
+  { id: 'host_deps', label: 'Host deps', blurb: 'OS packages & Java' },
   { id: 'start', label: 'Start', blurb: 'Launch node' },
   { id: 'sync', label: 'Sync', blurb: 'Catch up to tip' },
   { id: 'done', label: 'Finish', blurb: 'Node ready' },
@@ -73,6 +75,14 @@ export function wizardStepFromPanelStatus(
   }
   if (wl === 'needs_clients' || wl === 'clients_error') {
     return 'clients'
+  }
+  if (
+    wl === 'needs_host_deps' ||
+    wl === 'host_deps_running' ||
+    wl === 'host_deps_error' ||
+    wl === 'host_deps_complete'
+  ) {
+    return wl === 'host_deps_complete' ? (allowSnapshot ? 'snapshot' : 'start') : 'host_deps'
   }
   if (
     allowSnapshot &&

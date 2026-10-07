@@ -47,6 +47,7 @@ import rpcnode.toolkit.chains.hyperliquid.infrastructure.start.HyperliquidNodeSt
 import rpcnode.toolkit.chains.ton.infrastructure.http.TonNetworkTipProbe
 import rpcnode.toolkit.chains.ton.infrastructure.start.TonNodeStart
 import rpcnode.toolkit.chains.tron.infrastructure.http.TronClientReleaseResolver
+import rpcnode.toolkit.chains.tron.infrastructure.http.TronNileArtifactUrlResolver
 import rpcnode.toolkit.chains.tron.infrastructure.http.TronNetworkTipProbe
 import rpcnode.toolkit.chains.tron.infrastructure.http.TronSnapshotResolver
 import rpcnode.toolkit.chains.tron.infrastructure.start.TronNodeStart
@@ -61,6 +62,14 @@ import rpcnode.toolkit.nodes.application.logs.GetNodeLogsUseCase
 import rpcnode.toolkit.nodes.application.process.ControlNodeProcessUseCase
 import rpcnode.toolkit.nodes.application.version.GetNodeClientVersionUseCase
 import rpcnode.toolkit.nodes.infrastructure.http.HttpNodeClientVersionHostClient
+import rpcnode.toolkit.nodes.application.rpcauth.GetNodeRpcAuthUseCase
+import rpcnode.toolkit.nodes.infrastructure.http.HttpNodeRpcAuthHostClient
+import rpcnode.toolkit.nodes.application.discover.DiscoverServerNodesUseCase
+import rpcnode.toolkit.nodes.infrastructure.http.HttpHostInstalledNodesClient
+import rpcnode.toolkit.nodes.application.hostdeps.BuildNodeHostDepsPlanUseCase
+import rpcnode.toolkit.nodes.application.hostdeps.GetNodeHostDepsProgressUseCase
+import rpcnode.toolkit.nodes.application.hostdeps.StartNodeHostDepsUseCase
+import rpcnode.toolkit.nodes.infrastructure.http.HttpHostDepsClient
 import rpcnode.toolkit.nodes.infrastructure.http.HttpNodeLogsHostClient
 import rpcnode.toolkit.nodes.infrastructure.http.HttpNodeProcessControlClient
 import rpcnode.toolkit.nodes.infrastructure.http.HttpRemoveNodeOnHost
@@ -111,6 +120,13 @@ import rpcnode.toolkit.nodes.application.get.GetNodeUseCase
 import rpcnode.toolkit.nodes.application.list.ListNodesUseCase
 import rpcnode.toolkit.nodes.application.options.SaveNodeInstallOptionsUseCase
 import rpcnode.toolkit.nodes.application.config.ApplyNodeClientConfigUseCase
+import rpcnode.toolkit.nodes.application.config.asEnsureNodeClients
+import rpcnode.toolkit.nodes.application.nodeconfig.GetNodeConfigUseCase
+import rpcnode.toolkit.nodes.application.nodeconfig.SaveNodeConfigUseCase
+import rpcnode.toolkit.nodes.application.nodeconfig.asNodeRestart
+import rpcnode.toolkit.nodes.application.test.RunNodeLiveTestUseCase
+import rpcnode.toolkit.nodes.infrastructure.http.HttpHostFiles
+import rpcnode.toolkit.nodes.infrastructure.http.HttpTestNodeOnHost
 import rpcnode.toolkit.nodes.application.ingest.IngestNodeHeightsUseCase
 import rpcnode.toolkit.nodes.application.ingest.MarkNodeStartedUseCase
 import rpcnode.toolkit.nodes.application.start.StartNodeUseCase
@@ -273,7 +289,15 @@ class Toolkit(
     val getNodeHeight: GetNodeHeightUseCase,
     val getNodeLogs: GetNodeLogsUseCase,
     val getNodeClientVersion: GetNodeClientVersionUseCase,
+    val getNodeRpcAuth: GetNodeRpcAuthUseCase,
+    val discoverServerNodes: DiscoverServerNodesUseCase,
+    val buildNodeHostDepsPlan: BuildNodeHostDepsPlanUseCase,
+    val startNodeHostDeps: StartNodeHostDepsUseCase,
+    val getNodeHostDepsProgress: GetNodeHostDepsProgressUseCase,
     val controlNodeProcess: ControlNodeProcessUseCase,
+    val runNodeLiveTest: RunNodeLiveTestUseCase,
+    val getNodeConfig: GetNodeConfigUseCase,
+    val saveNodeConfig: SaveNodeConfigUseCase,
     val markNodeStarted: MarkNodeStartedUseCase,
     val ingestNodeHeights: IngestNodeHeightsUseCase,
     val ingestClientUpdateProgress: IngestClientUpdateProgressUseCase,
@@ -415,6 +439,7 @@ class Toolkit(
                 clientReleaseResolvers = clientReleaseResolvers,
                 artifactUrlResolvers = mapOf(
                     NetworkId.ETHEREUM to EthereumGethArtifactUrlResolver(),
+                    NetworkId.TRON to TronNileArtifactUrlResolver(),
                 ),
             )
 
@@ -503,6 +528,7 @@ class Toolkit(
                 resolveDestDir = resolveSnapshotDestDir,
                 startOnHost = HttpStartNodeOnHost(),
                 chainStarts = chainStartsMap,
+                ensureClients = applyNodeClientConfig.asEnsureNodeClients(),
             )
             val updateClientOnHost = HttpUpdateClientOnHost()
             val clientUpdateProgress = ClientUpdateProgressStore()
@@ -553,11 +579,68 @@ class Toolkit(
                 resolveDestDir = resolveSnapshotDestDir,
                 fetchOnHost = HttpNodeClientVersionHostClient(),
             )
+            val getNodeRpcAuth = GetNodeRpcAuthUseCase(
+                nodes = nodeRepository,
+                servers = serverRepository,
+                resolveDestDir = resolveSnapshotDestDir,
+                fetchOnHost = HttpNodeRpcAuthHostClient(),
+            )
+            val discoverServerNodes = DiscoverServerNodesUseCase(
+                servers = serverRepository,
+                nodes = nodeRepository,
+                catalog = catalog,
+                fetchOnHost = HttpHostInstalledNodesClient(),
+            )
+            val hostDepsClient = HttpHostDepsClient()
+            val buildNodeHostDepsPlan = BuildNodeHostDepsPlanUseCase(
+                nodes = nodeRepository,
+                facts = networkFacts,
+                catalog = clientProgramCatalog,
+            )
+            val startNodeHostDeps = StartNodeHostDepsUseCase(
+                nodes = nodeRepository,
+                servers = serverRepository,
+                buildPlan = buildNodeHostDepsPlan,
+                probeOnHost = hostDepsClient,
+                startOnHost = hostDepsClient,
+            )
+            val getNodeHostDepsProgress = GetNodeHostDepsProgressUseCase(
+                nodes = nodeRepository,
+                servers = serverRepository,
+                fetchOnHost = hostDepsClient,
+            )
             val controlNodeProcess = ControlNodeProcessUseCase(
                 nodes = nodeRepository,
                 servers = serverRepository,
                 controlOnHost = HttpNodeProcessControlClient(),
                 startNode = startNode,
+            )
+            val hostFiles = HttpHostFiles()
+            val getNodeConfig = GetNodeConfigUseCase(
+                nodes = nodeRepository,
+                servers = serverRepository,
+                facts = networkFacts,
+                resolveDestDir = resolveSnapshotDestDir,
+                files = hostFiles,
+            )
+            val saveNodeConfig = SaveNodeConfigUseCase(
+                nodes = nodeRepository,
+                servers = serverRepository,
+                facts = networkFacts,
+                catalog = clientProgramCatalog,
+                resolveDestDir = resolveSnapshotDestDir,
+                files = hostFiles,
+                restartNode = controlNodeProcess.asNodeRestart(),
+            )
+            val runNodeLiveTest = RunNodeLiveTestUseCase(
+                nodes = nodeRepository,
+                servers = serverRepository,
+                facts = networkFacts,
+                catalog = clientProgramCatalog,
+                resolveDestDir = resolveSnapshotDestDir,
+                chainStarts = chainStartsMap,
+                testOnHost = HttpTestNodeOnHost(),
+                publicTip = tipCache::tip,
             )
             val startNodeSnapshot = StartNodeSnapshotUseCase(
                 nodes = nodeRepository,
@@ -567,6 +650,7 @@ class Toolkit(
                 preferSnapshot = preferCdnSnapshot,
                 resolveDestDir = resolveSnapshotDestDir,
                 startOnHost = snapshotHost,
+                ensureClients = applyNodeClientConfig.asEnsureNodeClients(),
             )
 
             return Toolkit(
@@ -722,7 +806,15 @@ class Toolkit(
                 getNodeHeight = getNodeHeight,
                 getNodeLogs = getNodeLogs,
                 getNodeClientVersion = getNodeClientVersion,
+                getNodeRpcAuth = getNodeRpcAuth,
+                discoverServerNodes = discoverServerNodes,
+                buildNodeHostDepsPlan = buildNodeHostDepsPlan,
+                startNodeHostDeps = startNodeHostDeps,
+                getNodeHostDepsProgress = getNodeHostDepsProgress,
                 controlNodeProcess = controlNodeProcess,
+                runNodeLiveTest = runNodeLiveTest,
+                getNodeConfig = getNodeConfig,
+                saveNodeConfig = saveNodeConfig,
                 markNodeStarted = MarkNodeStartedUseCase(
                     serverRepository,
                     nodeRepository,

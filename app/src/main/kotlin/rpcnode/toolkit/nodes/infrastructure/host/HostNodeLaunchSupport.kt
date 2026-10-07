@@ -322,6 +322,20 @@ object HostNodeLaunchSupport
             "java_jar" ->
             {
                 val required = record.javaMajor
+                if (required != null)
+                {
+                    try
+                    {
+                        EnsureHostJava.ensure(required)
+                    }
+                    catch (e: Exception)
+                    {
+                        return HostNodeStartResult.Failed(
+                            e.message?.trim()?.ifBlank { null }
+                                ?: "Java $required required but could not be installed",
+                        )
+                    }
+                }
                 when (val java = HostJavaBinary.resolve(required))
                 {
                     is HostJavaBinary.ResolveResult.Found ->
@@ -337,7 +351,7 @@ object HostNodeLaunchSupport
         val unitPath = Path.of("/etc/systemd/system", unit)
         val description = "rpcnode $network/$env (${record.nodeId})"
         val customBody = nodeDir.resolve(".toolkit/systemd.unit.body")
-        val unitBody = if (Files.isRegularFile(customBody))
+        val rendered = if (Files.isRegularFile(customBody))
         {
             Files.readString(customBody)
         }
@@ -356,6 +370,7 @@ object HostNodeLaunchSupport
                 ),
             )
         }
+        val unitBody = withOptionalRpcAuthEnvironmentFile(rendered, absNodeDir)
         return try
         {
             Files.writeString(unitPath, unitBody)
@@ -806,5 +821,27 @@ object HostNodeLaunchSupport
         {
             Files.move(top, wantedPath)
         }
+    }
+
+    /**
+     * When sync wrote `.toolkit/rpc-auth.env` (Dash / LTC / …), point the unit at it so
+     * helpers sharing the unit see BITCOIN_RPC_*. Optional `-` prefix: missing file is OK.
+     */
+    internal fun withOptionalRpcAuthEnvironmentFile(unitBody: String, nodeDir: Path): String
+    {
+        val authEnv = nodeDir.resolve(".toolkit/rpc-auth.env")
+        if (!Files.isRegularFile(authEnv))
+        {
+            return unitBody
+        }
+        val line = "EnvironmentFile=-${authEnv.toAbsolutePath()}"
+        if (unitBody.contains("EnvironmentFile=") && unitBody.contains("rpc-auth.env"))
+        {
+            return unitBody
+        }
+        val service = Regex("(?m)^\\[Service\\]\\s*$")
+        val match = service.find(unitBody) ?: return unitBody.trimEnd() + "\n\n[Service]\n$line\n"
+        val insertAt = match.range.last + 1
+        return unitBody.substring(0, insertAt) + "\n$line" + unitBody.substring(insertAt)
     }
 }

@@ -37,7 +37,7 @@ data class ClientConfigBindingFacts(
 
 /**
  * Live “Test connect” action for a Start binding (`testConnect` in network.yml).
- * [kind] selects the panel probe (`eth_rpc`, `beacon_genesis`).
+ * [kind] selects the panel probe (`eth_rpc`, `beacon_genesis`, `tron_http`).
  */
 data class ClientConfigTestConnectFacts(
     val kind: String,
@@ -133,5 +133,10 @@ data class NetworkFacts(
     val diskMedia: String? = null,
     val diskNotes: List<String> = emptyList(),
     val oneEnvPerHost: Boolean = false,
+    /**
+     * Debian-style package names the host needs before Start
+     * (`hostPackages` in chains/<id>/network.yml). Common tools are added by the panel.
+     */
+    val hostPackages: List<String> = emptyList(),
     val clientConfig: ClientConfigFacts? = null,
 )

@@ -5,6 +5,7 @@ import rpcnode.toolkit.catalog.domain.NetworkId
 import rpcnode.toolkit.clients.domain.repository.ClientProgramCatalog
 import rpcnode.toolkit.clients.domain.repository.ClientVersionRepository
 import rpcnode.toolkit.networks.domain.repository.NetworkFactsRepository
+import rpcnode.toolkit.nodes.application.config.EnsureNodeClients
 import rpcnode.toolkit.nodes.application.config.clientConfigTemplateName
 import rpcnode.toolkit.nodes.application.options.SaveNodeInstallOptionsResult
 import rpcnode.toolkit.nodes.application.options.SaveNodeInstallOptionsUseCase
@@ -55,6 +56,7 @@ class StartNodeUseCase(
     private val resolveDestDir: ResolveSnapshotDestDirUseCase,
     private val startOnHost: StartNodeOnHost,
     private val chainStarts: Map<NetworkId, ChainNodeStart>,
+    private val ensureClients: EnsureNodeClients? = null,
     private val clock: () -> String = { Instant.now().toString() },
 )
 {
@@ -117,24 +119,38 @@ class StartNodeUseCase(
             return StartNodeResult.AgentUnreachable("missing agent url or key")
         }
 
-        val started = startOnHost.start(
-            server.agentUrl,
-            server.agentKey,
-            StartNodeOnHostCommand(
-                nodeId = node.id.value,
-                network = node.network.value,
-                env = node.env.value,
-                nodeDir = nodeDir,
-                configFile = templateName,
-                httpPort = httpPort,
-                program = clientConfig.program,
-                clientVersion = clients.find(node.network, node.env, clientConfig.program)
-                    ?.currentVersion
-                    .orEmpty(),
-                launch = plan.launch,
-                height = plan.height,
-            ),
-        ) ?: return StartNodeResult.AgentUnreachable()
+        val command = StartNodeOnHostCommand(
+            nodeId = node.id.value,
+            network = node.network.value,
+            env = node.env.value,
+            nodeDir = nodeDir,
+            configFile = templateName,
+            httpPort = httpPort,
+            program = clientConfig.program,
+            clientVersion = clients.find(node.network, node.env, clientConfig.program)
+                ?.currentVersion
+                .orEmpty(),
+            launch = plan.launch,
+            height = plan.height,
+        )
+        var started = startOnHost.start(server.agentUrl, server.agentKey, command)
+            ?: return StartNodeResult.AgentUnreachable()
+
+        // The client binary is not in node_dir (e.g. the snapshot type moved node_dir after the
+        // Clients step): sync it there once and retry instead of leaving the node unstartable.
+        if (started is StartNodeOnHostResult.Failed &&
+            ensureClients != null &&
+            started.message.contains(LAUNCH_ENTRY_MISSING, ignoreCase = true)
+        )
+        {
+            val syncError = ensureClients.ensure(node.id.value, node.installOptionsJson.ifBlank { null })
+            if (syncError != null)
+            {
+                return StartNodeResult.SyncFailed(error = "client_sync", message = syncError)
+            }
+            started = startOnHost.start(server.agentUrl, server.agentKey, command)
+                ?: return StartNodeResult.AgentUnreachable()
+        }
 
         return when (started)
         {
@@ -181,3 +197,6 @@ class StartNodeUseCase(
         }
     }
 }
+
+/** Agent message when the launch entry (e.g. FullNode.jar) is not in node_dir. */
+private const val LAUNCH_ENTRY_MISSING = "launch entry missing"

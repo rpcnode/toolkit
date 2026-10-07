@@ -1,6 +1,9 @@
 # Disk plan, host sizing. Snapshot required — official bnb-chain/bsc-snapshots (fetch-snapshot.sh).
 # Directory name is the network id. Ports live in clients.yml beside this file.
 label: BNB Smart Chain
+hostPackages:
+  - aria2
+  - lz4
 diskRoles:
   - id: chaindata
     label: chaindata

@@ -410,7 +410,7 @@ object AgentSystemInstall
     /**
      * Stop other JVMs running the agent jar / main, but never the current install/update process.
      */
-    internal fun killOtherAgentProcesses(
+    fun killOtherAgentProcesses(
         selfPid: Long = ProcessHandle.current().pid(),
         candidates: () -> Sequence<Pair<Long, String>> = {
             ProcessHandle.allProcesses().iterator().asSequence().mapNotNull { ph ->

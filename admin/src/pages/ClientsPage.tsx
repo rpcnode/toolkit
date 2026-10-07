@@ -349,7 +349,8 @@ export function ClientsPage() {
             <Anchor component="button" type="button" onClick={() => navigate({ name: 'settings' })}>
               Settings
             </Anchor>{' '}
-            before probing or downloading clients (rate limits). Add a client after the token is set — Check latest, then Download. The network appears once you Add.
+            before probing or downloading clients (rate limits). Add a network under Networks first,
+            then Add client here — Check latest, then Download.
           </Alert>
         ) : null}
 
@@ -1163,7 +1164,7 @@ function AddClientModal({
       setWant(0)
       return
     }
-    void api.networksAll().then(
+    void api.networks().then(
       (r) => setItems(r.items || []),
       (e) => setError(String((e as Error).message || e)),
     )
@@ -1173,6 +1174,14 @@ function AddClientModal({
     if (!opened || !network || !env) {
       setRelease(null)
       setVersionLoading(false)
+      return
+    }
+    const net = items.find((x) => x.id === network)
+    const isPinOnly = !!net?.pin_only
+    if (!isPinOnly && !tokenReady) {
+      setRelease(null)
+      setVersionLoading(false)
+      setError('Set a GitHub token in Settings before adding a client.')
       return
     }
     let stop = false
@@ -1206,7 +1215,7 @@ function AddClientModal({
     return () => {
       stop = true
     }
-  }, [opened, network, env])
+  }, [opened, network, env, tokenReady, items])
 
   useEffect(() => {
     if (!opened || !downloading || !network || !env) return
@@ -1318,26 +1327,28 @@ function AddClientModal({
       withCloseButton={!locked}
     >
       <Stack gap="md">
-        {error ? <Alert color="red">{error}</Alert> : null}
+        {!pinOnly && !tokenReady ? (
+          <Alert color="red" title="GitHub token required">
+            Set a GitHub token in{' '}
+            <Anchor component="button" type="button" onClick={() => navigate({ name: 'settings' })}>
+              Settings
+            </Anchor>{' '}
+            before adding a client. Latest version is read from GitHub; Download needs the token.
+          </Alert>
+        ) : null}
+        {error && (tokenReady || pinOnly) ? <Alert color="red">{error}</Alert> : null}
         {pinOnly ? (
           <Alert color="blue">
             Pin-only network — no CDN tarball. Add registers the host install pin (MyTonCtrl /
             similar); binaries are provisioned on the node at Start.
           </Alert>
-        ) : !tokenReady ? (
-          <Alert color="yellow">
-            Set a GitHub token in{' '}
-            <Anchor component="button" type="button" onClick={() => navigate({ name: 'settings' })}>
-              Settings
-            </Anchor>{' '}
-            first. Latest version is read from GitHub; Download needs the token.
-          </Alert>
-        ) : (
+        ) : tokenReady ? (
           <Text size="sm" c="dimmed">
-            Pick a network and env. Latest client version is resolved for that env, then Download
-            writes it under the clients directory and pins it in the database.
+            Pick a network already added under Networks, then an env. Latest client version is
+            resolved for that env, then Download writes it under the clients directory and pins it
+            in the database.
           </Text>
-        )}
+        ) : null}
         <Select
           label="Network"
           data={netChoices}
@@ -1353,6 +1364,8 @@ function AddClientModal({
           searchable
           required
           disabled={locked}
+          nothingFoundMessage="No networks added — add one under Networks first"
+          placeholder={items.length ? 'Select network' : 'No networks added yet'}
         />
         <Select
           label="Env"
@@ -1408,7 +1421,13 @@ function AddClientModal({
           </Button>
           {!preview && !release ? (
             <Button color="teal" disabled>
-              Select network and env
+              {!network || !env
+                ? 'Select network and env'
+                : !pinOnly && !tokenReady
+                  ? 'Set GitHub token in Settings'
+                  : versionLoading
+                    ? 'Resolving…'
+                    : 'Select network and env'}
             </Button>
           ) : allReady ? (
             <Button color="teal" onClick={handleClose}>
@@ -1421,13 +1440,15 @@ function AddClientModal({
               disabled={!canDownload || (!pinOnly && !tokenReady)}
               onClick={() => void startDownload()}
             >
-              {error && !downloading
-                ? pinOnly
-                  ? 'Retry add'
-                  : 'Retry download'
-                : pinOnly
-                  ? 'Add'
-                  : 'Download'}
+              {!pinOnly && !tokenReady
+                ? 'Set GitHub token in Settings'
+                : error && !downloading
+                  ? pinOnly
+                    ? 'Retry add'
+                    : 'Retry download'
+                  : pinOnly
+                    ? 'Add'
+                    : 'Download'}
             </Button>
           )}
         </Group>

@@ -149,7 +149,7 @@ class StartSnapshotDownloadUseCase(
             else ->
                 buildList {
                     add(
-                        if (already > 0)
+                        if (already > 0 && !streamUnpack)
                         {
                             "Resuming snapshot download from ${formatBytes(already)}"
                         }
@@ -161,7 +161,14 @@ class StartSnapshotDownloadUseCase(
                     add("url=$url")
                     add("dest=$destDir")
                     sizeBytes?.takeIf { it > 0 }?.let { add("size=${formatBytes(it)}") }
-                    add("partial file: .toolkit/$ARCHIVE_NAME (aria2/curl; detached systemd unit)")
+                    if (streamUnpack)
+                    {
+                        add("mode=stream unpack (HTTP → tar, no staging archive; resumes after disconnects)")
+                    }
+                    else
+                    {
+                        add("partial file: .toolkit/$ARCHIVE_NAME (aria2/curl; detached systemd unit)")
+                    }
                 }
         }
         val job = withLog(
@@ -302,11 +309,32 @@ class StartSnapshotDownloadUseCase(
                 withLog(
                     initial.copy(
                         phase = "download",
-                        detail = "Downloading archive (resumable) into ${initial.destDir}/.toolkit…",
+                        detail = if (initial.streamUnpack)
+                        {
+                            "Streaming download + extract into ${initial.destDir}…"
+                        }
+                        else
+                        {
+                            "Downloading archive (resumable) into ${initial.destDir}/.toolkit…"
+                        },
                     ),
-                    "Downloading archive (aria2 multi-conn or curl; detached systemd unit when available)",
+                    if (initial.streamUnpack)
+                    {
+                        "Stream unpack: HTTP → tar -xzf - (no .tgz on disk)"
+                    }
+                    else
+                    {
+                        "Downloading archive (aria2 multi-conn or curl; detached systemd unit when available)"
+                    },
                     "dest=${initial.destDir}",
-                    "partial kept under .toolkit/$ARCHIVE_NAME — survives agent restart",
+                    if (initial.streamUnpack)
+                    {
+                        "reconnects with HTTP Range after a network drop — lost only if the agent restarts"
+                    }
+                    else
+                    {
+                        "partial kept under .toolkit/$ARCHIVE_NAME — survives agent restart"
+                    },
                 ),
             )
             var lastLoggedDetail = ""
@@ -316,6 +344,7 @@ class StartSnapshotDownloadUseCase(
                 url = initial.url,
                 destDir = dest,
                 expectedBytes = initial.sizeBytes,
+                streamUnpack = initial.streamUnpack,
                 onProcess = { proc -> processes[id] = proc },
                 onUnit = { unit -> downloadUnits[id] = unit },
                 isAborted = { jobs[id]?.isActive == false },
@@ -351,13 +380,14 @@ class StartSnapshotDownloadUseCase(
                     total != null && total > 0 -> (copied.toDouble() / total.toDouble()) * 100.0
                     else -> null
                 }
-                val detail = if (currentPhase == "extract")
+                val detail = when
                 {
-                    "Extracting… → ${initial.destDir}"
-                }
-                else
-                {
-                    progressDetail(copied, total) + " → ${initial.destDir}"
+                    initial.streamUnpack ->
+                        "Streaming… ${progressDetail(copied, total)} → ${initial.destDir}"
+                    currentPhase == "extract" ->
+                        "Extracting… ${extractDetail(copied, total)} → ${initial.destDir}"
+                    else ->
+                        progressDetail(copied, total) + " → ${initial.destDir}"
                 }
                 val base = (store.read(id) ?: initial).copy(
                     pct = pct ?: 0.0,
@@ -849,11 +879,23 @@ class StartSnapshotDownloadUseCase(
         }
         try
         {
-            Files.walk(dir).use { stream ->
-                stream
-                    .sorted(Comparator.reverseOrder())
-                    .filter { it != dir }
-                    .forEach { Files.deleteIfExists(it) }
+            Files.list(dir).use { children ->
+                children.forEach { child ->
+                    if (SnapshotStreamExtract.shouldPreserveAlongsideSnapshot(child))
+                    {
+                        return@forEach
+                    }
+                    if (Files.isDirectory(child))
+                    {
+                        Files.walk(child).use { stream ->
+                            stream.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+                        }
+                    }
+                    else
+                    {
+                        Files.deleteIfExists(child)
+                    }
+                }
             }
         }
         catch (e: Exception)
@@ -874,6 +916,18 @@ class StartSnapshotDownloadUseCase(
         {
             "Downloaded $got"
         }
+    }
+
+    /** Archive bytes fed to tar so far (compressed size — the unpacked size is unknown). */
+    private fun extractDetail(copied: Long, total: Long?): String
+    {
+        val got = formatBytes(copied)
+        if (total == null || total <= 0)
+        {
+            return "$got read"
+        }
+        val pct = (copied.toDouble() / total.toDouble() * 100.0).coerceIn(0.0, 100.0)
+        return "%.0f%% (%s / %s of archive)".format(pct, got, formatBytes(total))
     }
 
     private fun formatBytes(bytes: Long): String = SnapshotHttpDownload.formatBytes(bytes)

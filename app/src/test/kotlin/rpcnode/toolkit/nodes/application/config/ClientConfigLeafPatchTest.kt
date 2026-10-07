@@ -47,6 +47,35 @@ class ClientConfigLeafPatchTest
     }
 
     @Test
+    fun hocon_keeps_http_and_rpc_solidity_ports_apart()
+    {
+        // java-tron template: solidityPort lives in http {} and, commented, in rpc {}.
+        val template = """
+            node {
+              http {
+                fullNodePort = 8090
+                solidityPort = 8091
+              }
+              rpc {
+                port = 50051
+                #solidityPort = 50061
+              }
+            }
+        """.trimIndent()
+        val out = ClientConfigLeafPatch.applyHocon(
+            template,
+            linkedMapOf(
+                "node.http.solidityPort" to "18290",
+                "node.rpc.solidityPort" to "50161",
+            ),
+        )
+        assertTrue(out.contains("node.http.solidityPort = 18290"), out)
+        assertTrue(out.contains("node.rpc.solidityPort = 50161"), out)
+        assertFalse(Regex("""(?m)^\s*solidityPort = 50161""").containsMatchIn(out), "http line must not take the rpc port\n$out")
+        assertTrue(out.contains("solidityPort = 8091"), "original http line is left alone, the override wins\n$out")
+    }
+
+    @Test
     fun leaf_key_candidates_longest_first()
     {
         assertEquals(

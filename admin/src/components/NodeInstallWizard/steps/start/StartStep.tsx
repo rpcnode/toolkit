@@ -63,6 +63,7 @@ function View({
     applyL1ParentChoice,
     wantsL1ParentPicker,
     goBackToClientsOrEarlier,
+    goBackToHostDepsOrEarlier,
     setUiStep,
     agentAckedStep,
     manualBackToClients,
@@ -226,9 +227,13 @@ function View({
                       >
                         <Stack gap={2} style={{ minWidth: 0, flex: '0 1 48%' }}>
                           <Text size="sm" fw={600} className="mono">
-                            {row.path}
+                            {row.path.startsWith('_')
+                              ? row.description || row.path
+                              : row.path}
                           </Text>
-                          {row.description && row.description !== row.path ? (
+                          {row.description &&
+                          row.description !== row.path &&
+                          !row.path.startsWith('_') ? (
                             <Text size="xs" c="dimmed">
                               {row.description}
                             </Text>
@@ -382,7 +387,7 @@ function View({
                       manualBackToNodeType.current = false
                       manualBackToClients.current = false
                     } else {
-                      goBackToClientsOrEarlier()
+                      goBackToHostDepsOrEarlier()
                     }
                   }}
                 >

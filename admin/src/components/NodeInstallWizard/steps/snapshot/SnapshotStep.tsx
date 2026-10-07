@@ -45,6 +45,7 @@ function View({
     stopSnapshotPolling,
     continueFromSnapshot,
     goBackToClientsOrEarlier,
+    goBackToHostDepsOrEarlier,
     workload,
     error,
 }: WizardApi) {
@@ -61,10 +62,6 @@ function View({
                       : snapshotProgress?.phase || workload?.status || 'pending'}
                   </Badge>
                 </Group>
-                <Text c="dimmed" size="sm">
-                  Pick Full / Lite / Archive (per network), then download to the Disks path. CDN
-                  stores archives under /snapshots/{'{network}'}/{'{env}'}/{'{type}'}/.
-                </Text>
 
                 {snapshotOptionGroups.length > 0 ? (
                   <InstallOptionsPicker
@@ -334,7 +331,7 @@ function View({
                     variant="default"
                     onClick={() => {
                       stopSnapshotPolling()
-                      goBackToClientsOrEarlier()
+                      goBackToHostDepsOrEarlier()
                     }}
                   >
                     Back

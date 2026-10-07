@@ -177,9 +177,16 @@ object ClientConfigLeafPatch
         {
             return null
         }
-        if (matches.size > 1 && !key.contains('.'))
+        if (!key.contains('.'))
         {
-            return null
+            // A bare leaf name (`solidityPort`) can belong to several blocks (http {} and rpc {}).
+            // Commented examples (`#solidityPort = 50061`) count too: they belong to another block,
+            // so replacing the one active line would rewrite the wrong key.
+            val commented = Regex("""(?m)^\s*#\s*$escaped\s*=""").findAll(text).count()
+            if (matches.size + commented > 1)
+            {
+                return null
+            }
         }
         var first = true
         return re.replace(text) { m ->

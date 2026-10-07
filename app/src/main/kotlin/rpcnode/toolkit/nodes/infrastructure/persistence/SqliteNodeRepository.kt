@@ -193,6 +193,24 @@ class SqliteNodeRepository(
             } > 0
         }
 
+    override suspend fun saveLiveTest(
+        id: NodeId,
+        status: String,
+        at: String,
+        error: String,
+        updatedAt: String,
+    ): Boolean =
+        withContext(Dispatchers.IO) {
+            transaction(db.database) {
+                NodesTable.update({ NodesTable.id eq id.value }) {
+                    it[NodesTable.liveTestStatus] = status
+                    it[NodesTable.liveTestAt] = at
+                    it[NodesTable.liveTestError] = error
+                    it[NodesTable.updatedAt] = updatedAt
+                }
+            } > 0
+        }
+
     private fun ResultRow.toDomain() = Node(
         id = NodeId.parse(this[NodesTable.id]) ?: error("invalid node id"),
         serverId = ServerId.parse(this[NodesTable.serverId]) ?: error("invalid server id on node"),
@@ -214,6 +232,9 @@ class SqliteNodeRepository(
         clientVersion = this[NodesTable.clientVersion],
         clientLatest = this[NodesTable.clientLatest],
         clientUpdateAvailable = this[NodesTable.clientUpdateAvailable] != 0,
+        liveTestStatus = this[NodesTable.liveTestStatus],
+        liveTestAt = this[NodesTable.liveTestAt],
+        liveTestError = this[NodesTable.liveTestError],
         createdAt = this[NodesTable.createdAt],
         updatedAt = this[NodesTable.updatedAt],
     )

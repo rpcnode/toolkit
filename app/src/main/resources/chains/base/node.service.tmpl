@@ -9,12 +9,12 @@ ExecStart={{bin}} node \
   --datadir={{datadir}} \
   --log.stdout.format=json \
   --http \
-  --http.addr=127.0.0.1 \
+  --http.addr=0.0.0.0 \
   --http.port={{http_port}} \
   --http.api=eth,net,web3,txpool,debug \
   --http.corsdomain=* \
   --ws \
-  --ws.addr=127.0.0.1 \
+  --ws.addr=0.0.0.0 \
   --ws.port={{ws_port}} \
   --ws.api=eth,net,web3,txpool,debug \
   --ws.origins=* \

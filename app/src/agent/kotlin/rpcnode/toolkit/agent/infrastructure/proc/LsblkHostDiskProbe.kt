@@ -8,6 +8,8 @@ import rpcnode.toolkit.agent.domain.model.disksFromMounts
 import rpcnode.toolkit.agent.domain.model.formatSizeHuman
 import rpcnode.toolkit.agent.domain.model.plannedMountForDisk
 import rpcnode.toolkit.agent.domain.model.unusedFromInventory
+import rpcnode.toolkit.agent.domain.model.fixWslRootMount
+import rpcnode.toolkit.agent.domain.model.windowsDriveMounts
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -19,9 +21,22 @@ class LsblkHostDiskProbe : HostDiskProbe
         val lsblk = runCommand("lsblk", "-Jbn", "-o", "NAME,PATH,MODEL,SIZE,TYPE,ROTA,TRAN,MOUNTPOINT,FSTYPE,FSAVAIL,FSUSE%")
         if (lsblk.isNotBlank())
         {
-            return LsblkHostDiskParser.parse(lsblk)
+            return withWindowsDrives(LsblkHostDiskParser.parse(lsblk))
         }
-        return fallbackFromMounts()
+        return withWindowsDrives(fallbackFromMounts())
+    }
+
+    /** WSL only: C:\, J:\ … are 9p mounts that lsblk cannot see. No-op on a real Linux host. */
+    private fun withWindowsDrives(inv: HostDiskInventory): HostDiskInventory
+    {
+        val drives = windowsDriveMounts(readProc("mounts").orEmpty(), ::statMount)
+        if (drives.isEmpty())
+        {
+            return inv
+        }
+        val known = inv.mounts.map { it.target }.toSet()
+        val mounts = fixWslRootMount(inv.mounts) + drives.filter { it.target !in known }
+        return inv.copy(mounts = mounts.sortedBy { it.target })
     }
 
     private fun fallbackFromMounts(): HostDiskInventory

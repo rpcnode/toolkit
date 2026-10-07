@@ -42,6 +42,9 @@ interface NodeRepository
         clientUpdateAvailable: Boolean,
         updatedAt: String,
     ): Boolean
+
+    /** Result of the node page live "Test" (`pass` | `fail`). */
+    suspend fun saveLiveTest(id: NodeId, status: String, at: String, error: String, updatedAt: String): Boolean
 }
 
 sealed interface NodeInsertResult

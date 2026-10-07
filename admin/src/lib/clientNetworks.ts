@@ -23,11 +23,14 @@ export function hasClientNetworkEnvs(rows: ClientRow[]): boolean {
   return clientNetworkEnvMap(rows).size > 0
 }
 
-/** Catalog networks/envs that already appear on Clients. Extra client-only ids are appended. */
+/**
+ * Networks the operator enabled on Networks (`api.networks()` catalog) that also have
+ * at least one Clients env. Client pins alone do not surface a network here — otherwise
+ * Add node listed chains that were never added on Networks.
+ */
 export function networksWithClients(catalog: NetworkInfo[], rows: ClientRow[]): NetworkInfo[] {
   const have = clientNetworkEnvMap(rows)
   const result: NetworkInfo[] = []
-  const seen = new Set<string>()
 
   for (const n of catalog) {
     const envs = have.get(n.id)
@@ -39,13 +42,11 @@ export function networksWithClients(catalog: NetworkInfo[], rows: ClientRow[]): 
       (e) => !listed.some((x) => x.toLowerCase() === e.toLowerCase()),
     )
     result.push({ ...n, envs: [...listed, ...extra] })
-    seen.add(n.id)
-  }
-
-  for (const [id, envs] of have) {
-    if (seen.has(id)) continue
-    result.push({ id, label: id, envs: [...envs] })
   }
 
   return result
+}
+
+export function hasAddableNetworkEnvs(catalog: NetworkInfo[], rows: ClientRow[]): boolean {
+  return networksWithClients(catalog, rows).length > 0
 }

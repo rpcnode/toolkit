@@ -7,9 +7,9 @@ Wants=network-online.target
 Type=simple
 ExecStart={{bin}} \
   --datadir {{datadir}}{{config_flag}} \
-  --http --http.addr 127.0.0.1 --http.port {{http_port}} \
+  --http --http.addr 0.0.0.0 --http.port {{http_port}} \
   --http.api eth,net,web3,txpool,parlia \
-  --http.vhosts localhost \
+  --http.vhosts * \
   --rpc.allow-unprotected-txs \
   --syncmode full \
   --gcmode full \

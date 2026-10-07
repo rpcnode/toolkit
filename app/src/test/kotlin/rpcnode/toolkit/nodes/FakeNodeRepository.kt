@@ -102,6 +102,13 @@ class FakeNodeRepository(
         return true
     }
 
+    override suspend fun saveLiveTest(id: NodeId, status: String, at: String, error: String, updatedAt: String): Boolean
+    {
+        val node = byId[id] ?: return false
+        byId[id] = node.copy(liveTestStatus = status, liveTestAt = at, liveTestError = error, updatedAt = updatedAt)
+        return true
+    }
+
     override suspend fun updateClientVersion(
         id: NodeId,
         clientVersion: String,

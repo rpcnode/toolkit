@@ -12,6 +12,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import rpcnode.toolkit.clients.application.ClientManifestFileEntry
 import rpcnode.toolkit.clients.application.ClientManifestWriter
+import rpcnode.toolkit.clients.application.formatClientProgramsVersion
 
 @Serializable
 private data class ManifestFileDto(val name: String, val role: String, val url: String)
@@ -67,8 +68,13 @@ class FileClientManifestWriter : ClientManifestWriter
             notes = notes,
             files = files.map { ManifestFileDto(it.name, it.role, it.url) },
         )
-        Files.writeString(manifestPath, manifestJson.encodeToString(manifest.copy(fetchedAt = Instant.now().toString())))
-        Files.writeString(dir.resolve("VERSION"), version.ifBlank { "unknown" } + "\n")
+        val written = manifest.copy(fetchedAt = Instant.now().toString())
+        Files.writeString(manifestPath, manifestJson.encodeToString(written))
+        // Multi-program env dirs share one VERSION; never overwrite geth with lighthouse alone.
+        val versionLine = formatClientProgramsVersion(
+            written.programs.mapValues { (_, p) -> p.version },
+        ).ifBlank { version.ifBlank { "unknown" } }
+        Files.writeString(dir.resolve("VERSION"), versionLine + "\n")
         Unit
     }
 }

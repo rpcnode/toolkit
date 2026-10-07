@@ -13,8 +13,11 @@ import io.ktor.server.response.respond
 
 /**
  * Browser preflight (OPTIONS + JSON POST) is not covered by a GET Origin check.
- * Echo the request origin when it is on the allowlist so cookies can cross
+ * Echo the request origin when it is allowed so cookies can cross
  * localhost ↔ 127.0.0.1.
+ *
+ * Loopback Origins are always allowed (Vite often lands on :5174/:5175 when :5173
+ * is taken). Remote Origins must still match [PANEL_CORS_ORIGINS].
  */
 fun Application.installServerCors(origins: List<String>)
 {
@@ -54,6 +57,11 @@ fun Application.installServerCors(origins: List<String>)
 
 internal fun originAllowed(origin: String, allowed: Set<String>): Boolean
 {
+    // Local admin / Vite — any port. Browser Origin cannot be forged cross-site.
+    if (isLoopbackHttpOrigin(origin))
+    {
+        return true
+    }
     if (origin in allowed)
     {
         return true
@@ -62,7 +70,23 @@ internal fun originAllowed(origin: String, allowed: Set<String>): Boolean
     {
         "://localhost" in origin -> origin.replace("://localhost", "://127.0.0.1")
         "://127.0.0.1" in origin -> origin.replace("://127.0.0.1", "://localhost")
-        else -> return false
+        else -> null
     }
-    return swapped in allowed
+    return swapped != null && swapped in allowed
+}
+
+internal fun isLoopbackHttpOrigin(origin: String): Boolean
+{
+    return try
+    {
+        val u = java.net.URI(origin)
+        val host = (u.host ?: "").lowercase()
+        val scheme = (u.scheme ?: "").lowercase()
+        (scheme == "http" || scheme == "https") &&
+            (host == "localhost" || host == "127.0.0.1" || host == "::1")
+    }
+    catch (_: Exception)
+    {
+        false
+    }
 }

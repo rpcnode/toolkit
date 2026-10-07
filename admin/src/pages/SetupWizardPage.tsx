@@ -14,12 +14,10 @@ import { SetupShell } from '../components/SetupShell'
 import { blockProps } from '../lib/blockId'
 import {
   advertisedOrigin,
-  CDN_LISTEN_PORT,
   isLoopbackHost,
   originHost,
   pageHost,
   SERVER_LISTEN_PORT,
-  suggestedAdvertisedHost,
 } from '../lib/advertisedOrigin'
 
 const STEPS = [
@@ -33,12 +31,11 @@ const STEP_DOC = [
   {
     title: 'origin',
     lines: [
-      '// pick the server, then connect',
-      '// docker: never 127.0.0.1',
-      '// that is the container itself',
+      '// connect to the panel API',
+      '// local: http://127.0.0.1:8094',
+      '// agents need a reachable URL',
       '',
-      'server = http://<host>:8094',
-      'cdn    = http://<host>:8095',
+      'server = http://…:8094',
     ],
   },
   {
@@ -66,7 +63,6 @@ const STEP_DOC = [
     title: 'nets',
     lines: [
       '// enable only when client files are on disk',
-      '// pin-only (ton, …) skip the CDN',
       '// download happens on Clients first',
       '',
       'for (n in catalog) pick(n)',
@@ -137,8 +133,6 @@ export function SetupWizardPage() {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [origin, setOrigin] = useState('')
-  const [cdnOrigin, setCdnOrigin] = useState('')
-  const [advertiseHost, setAdvertiseHost] = useState('')
   const [settings, setSettings] = useState<PanelSettings | null>(null)
   const [checks, setChecks] = useState<SetupCheck[]>([])
   const [checkReady, setCheckReady] = useState(false)
@@ -148,56 +142,22 @@ export function SetupWizardPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const serverPreview = advertiseHost
-    ? advertisedOrigin(advertiseHost, SERVER_LISTEN_PORT)
-    : 'http://<host>:8094'
-  const cdnPreview = advertiseHost
-    ? advertisedOrigin(advertiseHost, CDN_LISTEN_PORT)
-    : 'http://<host>:8095'
-
-  function applyAdvertiseHost(next: string) {
-    setAdvertiseHost(next)
-    if (!next) return
-    setOrigin(advertisedOrigin(next, SERVER_LISTEN_PORT))
-    setCdnOrigin((prev) => {
-      if (!prev.trim()) return advertisedOrigin(next, CDN_LISTEN_PORT)
-      const oldHost = originHost(prev)
-      if (!oldHost || isLoopbackHost(oldHost)) return advertisedOrigin(next, CDN_LISTEN_PORT)
-      try {
-        const u = new URL(prev)
-        u.hostname = next
-        return u.origin
-      } catch {
-        return advertisedOrigin(next, CDN_LISTEN_PORT)
-      }
-    })
-  }
+  const page = pageHost()
+  const serverPreview = page
+    ? advertisedOrigin(page, SERVER_LISTEN_PORT)
+    : `http://127.0.0.1:${SERVER_LISTEN_PORT}`
 
   const loadSettings = useCallback(async () => {
     const s = await api.panelSettings()
     setSettings(s)
-    const host = suggestedAdvertisedHost(s.install_origin, s.presets?.panel)
-    setAdvertiseHost(host)
     if (s.install_origin) setOrigin(s.install_origin)
-    else setOrigin(host ? advertisedOrigin(host, SERVER_LISTEN_PORT) : '')
-    if (s.snapshot_cdn_origin || s.snapshot_cdn?.origin) {
-      setCdnOrigin(s.snapshot_cdn_origin || s.snapshot_cdn?.origin || '')
-    } else {
-      setCdnOrigin(host ? advertisedOrigin(host, CDN_LISTEN_PORT) : '')
-    }
-  }, [])
+    else setOrigin(serverPreview)
+  }, [serverPreview])
 
   useEffect(() => {
     const saved = getApiOriginOverride()
-    const host = suggestedAdvertisedHost(saved, typeof window !== 'undefined' ? window.location.origin : '')
-    if (host) {
-      applyAdvertiseHost(host)
-    } else if (saved) {
-      setOrigin(saved)
-      const h = originHost(saved)
-      if (h) setAdvertiseHost(h)
-    }
-  }, [])
+    setOrigin(saved || serverPreview)
+  }, [serverPreview])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -216,17 +176,11 @@ export function SetupWizardPage() {
   }, [step])
 
   async function persistOriginsAndProbe() {
-    const cdn = cdnOrigin.trim()
     await api.savePanelSettings({
       install_origin: origin.trim(),
-      ...(cdn ? { snapshot_cdn_origin: cdn } : {}),
     })
     await loadSettings()
     const res = await api.setupCheck()
-    const cdnCheck = (res.checks || []).find((c) => c.id === 'cdn')
-    if (cdn && cdnCheck && !cdnCheck.ok) {
-      setError(`cdn down  ${cdnCheck.detail || cdn}`)
-    }
     await api.setupStage('server')
     setChecks(res.checks || [])
     setCheckReady(!!res.ready)
@@ -235,12 +189,12 @@ export function SetupWizardPage() {
 
   async function submitOrigin() {
     if (!origin.trim()) {
-      setError('server required — host IP or DNS, not 127.0.0.1 if you run Docker')
+      setError('server required — full URL, e.g. http://127.0.0.1:8094')
       return
     }
     const serverHost = originHost(origin)
     if (isLoopbackHost(serverHost) && !isLoopbackHost(pageHost())) {
-      setError('server is 127.0.0.1 — other Docker containers cannot reach it. Use the host IP or DNS.')
+      setError('server is loopback — this browser cannot use it from another host. Use a reachable URL.')
       return
     }
     setBusy(true)
@@ -359,12 +313,10 @@ export function SetupWizardPage() {
   const originDocLines =
     step === 0
       ? [
-          '// pick the server, then connect',
-          '// docker: never 127.0.0.1',
-          '// that is the container itself',
+          '// connect to the panel API',
+          '// local IntelliJ: loopback is fine',
           '',
           `server = ${serverPreview}`,
-          `cdn    = ${cdnPreview}`,
         ]
       : doc.lines
 
@@ -383,52 +335,18 @@ export function SetupWizardPage() {
           {step === 0 && (
             <div className="setup-block" {...blockProps('setup.step.origin')}>
               <p className="setup-note">
-                first the server, then the password. docker: 127.0.0.1 is this
-                container — a node / CDN / agent in another container will not reach
-                it. Put the Docker host IP or DNS and the published port (server
-                :8094, cdn :8095).
+                panel API URL (default :8094). Local IntelliJ: keep 127.0.0.1 /
+                localhost. Docker / remote agents need a URL they can reach — not
+                the container&apos;s own loopback.
               </p>
-              <TextInput
-                variant="unstyled"
-                classNames={{ root: 'setup-field', input: 'setup-field__input', label: 'setup-field__label' }}
-                label="host"
-                placeholder="10.0.0.2 or solana.example"
-                value={advertiseHost}
-                onChange={(e) => applyAdvertiseHost(e.currentTarget.value.trim())}
-              />
-              <p className="setup-note">
-                will be{' '}
-                <span className="mono">{serverPreview}</span>
-                {' · '}
-                <span className="mono">{cdnPreview}</span>
-              </p>
-              {advertiseHost && isLoopbackHost(advertiseHost) ? (
-                <p className="setup-err">
-                  ! {advertiseHost} is loopback — only this process. Use the host IP
-                  you SSH to, or a DNS name.
-                </p>
-              ) : null}
               <TextInput
                 variant="unstyled"
                 classNames={{ root: 'setup-field', input: 'setup-field__input', label: 'setup-field__label' }}
                 label="server"
                 placeholder={serverPreview}
                 value={origin}
-                onChange={(e) => {
-                  const next = e.currentTarget.value.trim()
-                  setOrigin(next)
-                  const h = originHost(next)
-                  if (h) setAdvertiseHost(h)
-                }}
+                onChange={(e) => setOrigin(e.currentTarget.value.trim())}
                 required
-              />
-              <TextInput
-                variant="unstyled"
-                classNames={{ root: 'setup-field', input: 'setup-field__input', label: 'setup-field__label' }}
-                label="cdn"
-                placeholder={cdnPreview}
-                value={cdnOrigin}
-                onChange={(e) => setCdnOrigin(e.currentTarget.value.trim())}
               />
               <div className="setup-actions">
                 <SetupCmd busy={busy} onClick={() => void submitOrigin()}>

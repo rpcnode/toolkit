@@ -64,6 +64,11 @@ fun resolveClientConfigAssignments(
         {
             continue
         }
+        // Paths under `_panel.` are Start-step UI only (e.g. TRON fullnode_url probe).
+        if (b.path.startsWith("_"))
+        {
+            continue
+        }
         out[b.path] = value
     }
     return out

@@ -3,6 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib/java-env.sh
+. "$(dirname "$0")/lib/java-env.sh"
 APP_DIR="$ROOT/app"
 INSTALL_DIR="${PANEL_INSTALL_DIR:-$APP_DIR/public/install}"
 BUILD_FILE="$APP_DIR/build.gradle.kts"

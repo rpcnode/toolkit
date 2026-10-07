@@ -13,11 +13,18 @@ import io.ktor.server.routing.routing
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import rpcnode.toolkit.agent.application.enroll.EnrollPanelResult
+import rpcnode.toolkit.agent.application.hostdeps.GetHostDepsProgressUseCase
+import rpcnode.toolkit.agent.application.hostdeps.HostDepRequest
+import rpcnode.toolkit.agent.application.hostdeps.ProbeHostDepsUseCase
+import rpcnode.toolkit.agent.application.hostdeps.StartHostDepsInstallResult
+import rpcnode.toolkit.agent.application.hostdeps.StartHostDepsInstallUseCase
 import rpcnode.toolkit.agent.application.disks.GetHostDisksUseCase
 import rpcnode.toolkit.agent.application.sysctl.GetHostSysctlUseCase
 import rpcnode.toolkit.agent.domain.model.HostSysctlSnapshot
 import rpcnode.toolkit.agent.application.enroll.EnrollPanelUseCase
 import rpcnode.toolkit.agent.application.enroll.UnenrollPanelUseCase
+import rpcnode.toolkit.agent.application.files.ReadHostFileResult
+import rpcnode.toolkit.agent.application.files.ReadHostFileUseCase
 import rpcnode.toolkit.agent.application.files.WriteHostFileResult
 import rpcnode.toolkit.agent.application.files.WriteHostFileUseCase
 import rpcnode.toolkit.agent.application.client.ClientSyncCommand
@@ -38,11 +45,17 @@ import rpcnode.toolkit.agent.application.node.GetNodeClientVersionResult
 import rpcnode.toolkit.agent.application.node.GetNodeClientVersionUseCase
 import rpcnode.toolkit.agent.application.node.GetNodeProcessLogsResult
 import rpcnode.toolkit.agent.application.node.GetNodeProcessLogsUseCase
+import rpcnode.toolkit.agent.application.node.GetNodeRpcAuthResult
+import rpcnode.toolkit.agent.application.node.GetNodeRpcAuthUseCase
+import rpcnode.toolkit.agent.application.node.ListLocalNodesUseCase
+import rpcnode.toolkit.agent.application.node.LocalInstalledNode
 import rpcnode.toolkit.agent.application.node.NodeHeightPlan
 import rpcnode.toolkit.agent.application.node.NodeLaunchPlan
 import rpcnode.toolkit.agent.application.node.NodeStartCommand
 import rpcnode.toolkit.agent.application.node.NodeStartProcessResult
+import rpcnode.toolkit.agent.application.node.NodeTestCommand
 import rpcnode.toolkit.agent.application.node.StartNodeProcessUseCase
+import rpcnode.toolkit.agent.application.node.TestNodeUseCase
 import rpcnode.toolkit.agent.application.ports.CheckPortsUseCase
 import rpcnode.toolkit.agent.application.snapshot.GetSnapshotProgressUseCase
 import rpcnode.toolkit.agent.application.snapshot.ProbeSnapshotSpeedUseCase
@@ -283,6 +296,21 @@ data class AgentWriteFileResponse(
 )
 
 @Serializable
+data class AgentReadFileBody(
+    val path: String = "",
+)
+
+@Serializable
+data class AgentReadFileResponse(
+    val ok: Boolean = true,
+    val path: String? = null,
+    val exists: Boolean = false,
+    val content: String = "",
+    val error: String? = null,
+    val message: String? = null,
+)
+
+@Serializable
 data class AgentClientSyncBody(
     val network: String = "",
     val env: String = "",
@@ -423,6 +451,104 @@ data class AgentNodeClientVersionResponse(
 )
 
 @Serializable
+data class AgentNodeRpcAuthResponse(
+    val ok: Boolean = true,
+    @SerialName("node_id") val nodeId: String = "",
+    val user: String = "",
+    val password: String = "",
+    val path: String = "",
+    val error: String? = null,
+    val message: String? = null,
+)
+
+@Serializable
+data class AgentLocalNodeItemResponse(
+    val network: String = "",
+    val env: String = "",
+    val status: String = "present",
+    val source: String = "",
+    @SerialName("public_port") val publicPort: Int = 0,
+    @SerialName("agent_port") val agentPort: Int = 0,
+    @SerialName("node_http_port") val nodeHttpPort: Int = 0,
+    @SerialName("p2p_port") val p2pPort: Int = 0,
+)
+
+@Serializable
+data class AgentLocalNodesResponse(
+    val ok: Boolean = true,
+    val items: List<AgentLocalNodeItemResponse> = emptyList(),
+    val count: Int = 0,
+    val error: String? = null,
+    val message: String? = null,
+)
+
+@Serializable
+data class AgentHostDepRequestBody(
+    val id: String = "",
+    val kind: String = "package",
+    val name: String = "",
+    @SerialName("java_major") val javaMajor: Int = 0,
+)
+
+@Serializable
+data class AgentHostDepsProbeBody(
+    val deps: List<AgentHostDepRequestBody> = emptyList(),
+)
+
+@Serializable
+data class AgentHostDepProbeItemResponse(
+    val id: String = "",
+    val present: Boolean = false,
+    val detail: String = "",
+)
+
+@Serializable
+data class AgentHostDepsProbeResponse(
+    val ok: Boolean = true,
+    val items: List<AgentHostDepProbeItemResponse> = emptyList(),
+    val error: String? = null,
+    val message: String? = null,
+)
+
+@Serializable
+data class AgentHostDepsInstallBody(
+    @SerialName("job_id") val jobId: String = "",
+    val deps: List<AgentHostDepRequestBody> = emptyList(),
+)
+
+@Serializable
+data class AgentHostDepsInstallResponse(
+    val ok: Boolean = true,
+    @SerialName("job_id") val jobId: String = "",
+    val accepted: Boolean = false,
+    val error: String? = null,
+    val message: String? = null,
+)
+
+@Serializable
+data class AgentHostDepProgressItemResponse(
+    val id: String = "",
+    val status: String = "",
+    val detail: String = "",
+)
+
+@Serializable
+data class AgentHostDepsProgressResponse(
+    val ok: Boolean = true,
+    @SerialName("job_id") val jobId: String = "",
+    val phase: String = "",
+    val detail: String = "",
+    val pct: Int = 0,
+    @SerialName("current_id") val currentId: String = "",
+    val items: List<AgentHostDepProgressItemResponse> = emptyList(),
+    val ready: Boolean = false,
+    val failed: Boolean = false,
+    val error: String = "",
+    @SerialName("log_tail") val logTail: List<String> = emptyList(),
+    val message: String? = null,
+)
+
+@Serializable
 data class AgentNodeRemoveBody(
     @SerialName("node_id") val nodeId: String = "",
     val network: String = "",
@@ -445,6 +571,35 @@ data class AgentNodeUnitControlBody(
     @SerialName("node_id") val nodeId: String = "",
     val network: String = "",
     val env: String = "",
+)
+
+@Serializable
+data class AgentNodeTestBody(
+    @SerialName("node_id") val nodeId: String = "",
+    val network: String = "",
+    val env: String = "",
+    @SerialName("node_dir") val nodeDir: String = "",
+    @SerialName("http_port") val httpPort: Int = 0,
+    @SerialName("config_file") val configFile: String = "",
+)
+
+@Serializable
+data class AgentNodeTestCheckResponse(
+    val id: String,
+    val title: String,
+    val ok: Boolean,
+    val detail: String = "",
+    val error: String = "",
+)
+
+@Serializable
+data class AgentNodeTestResponse(
+    val ok: Boolean = true,
+    val network: String = "",
+    val env: String = "",
+    val checks: List<AgentNodeTestCheckResponse> = emptyList(),
+    val error: String = "",
+    val message: String = "",
 )
 
 @Serializable
@@ -506,13 +661,20 @@ fun Application.agentApiRoutes(
     snapshotProgress: GetSnapshotProgressUseCase,
     probeSnapshotSpeed: ProbeSnapshotSpeedUseCase,
     writeHostFile: WriteHostFileUseCase = WriteHostFileUseCase(),
+    readHostFile: ReadHostFileUseCase = ReadHostFileUseCase(),
     syncClient: SyncClientFromPanelUseCase? = null,
     updateClient: UpdateClientOnHostUseCase? = null,
     startNode: StartNodeProcessUseCase? = null,
     getNodeLogs: GetNodeProcessLogsUseCase? = null,
     getNodeClientVersion: GetNodeClientVersionUseCase? = null,
+    getNodeRpcAuth: GetNodeRpcAuthUseCase? = null,
+    listLocalNodes: ListLocalNodesUseCase? = null,
+    probeHostDeps: ProbeHostDepsUseCase? = null,
+    startHostDepsInstall: StartHostDepsInstallUseCase? = null,
+    getHostDepsProgress: GetHostDepsProgressUseCase? = null,
     controlNodeUnit: ControlNodeUnitUseCase? = null,
     removeNodeHost: RemoveNodeHostUseCase? = null,
+    testNode: TestNodeUseCase? = null,
 )
 {
     routing {
@@ -558,6 +720,116 @@ fun Application.agentApiRoutes(
                 return@get
             }
             call.respond(getHostDisks().toResponse())
+        }
+        get("/api/v1/nodes") {
+            if (!call.authorized(cfg.token))
+            {
+                return@get
+            }
+            val list = listLocalNodes
+            if (list == null)
+            {
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    AgentLocalNodesResponse(
+                        ok = false,
+                        error = "not_wired",
+                        message = "Local node inventory not configured",
+                    ),
+                )
+                return@get
+            }
+            val items = list().map { it.toResponse() }
+            call.respond(AgentLocalNodesResponse(items = items, count = items.size))
+        }
+        post("/api/v1/host/deps/probe") {
+            if (!call.authorized(cfg.token))
+            {
+                return@post
+            }
+            val probe = probeHostDeps
+            if (probe == null)
+            {
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    AgentHostDepsProbeResponse(ok = false, error = "not_wired"),
+                )
+                return@post
+            }
+            val body = call.receive<AgentHostDepsProbeBody>()
+            val items = probe(body.deps.map { it.toDomain() }).map {
+                AgentHostDepProbeItemResponse(id = it.id, present = it.present, detail = it.detail)
+            }
+            call.respond(AgentHostDepsProbeResponse(items = items))
+        }
+        post("/api/v1/host/deps/install") {
+            if (!call.authorized(cfg.token))
+            {
+                return@post
+            }
+            val start = startHostDepsInstall
+            if (start == null)
+            {
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    AgentHostDepsInstallResponse(ok = false, error = "not_wired"),
+                )
+                return@post
+            }
+            val body = call.receive<AgentHostDepsInstallBody>()
+            when (val result = start(body.jobId, body.deps.map { it.toDomain() }))
+            {
+                is StartHostDepsInstallResult.Started ->
+                    call.respond(AgentHostDepsInstallResponse(jobId = result.jobId, accepted = true))
+                is StartHostDepsInstallResult.AlreadyRunning ->
+                    call.respond(AgentHostDepsInstallResponse(jobId = result.jobId, accepted = true))
+                StartHostDepsInstallResult.Invalid ->
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        AgentHostDepsInstallResponse(ok = false, error = "invalid", message = "deps required"),
+                    )
+            }
+        }
+        get("/api/v1/host/deps/progress") {
+            if (!call.authorized(cfg.token))
+            {
+                return@get
+            }
+            val progress = getHostDepsProgress
+            if (progress == null)
+            {
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    AgentHostDepsProgressResponse(ok = false, message = "not_wired"),
+                )
+                return@get
+            }
+            val jobId = call.request.queryParameters["job_id"].orEmpty()
+            val snap = progress(jobId)
+            if (snap == null)
+            {
+                call.respond(
+                    HttpStatusCode.NotFound,
+                    AgentHostDepsProgressResponse(ok = false, jobId = jobId, message = "job not found"),
+                )
+                return@get
+            }
+            call.respond(
+                AgentHostDepsProgressResponse(
+                    jobId = snap.jobId,
+                    phase = snap.phase,
+                    detail = snap.detail,
+                    pct = snap.pct,
+                    currentId = snap.currentId,
+                    items = snap.items.map {
+                        AgentHostDepProgressItemResponse(id = it.id, status = it.status, detail = it.detail)
+                    },
+                    ready = snap.ready,
+                    failed = snap.failed,
+                    error = snap.error,
+                    logTail = snap.logTail,
+                ),
+            )
         }
         get("/api/v1/host/sysctl") {
             if (!call.authorized(cfg.token))
@@ -792,6 +1064,33 @@ fun Application.agentApiRoutes(
                     call.respond(
                         HttpStatusCode.InternalServerError,
                         AgentWriteFileResponse(ok = false, error = "write_failed", message = result.detail),
+                    )
+            }
+        }
+        post("/api/v1/files/read") {
+            if (!call.authorized(cfg.token))
+            {
+                return@post
+            }
+            val body = call.receive<AgentReadFileBody>()
+            when (val result = readHostFile(body.path))
+            {
+                is ReadHostFileResult.Ok ->
+                    call.respond(AgentReadFileResponse(path = result.path, exists = result.exists, content = result.content))
+                ReadHostFileResult.InvalidPath ->
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        AgentReadFileResponse(ok = false, error = "invalid_path", message = "Absolute path to a regular file required"),
+                    )
+                ReadHostFileResult.TooLarge ->
+                    call.respond(
+                        HttpStatusCode.PayloadTooLarge,
+                        AgentReadFileResponse(ok = false, error = "too_large", message = "File is larger than 2 MiB"),
+                    )
+                is ReadHostFileResult.Failed ->
+                    call.respond(
+                        HttpStatusCode.InternalServerError,
+                        AgentReadFileResponse(ok = false, error = "read_failed", message = result.detail),
                     )
             }
         }
@@ -1224,6 +1523,54 @@ fun Application.agentApiRoutes(
                     )
             }
         }
+        get("/api/v1/node/rpc-auth") {
+            if (!call.authorized(cfg.token))
+            {
+                return@get
+            }
+            val rpcAuth = getNodeRpcAuth
+            if (rpcAuth == null)
+            {
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    AgentNodeRpcAuthResponse(
+                        ok = false,
+                        error = "not_wired",
+                        message = "Node RPC auth not configured",
+                    ),
+                )
+                return@get
+            }
+            val nodeId = call.request.queryParameters["node_id"].orEmpty()
+            val network = call.request.queryParameters["network"]
+            val nodeDir = call.request.queryParameters["node_dir"]
+            when (val result = rpcAuth(nodeId, network, nodeDir))
+            {
+                is GetNodeRpcAuthResult.Ok ->
+                    call.respond(
+                        AgentNodeRpcAuthResponse(
+                            nodeId = result.view.nodeId,
+                            user = result.view.user,
+                            password = result.view.password,
+                            path = result.view.path,
+                        ),
+                    )
+                GetNodeRpcAuthResult.NotApplicable ->
+                    call.respond(
+                        AgentNodeRpcAuthResponse(
+                            ok = true,
+                            nodeId = nodeId,
+                            error = "not_applicable",
+                            message = "This network uses cookie auth (no rpcuser/rpcpassword)",
+                        ),
+                    )
+                GetNodeRpcAuthResult.NotFound ->
+                    call.respond(
+                        HttpStatusCode.NotFound,
+                        AgentNodeRpcAuthResponse(ok = false, error = "not_found", nodeId = nodeId),
+                    )
+            }
+        }
         post("/api/v1/node/process/stop") {
             if (!call.authorized(cfg.token))
             {
@@ -1272,6 +1619,43 @@ fun Application.agentApiRoutes(
                 control.start(body.nodeId, body.network, body.env),
                 body.nodeId,
                 "start",
+            )
+        }
+        post("/api/v1/node/test") {
+            if (!call.authorized(cfg.token))
+            {
+                return@post
+            }
+            val tester = testNode
+            if (tester == null)
+            {
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    AgentNodeTestResponse(ok = false, error = "not_wired", message = "Node test not configured"),
+                )
+                return@post
+            }
+            val body = call.receive<AgentNodeTestBody>()
+            val report = tester(
+                NodeTestCommand(
+                    nodeId = body.nodeId,
+                    network = body.network,
+                    env = body.env,
+                    nodeDir = body.nodeDir,
+                    httpPort = body.httpPort,
+                    configFile = body.configFile,
+                ),
+            )
+            call.respond(
+                AgentNodeTestResponse(
+                    ok = report.ok,
+                    network = report.network,
+                    env = report.env,
+                    checks = report.checks.map {
+                        AgentNodeTestCheckResponse(it.id, it.title, it.ok, it.detail, it.error)
+                    },
+                    error = report.error,
+                ),
             )
         }
         post("/api/v1/node/remove") {
@@ -1403,6 +1787,24 @@ private suspend fun ApplicationCall.respondNodeUnitControl(
             )
     }
 }
+
+private fun AgentHostDepRequestBody.toDomain() = HostDepRequest(
+    id = id.trim().ifEmpty { name.trim().ifEmpty { "dep" } },
+    kind = kind.trim().ifEmpty { "package" },
+    name = name.trim().ifEmpty { id.trim() },
+    javaMajor = javaMajor,
+)
+
+private fun LocalInstalledNode.toResponse() = AgentLocalNodeItemResponse(
+    network = network,
+    env = env,
+    status = status,
+    source = source,
+    publicPort = publicPort,
+    agentPort = agentPort,
+    nodeHttpPort = nodeHttpPort,
+    p2pPort = p2pPort,
+)
 
 private fun HostDiskInventory.toResponse() = AgentHostDisksResponse(
     disks = disks.map { it.toResponse() },

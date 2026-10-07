@@ -58,7 +58,7 @@ object SuiUnitBodies
             appendLine()
             appendLine("network-address: \"/ip4/127.0.0.1/tcp/8080/http\"")
             appendLine("metrics-address: \"127.0.0.1:$metricsPort\"")
-            appendLine("json-rpc-address: \"127.0.0.1:$rpcPort\"")
+            appendLine("json-rpc-address: \"0.0.0.0:$rpcPort\"")
             appendLine("enable-event-processing: $enableEventProcessing")
             appendLine()
             appendLine("p2p-config:")

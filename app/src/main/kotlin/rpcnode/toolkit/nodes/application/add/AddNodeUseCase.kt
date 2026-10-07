@@ -5,6 +5,8 @@ import java.time.Instant
 import rpcnode.toolkit.catalog.domain.EnvId
 import rpcnode.toolkit.catalog.domain.NetworkCatalog
 import rpcnode.toolkit.catalog.domain.NetworkId
+import rpcnode.toolkit.clients.application.formatPinsVersion
+import rpcnode.toolkit.clients.application.pinsUpdateAvailable
 import rpcnode.toolkit.clients.domain.repository.ClientVersionRepository
 import rpcnode.toolkit.networks.domain.repository.NetworkFactsRepository
 import rpcnode.toolkit.nodes.domain.model.Node
@@ -12,7 +14,6 @@ import rpcnode.toolkit.nodes.domain.model.NodeId
 import rpcnode.toolkit.nodes.domain.model.NodeStatus
 import rpcnode.toolkit.nodes.domain.repository.NodeInsertResult
 import rpcnode.toolkit.nodes.domain.repository.NodeRepository
-import rpcnode.toolkit.nodes.application.ingest.looseSameVersion
 import rpcnode.toolkit.servers.domain.model.ServerId
 import rpcnode.toolkit.servers.domain.repository.ServerRepository
 
@@ -122,26 +123,24 @@ class AddNodeUseCase(
 
     private suspend fun clientVersionAtAdd(network: NetworkId, env: EnvId): ClientVersionFields
     {
-        val pin = clientPin(network, env) ?: return ClientVersionFields()
-        val clientVersion = pin.currentVersion.trim()
+        val pins = clients.list().filter { it.network == network && it.env == env && it.currentVersion.isNotBlank() }
+        if (pins.isEmpty())
+        {
+            return ClientVersionFields()
+        }
+        val primary = facts.factsFor(network)?.clientConfig?.program?.trim().orEmpty()
+        val clientVersion = formatPinsVersion(pins, preferLatest = false)
         if (clientVersion.isEmpty())
         {
             return ClientVersionFields()
         }
-        val clientLatest = pin.latestVersion.trim().ifEmpty { clientVersion }
-        val clientUpdateAvailable = clientLatest.isNotEmpty() && !looseSameVersion(clientVersion, clientLatest)
+        val clientLatest = formatPinsVersion(pins, preferLatest = true).ifEmpty { clientVersion }
         return ClientVersionFields(
             clientVersion = clientVersion,
             clientLatest = clientLatest,
-            clientUpdateAvailable = clientUpdateAvailable,
+            clientUpdateAvailable = pinsUpdateAvailable(clientVersion, pins, primary),
         )
     }
-
-    private suspend fun clientPin(network: NetworkId, env: EnvId) =
-        facts.factsFor(network)?.clientConfig?.program?.trim()?.takeIf { it.isNotEmpty() }?.let { program ->
-            clients.find(network, env, program)
-        }
-            ?: clients.list().firstOrNull { it.network == network && it.env == env && it.currentVersion.isNotBlank() }
 
     private data class ClientVersionFields(
         val clientVersion: String = "",

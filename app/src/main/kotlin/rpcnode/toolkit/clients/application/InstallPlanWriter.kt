@@ -12,6 +12,8 @@ data class InstallPlanFile(
 data class InstallPlanLaunch(
     val kind: String,
     val entry: String,
+    /** From `programs[].requirements.javaMajor` — host agent ensures this JDK on sync/start. */
+    val javaMajor: Int? = null,
 )
 
 data class InstallPlan(
@@ -63,12 +65,16 @@ fun inferArchFromFileName(name: String): String?
     }
 }
 
-fun inferLaunch(programId: String, files: List<InstallPlanFile>): InstallPlanLaunch?
+fun inferLaunch(
+    programId: String,
+    files: List<InstallPlanFile>,
+    javaMajor: Int? = null,
+): InstallPlanLaunch?
 {
     val jar = files.firstOrNull { it.path.endsWith(".jar", ignoreCase = true) }?.path
     if (jar != null)
     {
-        return InstallPlanLaunch(kind = "java_jar", entry = jar)
+        return InstallPlanLaunch(kind = "java_jar", entry = jar, javaMajor = javaMajor)
     }
     val tar = files.firstOrNull { it.role == "artifact" }?.path
     BitcoreChainSpecs.byProgramId(programId)?.let { spec ->

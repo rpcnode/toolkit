@@ -29,7 +29,7 @@ programs:
       - { role: http_solidity, port: 18190, label: "HTTP API (solidity)", config: required }
       - { role: http_pbft, port: 18191, label: "HTTP API (PBFT)", config: required }
       - { role: grpc_fullnode, port: 50051, label: "gRPC (fullnode)", config: required }
-      - { role: grpc_solidity, port: 50061, label: "gRPC (solidity)", config: none }
+      - { role: grpc_solidity, port: 50081, label: "gRPC (solidity)", config: required }
       - { role: grpc_pbft, port: 50071, label: "gRPC (PBFT)", config: required }
       - { role: metrics, port: 9527, label: "Metrics", config: none }
   - env: nile
@@ -49,7 +49,7 @@ programs:
       - { role: http_solidity, port: 18290, label: "HTTP API (solidity)", config: required }
       - { role: http_pbft, port: 18291, label: "HTTP API (PBFT)", config: required }
       - { role: grpc_fullnode, port: 50151, label: "gRPC (fullnode)", config: required }
-      - { role: grpc_solidity, port: 50161, label: "gRPC (solidity)", config: none }
+      - { role: grpc_solidity, port: 50161, label: "gRPC (solidity)", config: required }
       - { role: grpc_pbft, port: 50171, label: "gRPC (PBFT)", config: required }
       - { role: metrics, port: 9528, label: "Metrics", config: none }
   - env: shasta
@@ -70,7 +70,7 @@ programs:
       - { role: http_solidity, port: 18390, label: "HTTP API (solidity)", config: required }
       - { role: http_pbft, port: 18391, label: "HTTP API (PBFT)", config: required }
       - { role: grpc_fullnode, port: 50251, label: "gRPC (fullnode)", config: required }
-      - { role: grpc_solidity, port: 50261, label: "gRPC (solidity)", config: none }
+      - { role: grpc_solidity, port: 50261, label: "gRPC (solidity)", config: required }
       - { role: grpc_pbft, port: 50271, label: "gRPC (PBFT)", config: required }
       - { role: metrics, port: 9529, label: "Metrics", config: none }
 

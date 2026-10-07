@@ -85,7 +85,7 @@ object SolanaUnitBodies
             flags += "--no-xdp"
         }
         flags += "--rpc-port $rpcPort"
-        flags += "--rpc-bind-address 127.0.0.1"
+        flags += "--rpc-bind-address 0.0.0.0"
         if (p2pRange.isNotBlank())
         {
             flags += "--dynamic-port-range $p2pRange"

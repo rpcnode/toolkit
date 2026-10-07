@@ -1,6 +1,9 @@
 # Toncoin liteserver (MyTonCtrl). Pin-only — no CDN tarball.
 # Directory name is the network id. Ports live in clients.yml beside this file.
 label: Toncoin
+hostPackages:
+  - git
+  - python3-pip
 diskRoles:
   - id: blockchain
     label: Blockchain DB

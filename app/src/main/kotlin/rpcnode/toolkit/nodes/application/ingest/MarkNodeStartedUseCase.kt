@@ -1,6 +1,8 @@
 package rpcnode.toolkit.nodes.application.ingest
 
 import java.time.Instant
+import rpcnode.toolkit.clients.application.formatPinsVersion
+import rpcnode.toolkit.clients.application.pinsUpdateAvailable
 import rpcnode.toolkit.clients.domain.repository.ClientVersionRepository
 import rpcnode.toolkit.networks.application.tip.NetworkTipCache
 import rpcnode.toolkit.networks.domain.repository.NetworkFactsRepository
@@ -190,14 +192,22 @@ internal suspend fun compareToLatest(
     facts: NetworkFactsRepository,
 ): ClientVersionCompare
 {
-    val program = facts.factsFor(node.network)?.clientConfig?.program?.trim().orEmpty()
-    val pin = if (program.isNotEmpty())
+    val primary = facts.factsFor(node.network)?.clientConfig?.program?.trim().orEmpty()
+    val pins = clients.list().filter { it.network == node.network && it.env == node.env }
+    if (pins.size > 1)
     {
-        clients.find(node.network, node.env, program)
+        val latest = formatPinsVersion(pins, preferLatest = true)
+        val updateAvailable = pinsUpdateAvailable(clientVersion, pins, primary)
+        return ClientVersionCompare(latest = latest, updateAvailable = updateAvailable)
+    }
+    val pin = if (primary.isNotEmpty())
+    {
+        clients.find(node.network, node.env, primary)
     }
     else
     {
-        clients.list().firstOrNull { it.network == node.network && it.env == node.env && it.currentVersion.isNotBlank() }
+        pins.firstOrNull { it.currentVersion.isNotBlank() }
+            ?: clients.list().firstOrNull { it.network == node.network && it.env == node.env && it.currentVersion.isNotBlank() }
     }
     val latest = pin?.latestVersion?.trim()?.ifEmpty { null }
         ?: pin?.currentVersion?.trim().orEmpty()

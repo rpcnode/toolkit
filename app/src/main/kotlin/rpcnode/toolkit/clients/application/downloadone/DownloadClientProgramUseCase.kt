@@ -153,7 +153,7 @@ class DownloadClientProgramUseCase(
                     env = spec.env.value,
                     program = planProgram,
                     files = planFiles,
-                    launch = inferLaunch(planProgram, planFiles),
+                    launch = inferLaunch(planProgram, planFiles, spec.requirements.javaMajor),
                 ),
             )
 
@@ -209,7 +209,7 @@ class DownloadClientProgramUseCase(
                 env = spec.env.value,
                 program = planProgram,
                 files = planFiles,
-                launch = inferLaunch(planProgram, planFiles),
+                launch = inferLaunch(planProgram, planFiles, spec.requirements.javaMajor),
             ),
         )
     }

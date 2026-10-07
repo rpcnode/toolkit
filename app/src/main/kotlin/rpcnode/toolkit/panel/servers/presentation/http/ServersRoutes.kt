@@ -24,7 +24,30 @@ import rpcnode.toolkit.servers.application.update.UpdateServerResult
 import rpcnode.toolkit.servers.domain.model.Server
 import rpcnode.toolkit.servers.domain.model.ServerMetrics
 import rpcnode.toolkit.servers.domain.model.agentVersionOutdated
+import rpcnode.toolkit.nodes.application.discover.DiscoverServerNodesResult
 import rpcnode.toolkit.wiring.Toolkit
+
+@Serializable
+data class DiscoveredNodeResponse(
+    val network: String = "",
+    val env: String = "",
+    val label: String = "",
+    @SerialName("host_status") val hostStatus: String = "",
+    val source: String = "",
+    @SerialName("public_port") val publicPort: Int = 0,
+    @SerialName("agent_port") val agentPort: Int = 0,
+    @SerialName("node_http_port") val nodeHttpPort: Int = 0,
+    @SerialName("p2p_port") val p2pPort: Int = 0,
+)
+
+@Serializable
+data class DiscoverServerNodesResponse(
+    val ok: Boolean = true,
+    val items: List<DiscoveredNodeResponse> = emptyList(),
+    val count: Int = 0,
+    val error: String? = null,
+    val message: String? = null,
+)
 
 @Serializable
 data class ProbeServerBody(
@@ -313,6 +336,64 @@ fun Application.serversApiRoutes(
                         ProbeServerErrorResponse(
                             error = "has_nodes",
                             message = "Remove ${result.count} node(s) first, then delete the server.",
+                        ),
+                    )
+            }
+        }
+
+        get("/api/servers/{id}/discover") {
+            val id = call.parameters["id"].orEmpty()
+            when (val result = toolkit.discoverServerNodes(id))
+            {
+                is DiscoverServerNodesResult.Ok ->
+                    call.respond(
+                        DiscoverServerNodesResponse(
+                            items = result.items.map {
+                                DiscoveredNodeResponse(
+                                    network = it.network,
+                                    env = it.env,
+                                    label = it.label,
+                                    hostStatus = it.hostStatus,
+                                    source = it.source,
+                                    publicPort = it.publicPort,
+                                    agentPort = it.agentPort,
+                                    nodeHttpPort = it.nodeHttpPort,
+                                    p2pPort = it.p2pPort,
+                                )
+                            },
+                            count = result.items.size,
+                        ),
+                    )
+                DiscoverServerNodesResult.NotFound ->
+                    call.respond(
+                        HttpStatusCode.NotFound,
+                        DiscoverServerNodesResponse(ok = false, error = "not_found"),
+                    )
+                DiscoverServerNodesResult.AgentNotConfigured ->
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        DiscoverServerNodesResponse(
+                            ok = false,
+                            error = "agent_not_configured",
+                            message = "Server has no agent URL / key",
+                        ),
+                    )
+                DiscoverServerNodesResult.InvalidAgentKey ->
+                    call.respond(
+                        HttpStatusCode.Unauthorized,
+                        DiscoverServerNodesResponse(
+                            ok = false,
+                            error = InvalidAgentKey.ERROR,
+                            message = InvalidAgentKey.MESSAGE,
+                        ),
+                    )
+                is DiscoverServerNodesResult.AgentUnreachable ->
+                    call.respond(
+                        HttpStatusCode.BadGateway,
+                        DiscoverServerNodesResponse(
+                            ok = false,
+                            error = "agent_unreachable",
+                            message = result.detail.ifBlank { "Host agent did not answer" },
                         ),
                     )
             }

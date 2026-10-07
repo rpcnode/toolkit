@@ -127,6 +127,95 @@ class MarkNodeStartedUseCaseTest
     }
 
     @Test
+    fun ethereum_does_not_compare_lighthouse_version_to_geth_pin() = runTest {
+        val ethNode = node.copy(
+            id = nodeId,
+            name = "ETH sepolia",
+            network = NetworkId.ETHEREUM,
+            env = EnvId.SEPOLIA,
+            clientVersion = "8.2.2",
+        )
+        val nodes = FakeNodeRepository(listOf(ethNode))
+        val clients = FakeClientVersionRepository(
+            listOf(
+                ClientVersionPin(
+                    network = NetworkId.ETHEREUM,
+                    env = EnvId.SEPOLIA,
+                    program = "geth",
+                    currentVersion = "1.17.5",
+                    latestVersion = "1.17.5",
+                ),
+                ClientVersionPin(
+                    network = NetworkId.ETHEREUM,
+                    env = EnvId.SEPOLIA,
+                    program = "lighthouse",
+                    currentVersion = "8.2.2",
+                    latestVersion = "8.2.2",
+                ),
+            ),
+        )
+        val useCase = MarkNodeStartedUseCase(
+            servers = FakeServerRepository(listOf(server)),
+            nodes = nodes,
+            clients = clients,
+            facts = YamlNetworkFactsRepository(),
+        )
+
+        val result = useCase("tok", serverId.value, nodeId.value, "8.2.2")
+
+        assertIs<MarkNodeStartedResult.Ok>(result)
+        val updated = nodes.findById(nodeId)!!
+        assertEquals("8.2.2", updated.clientVersion)
+        assertEquals("geth 1.17.5 · lighthouse 8.2.2", updated.clientLatest)
+        assertFalse(updated.clientUpdateAvailable)
+    }
+
+    @Test
+    fun ethereum_composite_flags_when_lighthouse_behind() = runTest {
+        val ethNode = node.copy(
+            network = NetworkId.ETHEREUM,
+            env = EnvId.SEPOLIA,
+        )
+        val nodes = FakeNodeRepository(listOf(ethNode))
+        val clients = FakeClientVersionRepository(
+            listOf(
+                ClientVersionPin(
+                    network = NetworkId.ETHEREUM,
+                    env = EnvId.SEPOLIA,
+                    program = "geth",
+                    currentVersion = "1.17.5",
+                    latestVersion = "1.17.5",
+                ),
+                ClientVersionPin(
+                    network = NetworkId.ETHEREUM,
+                    env = EnvId.SEPOLIA,
+                    program = "lighthouse",
+                    currentVersion = "8.1.0",
+                    latestVersion = "8.2.2",
+                ),
+            ),
+        )
+        val useCase = MarkNodeStartedUseCase(
+            servers = FakeServerRepository(listOf(server)),
+            nodes = nodes,
+            clients = clients,
+            facts = YamlNetworkFactsRepository(),
+        )
+
+        val result = useCase(
+            "tok",
+            serverId.value,
+            nodeId.value,
+            "geth 1.17.5 · lighthouse 8.1.0",
+        )
+
+        assertIs<MarkNodeStartedResult.Ok>(result)
+        val updated = nodes.findById(nodeId)!!
+        assertEquals("geth 1.17.5 · lighthouse 8.2.2", updated.clientLatest)
+        assertTrue(updated.clientUpdateAvailable)
+    }
+
+    @Test
     fun height_push_persists_sync_pct_and_stays_sync_while_host_syncing() = runTest {
         val nodes = FakeNodeRepository(listOf(node.copy(status = NodeStatus.SYNC, height = 0)))
         val clients = FakeClientVersionRepository()

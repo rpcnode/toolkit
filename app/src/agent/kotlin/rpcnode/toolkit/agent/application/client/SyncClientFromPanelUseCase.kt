@@ -11,7 +11,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.yaml.snakeyaml.Yaml
 import rpcnode.toolkit.agent.application.enroll.PanelEnrollmentStore
+import rpcnode.toolkit.chains.bitcore.infrastructure.BitcoreRpcAuth
 import rpcnode.toolkit.nodes.application.config.EnsureClientConfigDirectories
+import rpcnode.toolkit.nodes.infrastructure.host.EnsureHostJava
 
 data class ClientSyncCommand(
     val network: String,
@@ -83,6 +85,20 @@ class SyncClientFromPanelUseCase(
         if (files.isEmpty())
         {
             return ClientSyncResult.PlanMissing("no files for arch $hostArch in install-plan.yml")
+        }
+
+        plan.javaMajor?.let { major ->
+            try
+            {
+                EnsureHostJava.ensure(major)
+            }
+            catch (e: Exception)
+            {
+                return ClientSyncResult.DownloadFailed(
+                    e.message?.trim()?.ifBlank { null }
+                        ?: "Java $major required for this client but could not be installed",
+                )
+            }
         }
 
         val destRoot = Path.of(nodeDir)
@@ -162,7 +178,14 @@ class SyncClientFromPanelUseCase(
                 ?: files.firstOrNull { it.role.equals("config", ignoreCase = true) }?.path
         }
         var configPath: String? = null
-        if (configName != null && cmd.configAssignments.isNotEmpty())
+        val patchAssignments = mergeBitcoreRpcAuth(
+            network = network,
+            env = env,
+            nodeDir = destRoot,
+            configName = configName,
+            assignments = cmd.configAssignments,
+        )
+        if (configName != null && patchAssignments.isNotEmpty())
         {
             val conf = destRoot.resolve(configName.trim().trimStart('/'))
             if (!Files.isRegularFile(conf))
@@ -175,7 +198,7 @@ class SyncClientFromPanelUseCase(
                 val patched = patchConfig(
                     cmd.configFormat,
                     raw,
-                    cmd.configAssignments,
+                    patchAssignments,
                     cmd.configIniSection,
                     cmd.configOmitIniKeys,
                 )
@@ -193,6 +216,36 @@ class SyncClientFromPanelUseCase(
         }
 
         return ClientSyncResult.Ok(nodeDir = nodeDir, files = saved, configPath = configPath)
+    }
+
+    /**
+     * Dash / LTC / Doge / BCH: ensure rpcuser/rpcpassword in the patched conf and
+     * `.toolkit/rpc-auth.env` (Go leaf proxy reads BITCOIN_RPC_* from toolkit.env).
+     */
+    private fun mergeBitcoreRpcAuth(
+        network: String,
+        env: String,
+        nodeDir: Path,
+        configName: String?,
+        assignments: Map<String, String>,
+    ): Map<String, String>
+    {
+        if (!BitcoreRpcAuth.needsRpcUserPassword(network) || configName.isNullOrBlank())
+        {
+            return assignments
+        }
+        val conf = nodeDir.resolve(configName.trim().trimStart('/'))
+        val existing = if (Files.isRegularFile(conf))
+        {
+            runCatching { Files.readString(conf) }.getOrNull()
+        }
+        else
+        {
+            null
+        }
+        val creds = BitcoreRpcAuth.ensure(nodeDir, existing)
+        BitcoreRpcAuth.upsertGoToolkitEnv(network, env, creds)
+        return assignments + BitcoreRpcAuth.assignments(creds)
     }
 
     private fun getText(url: String): String?
@@ -243,7 +296,12 @@ class SyncClientFromPanelUseCase(
             )
         }
         if (files.isEmpty()) return null
-        return ParsedPlan(files = files)
+        val launch = root["launch"] as? Map<*, *>
+        val javaMajor = (launch?.get("java_major") as? Number)?.toInt()
+            ?: (launch?.get("java_major") as? String)?.trim()?.toIntOrNull()
+            ?: (launch?.get("javaMajor") as? Number)?.toInt()
+            ?: (launch?.get("javaMajor") as? String)?.trim()?.toIntOrNull()
+        return ParsedPlan(files = files, javaMajor = javaMajor?.takeIf { it in 1..99 })
     }
 
     private fun hostArch(): String
@@ -252,6 +310,6 @@ class SyncClientFromPanelUseCase(
         return if (arch.contains("aarch64") || arch.contains("arm64")) "aarch64" else "x86_64"
     }
 
-    private data class ParsedPlan(val files: List<ParsedFile>)
+    private data class ParsedPlan(val files: List<ParsedFile>, val javaMajor: Int? = null)
     private data class ParsedFile(val role: String, val path: String, val arch: String?)
 }

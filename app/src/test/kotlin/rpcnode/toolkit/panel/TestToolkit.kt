@@ -14,6 +14,12 @@ import rpcnode.toolkit.networks.application.tip.NetworkTipProbe
 import rpcnode.toolkit.networks.application.tip.NetworkTipProbeRegistry
 import rpcnode.toolkit.nodes.application.height.GetNodeHeightUseCase
 import rpcnode.toolkit.nodes.application.logs.FetchNodeLogsOnHost
+import rpcnode.toolkit.nodes.application.nodeconfig.GetNodeConfigUseCase
+import rpcnode.toolkit.nodes.InMemoryHostFiles
+import rpcnode.toolkit.nodes.application.nodeconfig.HostFiles
+import rpcnode.toolkit.nodes.application.nodeconfig.SaveNodeConfigUseCase
+import rpcnode.toolkit.nodes.application.test.RunNodeLiveTestUseCase
+import rpcnode.toolkit.nodes.application.test.TestNodeOnHost
 import rpcnode.toolkit.nodes.application.logs.FetchNodeLogsResult
 import rpcnode.toolkit.nodes.application.logs.GetNodeLogsUseCase
 import rpcnode.toolkit.nodes.application.logs.NodeHostLogs
@@ -21,6 +27,21 @@ import rpcnode.toolkit.nodes.application.version.FetchNodeClientVersionOnHost
 import rpcnode.toolkit.nodes.application.version.FetchNodeClientVersionResult
 import rpcnode.toolkit.nodes.application.version.GetNodeClientVersionUseCase
 import rpcnode.toolkit.nodes.application.version.NodeHostClientVersion
+import rpcnode.toolkit.nodes.application.rpcauth.FetchNodeRpcAuthOnHost
+import rpcnode.toolkit.nodes.application.rpcauth.FetchNodeRpcAuthResult
+import rpcnode.toolkit.nodes.application.rpcauth.GetNodeRpcAuthUseCase
+import rpcnode.toolkit.nodes.application.discover.DiscoverServerNodesUseCase
+import rpcnode.toolkit.nodes.application.discover.FetchHostInstalledNodes
+import rpcnode.toolkit.nodes.application.discover.FetchHostInstalledNodesResult
+import rpcnode.toolkit.nodes.application.hostdeps.BuildNodeHostDepsPlanUseCase
+import rpcnode.toolkit.nodes.application.hostdeps.FetchHostDepsProgressOnHost
+import rpcnode.toolkit.nodes.application.hostdeps.FetchHostDepsProgressOnHostResult
+import rpcnode.toolkit.nodes.application.hostdeps.GetNodeHostDepsProgressUseCase
+import rpcnode.toolkit.nodes.application.hostdeps.ProbeHostDepsOnHost
+import rpcnode.toolkit.nodes.application.hostdeps.ProbeHostDepsOnHostResult
+import rpcnode.toolkit.nodes.application.hostdeps.StartHostDepsOnHost
+import rpcnode.toolkit.nodes.application.hostdeps.StartHostDepsOnHostResult
+import rpcnode.toolkit.nodes.application.hostdeps.StartNodeHostDepsUseCase
 import rpcnode.toolkit.nodes.application.process.ControlNodeProcessOnHost
 import rpcnode.toolkit.nodes.application.process.ControlNodeProcessUseCase
 import rpcnode.toolkit.nodes.application.process.NodeProcessControlResult
@@ -193,6 +214,7 @@ internal fun testToolkit(
     artifactDownloader: ArtifactDownloader = FakeArtifactDownloader(),
     githubTokenProvider: GitHubTokenProvider? = null,
     serverRepository: ServerRepository = FakeServerRepository(),
+    testHostFiles: HostFiles = InMemoryHostFiles(),
     serverMetricsRepository: ServerMetricsRepository = FakeServerMetricsRepository(),
     enrollHostAgent: EnrollHostAgent = EnrollHostAgent { _, _, _, _ -> EnrollHostAgentResult.Ok },
     hostAgentClient: HostAgentClient = HostAgentClient { _, _ -> null },
@@ -564,6 +586,49 @@ internal fun testToolkit(
                 FetchNodeClientVersionResult.Ok(NodeHostClientVersion())
             },
         ),
+        getNodeRpcAuth = GetNodeRpcAuthUseCase(
+            nodes = nodeRepository,
+            servers = serverRepository,
+            resolveDestDir = resolveSnapshotDestDir,
+            fetchOnHost = FetchNodeRpcAuthOnHost { _, _, _, _, _ ->
+                FetchNodeRpcAuthResult.Empty
+            },
+        ),
+        discoverServerNodes = DiscoverServerNodesUseCase(
+            servers = serverRepository,
+            nodes = nodeRepository,
+            catalog = catalog,
+            fetchOnHost = FetchHostInstalledNodes { _, _ ->
+                FetchHostInstalledNodesResult.Ok(emptyList())
+            },
+        ),
+        buildNodeHostDepsPlan = BuildNodeHostDepsPlanUseCase(
+            nodes = nodeRepository,
+            facts = networkFacts,
+            catalog = clientProgramCatalog,
+        ),
+        startNodeHostDeps = StartNodeHostDepsUseCase(
+            nodes = nodeRepository,
+            servers = serverRepository,
+            buildPlan = BuildNodeHostDepsPlanUseCase(
+                nodes = nodeRepository,
+                facts = networkFacts,
+                catalog = clientProgramCatalog,
+            ),
+            probeOnHost = ProbeHostDepsOnHost { _, _, deps ->
+                ProbeHostDepsOnHostResult.Ok(deps.map { it.id to true })
+            },
+            startOnHost = StartHostDepsOnHost { _, _, jobId, _ ->
+                StartHostDepsOnHostResult.Ok(jobId)
+            },
+        ),
+        getNodeHostDepsProgress = GetNodeHostDepsProgressUseCase(
+            nodes = nodeRepository,
+            servers = serverRepository,
+            fetchOnHost = FetchHostDepsProgressOnHost { _, _, _ ->
+                FetchHostDepsProgressOnHostResult.JobNotFound
+            },
+        ),
         controlNodeProcess = ControlNodeProcessUseCase(
             nodes = nodeRepository,
             servers = serverRepository,
@@ -571,6 +636,32 @@ internal fun testToolkit(
                 NodeProcessControlResult(ok = true, pid = 1, action = "start")
             },
             startNode = startNode,
+        ),
+        getNodeConfig = GetNodeConfigUseCase(
+            nodes = nodeRepository,
+            servers = serverRepository,
+            facts = networkFacts,
+            resolveDestDir = resolveSnapshotDestDir,
+            files = testHostFiles,
+        ),
+        saveNodeConfig = SaveNodeConfigUseCase(
+            nodes = nodeRepository,
+            servers = serverRepository,
+            facts = networkFacts,
+            catalog = clientProgramCatalog,
+            resolveDestDir = resolveSnapshotDestDir,
+            files = testHostFiles,
+            restartNode = { null },
+        ),
+        runNodeLiveTest = RunNodeLiveTestUseCase(
+            nodes = nodeRepository,
+            servers = serverRepository,
+            facts = networkFacts,
+            catalog = clientProgramCatalog,
+            resolveDestDir = resolveSnapshotDestDir,
+            chainStarts = mapOf(NetworkId.TRON to TronNodeStart()),
+            testOnHost = TestNodeOnHost { _, _, _ -> null },
+            publicTip = { _, _ -> null },
         ),
         markNodeStarted = MarkNodeStartedUseCase(
             serverRepository,

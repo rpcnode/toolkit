@@ -9,7 +9,7 @@ import rpcnode.toolkit.nodes.domain.repository.NodeRepository
 /**
  * Lists nodes with [Node.clientLatest] / [Node.clientUpdateAvailable] taken from the
  * Clients pin (`client_versions`), not the denormalized DB columns.
- * Update is needed when [Node.clientVersion] ≠ pin latest.
+ * Multi-program networks compare each program separately (never geth vs lighthouse).
  */
 class ListNodesUseCase(
     private val nodes: NodeRepository,

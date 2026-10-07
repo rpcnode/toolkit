@@ -305,6 +305,43 @@ class NodesRoutesTest
     }
 
     @Test
+    fun live_test_route_exists_and_reports_unknown_node() = testApplication {
+        application { module(ServerConfig(), testToolkit()) }
+        val res = client.post("/api/nodes/test") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"node_id":"missing"}""")
+        }
+        assertEquals(HttpStatusCode.NotFound, res.status)
+        val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        assertEquals(false, body["ok"]!!.jsonPrimitive.boolean)
+        assertEquals("not_found", body["error"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun live_test_reports_an_unreachable_agent() = testApplication {
+        val nodes = FakeNodeRepository()
+        application { module(ServerConfig(), toolkitWithDisks(nodes)) }
+        val created = client.post("/api/nodes") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"server_id":"srv-1","network":"tron","env":"mainnet"}""")
+        }
+        val id = Json.parseToJsonElement(created.bodyAsText())
+            .jsonObject["item"]!!.jsonObject["id"]!!.jsonPrimitive.content
+
+        val res = client.post("/api/nodes/test") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"node_id":"$id"}""")
+        }
+        assertEquals(HttpStatusCode.BadGateway, res.status)
+        val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
+        assertEquals("agent_unreachable", body["error"]!!.jsonPrimitive.content)
+        // fields the admin UI reads on every node
+        val node = Json.parseToJsonElement(client.get("/api/nodes/$id").bodyAsText())
+            .jsonObject["item"]!!.jsonObject
+        assertEquals("", node["live_test_status"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun host_disks_returns_inventory_from_agent() = testApplication {
         application { module(ServerConfig(), toolkitWithDisks()) }
         val res = client.get("/api/host/disks?server_id=srv-1")

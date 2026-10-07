@@ -5,11 +5,12 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import rpcnode.toolkit.chains.ethereum.infrastructure.http.EthereumEthRpc
+import rpcnode.toolkit.chains.tron.infrastructure.http.TronWalletRpc
 import rpcnode.toolkit.shared.infrastructure.http.SimpleHttp
 
 /**
  * Panel-side live probe for Start `clientConfig.bindings[].testConnect`.
- * Kinds are declared in chains/<id>/network.yml (`eth_rpc`, `beacon_genesis`).
+ * Kinds are declared in chains/<id>/network.yml (`eth_rpc`, `beacon_genesis`, `tron_http`).
  */
 class TestConfigConnectUseCase(
     private val http: SimpleHttp = SimpleHttp(),
@@ -34,6 +35,7 @@ class TestConfigConnectUseCase(
         {
             "eth_rpc" -> probeEthRpc(endpoint)
             "beacon_genesis" -> probeBeaconGenesis(endpoint)
+            "tron_http" -> probeTronHttp(endpoint)
             else -> Result.BadKind
         }
     }
@@ -50,6 +52,10 @@ class TestConfigConnectUseCase(
         val base = url.trim().trimEnd('/')
         val body = http.getText("$base/eth/v1/beacon/genesis", accept = "application/json")
             ?: return Result.Failed("GET /eth/v1/beacon/genesis failed — unreachable or non-2xx")
+        if (TronWalletRpc.looksLikeHtml(body))
+        {
+            return Result.Failed("beacon genesis returned HTML — not a Beacon API endpoint")
+        }
         val genesis = runCatching {
             json.parseToJsonElement(body).jsonObject["data"]
                 ?.jsonObject
@@ -62,6 +68,19 @@ class TestConfigConnectUseCase(
             return Result.Failed("beacon genesis JSON missing data.genesis_time")
         }
         return Result.Ok("beacon genesis ok · genesis_time=$genesis")
+    }
+
+    private suspend fun probeTronHttp(url: String): Result
+    {
+        val base = TronWalletRpc.normalizeBaseUrl(url)
+        val version = TronWalletRpc.codeVersion(http, base)
+            ?: return Result.Failed(
+                "wallet/getnodeinfo failed — need TRON FullNode HTTP API " +
+                    "(not eth-jsonrpc; no /jsonrpc). Tried ${TronWalletRpc.getnodeinfoUrl(base)}",
+            )
+        val height = TronWalletRpc.blockHeight(http, base)
+        val heightPart = if (height != null) " · height $height" else ""
+        return Result.Ok("getnodeinfo ok · codeVersion=$version$heightPart")
     }
 
     companion object

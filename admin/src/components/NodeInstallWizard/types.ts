@@ -6,6 +6,7 @@ export type WizardStepId =
   | 'disks'
   | 'node_type'
   | 'clients'
+  | 'host_deps'
   | 'install'
   | 'snapshot'
   | 'start'

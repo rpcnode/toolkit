@@ -48,6 +48,7 @@ Operator starts the server from IntelliJ IDEA. Agents do **not** `./gradlew run`
 # React UI: ../admin  VITE_API_URL → this process
 ```
 
+
 `PANEL_LISTEN`, `PANEL_PORT` (default **8094**), `TOOLKIT_DB`, `PANEL_HTPASSWD`, `PANEL_SESSIONS`, `PANEL_CORS_ORIGINS` (unset = Vite/admin localhost; blank = allow any Origin so admin `:8093` can call server `:8094`). Admin UI is `:8093`.
 
 Admin first-run: enter the server origin, then the password. `VITE_API_URL` in `../admin/.env` is optional.

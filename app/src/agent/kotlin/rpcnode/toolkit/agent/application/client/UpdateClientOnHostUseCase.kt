@@ -15,6 +15,7 @@ import rpcnode.toolkit.agent.application.node.NodeStartProcessResult
 import rpcnode.toolkit.agent.application.node.StartNodeProcessUseCase
 import rpcnode.toolkit.agent.infrastructure.node.readNodeClientVersion
 import rpcnode.toolkit.agent.infrastructure.proc.runningAsRoot
+import rpcnode.toolkit.clients.application.clientProgramsUpdateAvailable
 import rpcnode.toolkit.nodes.application.start.HostNodeStartResult
 import rpcnode.toolkit.nodes.infrastructure.host.HostNodeLaunchSupport
 
@@ -68,7 +69,10 @@ class UpdateClientOnHostUseCase(
     private val notifyPanel: NotifyPanelClientUpdate,
     private val agentToken: String,
     private val isRoot: () -> Boolean = ::runningAsRoot,
-    private val trialActiveSeconds: Long = 45,
+    /** The new client must keep one stable process for this long, else it is rolled back. */
+    private val stability: UnitStabilityCheck = UnitStabilityCheck(::systemctlUnitSample, trialSeconds = 60),
+    /** Restore the previous client automatically when the new one crashes or will not start. */
+    private val autoRollback: Boolean = true,
     private val logTailLines: Int = 80,
 )
 {
@@ -114,8 +118,7 @@ class UpdateClientOnHostUseCase(
                 local = local,
                 latest = latest,
                 previousVersion = previousHint,
-                updateAvailable = latest.isNotEmpty() && local.isNotEmpty() &&
-                    !local.equals(latest, ignoreCase = true),
+                updateAvailable = clientProgramsUpdateAvailable(local, latest),
                 phase = "updating",
                 step = "check",
                 detail = "Preparing client update",
@@ -319,7 +322,7 @@ class UpdateClientOnHostUseCase(
                     return
                 }
                 is NodeStartProcessResult.Failed ->
-                    return fail(nodeId, nodeDir, network, env, logFile, "start_failed", started.detail)
+                    return failAndRollback(nodeId, nodeDir, network, env, logFile, "start_failed", started.detail, newVersion)
                 NodeStartProcessResult.NotRoot ->
                     return fail(nodeId, nodeDir, network, env, logFile, "not_root", "Agent is not root")
                 NodeStartProcessResult.InvalidLaunch ->
@@ -335,16 +338,18 @@ class UpdateClientOnHostUseCase(
             }
             report(nodeId)
             val unit = HostNodeLaunchSupport.unitName(network, env)
-            if (!waitUnitActive(unit))
+            val unstable = stability.verify(unit)
+            if (unstable != null)
             {
-                return fail(
+                return failAndRollback(
                     nodeId,
                     nodeDir,
                     network,
                     env,
                     logFile,
                     "unit_not_active",
-                    "systemd unit $unit did not stay active",
+                    "new client $newVersion is not stable: $unstable",
+                    newVersion,
                 )
             }
 
@@ -370,37 +375,70 @@ class UpdateClientOnHostUseCase(
         }
     }
 
-    private fun waitUnitActive(unit: String): Boolean
+    /**
+     * The new client was promoted but does not run (will not start, or crash-loops under systemd).
+     * Put the previous client back and start it, so the node keeps serving instead of flapping on a
+     * broken release. The update still ends as an error: the operator must see why it failed.
+     * Without a previous copy (first install) it behaves like [fail].
+     */
+    private fun failAndRollback(
+        nodeId: String,
+        nodeDir: Path,
+        network: String,
+        env: String,
+        logFile: String?,
+        error: String,
+        message: String,
+        badVersion: String,
+    )
     {
-        val deadline = System.nanoTime() + trialActiveSeconds * 1_000_000_000L
-        var sawActive = false
-        while (System.nanoTime() < deadline)
+        val previous = ClientStagingLayout.previousDir(nodeDir)
+        val canRollback = autoRollback &&
+            Files.isDirectory(previous) &&
+            ClientStagingLayout.listArtifactNames(previous).isNotEmpty()
+        if (!canRollback)
         {
-            val active = systemctlIsActive(unit)
-            if (active == "active")
-            {
-                sawActive = true
-                Thread.sleep(1_000)
-                continue
-            }
-            if (sawActive && (active == "failed" || active == "inactive" || active == "deactivating"))
-            {
-                return false
-            }
-            Thread.sleep(1_000)
+            return fail(nodeId, nodeDir, network, env, logFile, error, message)
         }
-        return systemctlIsActive(unit) == "active"
+        // The crash evidence lives in the log the previous client is about to keep appending to.
+        val crashLog = readLogTail(nodeDir, logFile)
+        patch(nodeId) {
+            it.copy(step = "rollback", detail = "New client is not stable — restoring the previous one", pct = 90)
+        }
+        report(nodeId)
+        try
+        {
+            HostNodeLaunchSupport.stopUnit(network, env, nodeDir)
+            val restored = ClientStagingLayout.restorePreviousToLive(nodeDir)
+            when (val started = HostNodeLaunchSupport.restartUnit(network, env, nodeDir))
+            {
+                is HostNodeStartResult.Failed ->
+                    return fail(nodeId, nodeDir, network, env, logFile, error, "$message; rollback to $restored also failed: ${started.detail}")
+                HostNodeStartResult.InvalidLaunch ->
+                    return fail(nodeId, nodeDir, network, env, logFile, error, "$message; rollback impossible (invalid launch)")
+                is HostNodeStartResult.Started, is HostNodeStartResult.Pending -> Unit
+            }
+            state.update(nodeId) {
+                it.copy(
+                    phase = "error",
+                    step = "rolled_back",
+                    detail = "Client ${badVersion.ifBlank { "update" }} failed and was rolled back to $restored",
+                    lastError = "$error: $message",
+                    pct = 100,
+                    local = restored,
+                    previousVersion = restored,
+                    updateAvailable = true,
+                    logTail = crashLog,
+                )
+            }
+            report(nodeId, eventId = "error", eventLabel = "Rolled back")
+        }
+        catch (e: Exception)
+        {
+            log.warn("auto rollback failed for {}: {}", nodeId, e.message)
+            fail(nodeId, nodeDir, network, env, logFile, error, "$message; rollback failed: ${e.message}")
+        }
     }
-
-    private fun systemctlIsActive(unit: String): String =
-        runCatching {
-            val pb = ProcessBuilder("systemctl", "is-active", unit)
-            pb.redirectErrorStream(true)
-            val proc = pb.start()
-            val out = proc.inputStream.bufferedReader().readText().trim()
-            proc.waitFor()
-            out
-        }.getOrDefault("")
 
     private fun fail(
         nodeId: String,

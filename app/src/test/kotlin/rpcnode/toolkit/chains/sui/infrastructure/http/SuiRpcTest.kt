@@ -85,7 +85,7 @@ class SuiUnitBodiesTest
             genesisPath = "/data/genesis.blob",
             archiveUrl = "https://checkpoints.mainnet.sui.io",
         )
-        assertTrue(yaml.contains("json-rpc-address: \"127.0.0.1:9000\""))
+        assertTrue(yaml.contains("json-rpc-address: \"0.0.0.0:9000\""))
         assertTrue(yaml.contains("metrics-address: \"127.0.0.1:9184\""))
         assertTrue(yaml.contains("listen-address: \"0.0.0.0:8084\""))
         assertTrue(yaml.contains("num-epochs-to-retain: ${SuiUnitBodies.NUM_EPOCHS_TO_RETAIN}"))

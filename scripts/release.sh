@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
-# Bump toolkit version, build JARs, tag, push, create GitHub Release with jars.
+# Bump toolkit version, build JARs, tag, push, create a published GitHub Release.
 #
 # Usage:
-#   ./scripts/release.sh              # bump patch, or finish HEAD version if its tag is missing
-#   ./scripts/release.sh 0.2.0        # explicit version (retry OK if tag missing; no bump if already on HEAD)
-#   ./scripts/release.sh --dry-run    # print plan only
-#   ./scripts/release.sh 0.2.0 --no-push
+#   ./scripts/release.sh -m "Fix agent install"
+#   ./scripts/release.sh 0.2.0 -m "Fix agent install"
+#   ./scripts/release.sh -m "notes" --dry-run
+#   ./scripts/release.sh 0.2.0 -m "notes" --no-push
 #
+# Comment (-m) is required: used for the Release commit, annotated tag, and GitHub notes.
 # On failure before the release commit, version files are restored to HEAD.
-# Re-run the same version to retry a failed attempt (no need to bump).
+# If the tag already exists but the GitHub Release is missing/incomplete, re-run with
+# the same version and -m to rebuild jars and finish publishing (no second tag).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib/java-env.sh
+. "$(dirname "$0")/lib/java-env.sh"
 APP_DIR="$ROOT/app"
 BUILD_FILE="$APP_DIR/build.gradle.kts"
 PANEL_VERSION_FILE="$ROOT/admin/PANEL_VERSION"
@@ -22,30 +26,48 @@ PANEL_REL="admin/PANEL_VERSION"
 DRY_RUN=0
 NO_PUSH=0
 EXPLICIT_VERSION=""
+COMMENT=""
 VERSION_TOUCHED=0
 RELEASE_COMMITTED=0
 RESTORE_VER=""
+UPLOAD_ONLY=0
 
 usage() {
-  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
-for arg in "$@"; do
-  case "$arg" in
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     -h|--help) usage 0 ;;
-    --dry-run) DRY_RUN=1 ;;
-    --no-push) NO_PUSH=1 ;;
+    --dry-run) DRY_RUN=1; shift ;;
+    --no-push) NO_PUSH=1; shift ;;
+    -m|--message|--notes|--comment)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "missing value for $1" >&2
+        usage 1
+      fi
+      COMMENT="$2"
+      shift 2
+      ;;
     -*)
-      echo "unknown flag: $arg" >&2
+      echo "unknown flag: $1" >&2
       usage 1
       ;;
     *)
-      if [[ -n "$EXPLICIT_VERSION" ]]; then
-        echo "unexpected argument: $arg" >&2
+      if [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+        if [[ -n "$EXPLICIT_VERSION" ]]; then
+          echo "unexpected argument: $1" >&2
+          usage 1
+        fi
+        EXPLICIT_VERSION="$1"
+      elif [[ -z "$COMMENT" ]]; then
+        COMMENT="$1"
+      else
+        echo "unexpected argument: $1" >&2
         usage 1
       fi
-      EXPLICIT_VERSION="$arg"
+      shift
       ;;
   esac
 done
@@ -82,6 +104,22 @@ require_semver() {
   }
 }
 
+require_comment() {
+  if [[ -n "$COMMENT" ]]; then
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    echo "release comment required: ./scripts/release.sh -m \"your notes\"" >&2
+    exit 1
+  fi
+  printf 'Release comment: '
+  IFS= read -r COMMENT
+  if [[ -z "$COMMENT" ]]; then
+    echo "empty comment — abort" >&2
+    exit 1
+  fi
+}
+
 # Only version files may be dirty (left over from a failed release attempt).
 assert_tree_ok_for_release() {
   local bad=0
@@ -90,7 +128,6 @@ assert_tree_ok_for_release() {
     local path="${line:3}"
     path="${path#\"}"
     path="${path%\"}"
-    # handle "R  old -> new" / rename — take last field
     if [[ "$line" =~ -\>\ (.+)$ ]]; then
       path="${BASH_REMATCH[1]}"
       path="${path#\"}"
@@ -125,9 +162,62 @@ restore_version_if_needed() {
   echo "release failed — restored version to $RESTORE_VER" >&2
 }
 
+release_notes_body() {
+  printf '%s\n\n**Full changelog:** compare previous tag → %s\n' "$COMMENT" "$TAG"
+}
+
+# Create/publish GitHub Release, then upload assets one-by-one (avoids multi-file hang/404).
+publish_release() {
+  local notes_file
+  notes_file="$(mktemp)"
+  release_notes_body > "$notes_file"
+
+  if ! gh release view "$TAG" >/dev/null 2>&1; then
+    echo "creating GitHub Release $TAG…"
+    gh release create "$TAG" \
+      --title "RpcNode ${TAG}" \
+      --notes-file "$notes_file" \
+      --latest
+  else
+    echo "updating GitHub Release $TAG notes…"
+    gh release edit "$TAG" \
+      --title "RpcNode ${TAG}" \
+      --notes-file "$notes_file" \
+      --draft=false \
+      --latest
+  fi
+  rm -f "$notes_file"
+
+  local asset
+  for asset in \
+    "$DIST_DIR/rpcnode-server.jar" \
+    "$DIST_DIR/rpcnode-agent.jar" \
+    "$DIST_DIR/rpcnode-cdn.jar" \
+    "$DIST_DIR/rpcnode-${TAG}.sha256"
+  do
+    echo "uploading $(basename "$asset")…"
+    local attempt=1
+    while true; do
+      if gh release upload "$TAG" "$asset" --clobber; then
+        break
+      fi
+      if [[ "$attempt" -ge 3 ]]; then
+        echo "failed to upload $asset after $attempt attempts" >&2
+        return 1
+      fi
+      echo "upload failed, retry $((attempt + 1))/3…" >&2
+      sleep $((attempt * 2))
+      attempt=$((attempt + 1))
+    done
+  done
+
+  gh release edit "$TAG" --draft=false --latest >/dev/null
+}
+
 trap restore_version_if_needed EXIT
 
 cd "$ROOT"
+require_comment
 
 FILE_VER="$(read_server_version)"
 FILE_VER="${FILE_VER:-0.0.0}"
@@ -138,7 +228,6 @@ RESTORE_VER="$GIT_VER"
 if [[ -n "$EXPLICIT_VERSION" ]]; then
   VERSION="$EXPLICIT_VERSION"
 else
-  # HEAD already bumped but tag never created (failed release) → finish that version.
   if [[ -n "$GIT_VER" ]] && ! git rev-parse "v${GIT_VER}" >/dev/null 2>&1; then
     VERSION="$GIT_VER"
   else
@@ -149,31 +238,35 @@ require_semver "$VERSION"
 TAG="v${VERSION}"
 
 if git rev-parse "$TAG" >/dev/null 2>&1; then
-  echo "tag already exists: $TAG" >&2
-  echo "if only the GitHub Release upload failed, run:" >&2
-  echo "  gh release upload \"$TAG\" dist/release/rpcnode-*.jar dist/release/rpcnode-${TAG}.sha256 --clobber" >&2
-  exit 1
+  # Tag exists — allow finishing a broken GitHub Release (upload-only path).
+  UPLOAD_ONLY=1
+  echo "tag $TAG already exists — will rebuild jars and publish/repair GitHub Release"
 fi
 
 NEED_VERSION_COMMIT=0
-if [[ "$VERSION" != "$GIT_VER" ]]; then
+if [[ "$UPLOAD_ONLY" -eq 1 ]]; then
+  echo "publish $TAG — $COMMENT"
+elif [[ "$VERSION" != "$GIT_VER" ]]; then
   NEED_VERSION_COMMIT=1
-  echo "release $GIT_VER -> $VERSION (tag $TAG)"
+  echo "release $GIT_VER -> $VERSION (tag $TAG) — $COMMENT"
 elif [[ "$FILE_VER" != "$VERSION" ]]; then
   NEED_VERSION_COMMIT=1
-  echo "release $VERSION (tag $TAG) — sync version files then tag HEAD"
+  echo "release $VERSION (tag $TAG) — sync version files — $COMMENT"
 else
-  echo "release $VERSION (tag $TAG) — version already on HEAD, tagging retry"
+  echo "release $VERSION (tag $TAG) — version already on HEAD — $COMMENT"
 fi
-if [[ "$FILE_VER" == "$VERSION" && "$FILE_VER" != "$GIT_VER" ]]; then
+if [[ "$FILE_VER" == "$VERSION" && "$FILE_VER" != "$GIT_VER" && "$UPLOAD_ONLY" -eq 0 ]]; then
   echo "retry: working tree already at $VERSION (previous attempt left version files bumped)"
 fi
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
-  if [[ "$NEED_VERSION_COMMIT" -eq 1 ]]; then
-    echo "dry-run: would set version, build jars, commit, tag, push, gh release create"
+  echo "dry-run: comment=$(printf %q "$COMMENT")"
+  if [[ "$UPLOAD_ONLY" -eq 1 ]]; then
+    echo "dry-run: would build jars, push (if needed), publish GitHub Release for existing $TAG"
+  elif [[ "$NEED_VERSION_COMMIT" -eq 1 ]]; then
+    echo "dry-run: would set version, build jars, commit, tag, push, publish GitHub Release"
   else
-    echo "dry-run: would build jars, tag HEAD, push, gh release create (no version bump)"
+    echo "dry-run: would build jars, tag HEAD, push, publish GitHub Release"
   fi
   exit 0
 fi
@@ -190,7 +283,7 @@ if ! gh auth status >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ "$NEED_VERSION_COMMIT" -eq 1 ]]; then
+if [[ "$UPLOAD_ONLY" -eq 0 && "$NEED_VERSION_COMMIT" -eq 1 ]]; then
   set_server_version "$VERSION"
   VERSION_TOUCHED=1
 fi
@@ -218,53 +311,40 @@ cp -f "$SERVER_JAR" "$AGENT_JAR" "$CDN_JAR" "$DIST_DIR/"
   sha256sum rpcnode-server.jar rpcnode-agent.jar rpcnode-cdn.jar > "rpcnode-${TAG}.sha256"
 )
 
-if [[ "$NEED_VERSION_COMMIT" -eq 1 ]]; then
-  git add "$BUILD_FILE" "$PANEL_VERSION_FILE"
-  # Empty commit only if version files actually differ from HEAD index after add
-  if ! git diff --cached --quiet; then
-    git commit -m "Release ${TAG}"
+if [[ "$UPLOAD_ONLY" -eq 0 ]]; then
+  if [[ "$NEED_VERSION_COMMIT" -eq 1 ]]; then
+    git add "$BUILD_FILE" "$PANEL_VERSION_FILE"
+    if ! git diff --cached --quiet; then
+      git commit -m "$(printf 'Release %s\n\n%s\n' "$TAG" "$COMMENT")"
+    fi
   fi
+  git tag -a "$TAG" -m "$(printf 'RpcNode %s\n\n%s\n' "$TAG" "$COMMENT")"
+  RELEASE_COMMITTED=1
+else
+  # Tag already committed earlier — do not restore version on later failure.
+  RELEASE_COMMITTED=1
 fi
-git tag -a "$TAG" -m "RpcNode ${TAG}"
-RELEASE_COMMITTED=1
 
 if [[ "$NO_PUSH" -eq 1 ]]; then
-  echo "skipped push (--no-push). Create the release later with:"
+  echo "skipped push (--no-push). Publish later with:"
   echo "  git push origin HEAD \"$TAG\""
-  echo "  gh release create \"$TAG\" \"$DIST_DIR\"/rpcnode-*.jar \"$DIST_DIR/rpcnode-${TAG}.sha256\" --title \"RpcNode ${TAG}\" --generate-notes"
+  echo "  # then re-run: ./scripts/release.sh $VERSION -m $(printf %q "$COMMENT")"
   exit 0
 fi
 
-git push origin HEAD "$TAG"
-
-publish_release() {
-  if gh release view "$TAG" >/dev/null 2>&1; then
-    gh release upload "$TAG" \
-      "$DIST_DIR/rpcnode-server.jar" \
-      "$DIST_DIR/rpcnode-agent.jar" \
-      "$DIST_DIR/rpcnode-cdn.jar" \
-      "$DIST_DIR/rpcnode-${TAG}.sha256" \
-      --clobber
-  else
-    gh release create "$TAG" \
-      "$DIST_DIR/rpcnode-server.jar" \
-      "$DIST_DIR/rpcnode-agent.jar" \
-      "$DIST_DIR/rpcnode-cdn.jar" \
-      "$DIST_DIR/rpcnode-${TAG}.sha256" \
-      --title "RpcNode ${TAG}" \
-      --generate-notes
-  fi
-}
+if [[ "$UPLOAD_ONLY" -eq 0 ]]; then
+  git push origin HEAD "$TAG"
+else
+  # Ensure tag is on origin (no-op if already there).
+  git push origin "$TAG" 2>/dev/null || git push origin "refs/tags/$TAG"
+fi
 
 if ! publish_release; then
-  echo "tag $TAG is on origin, but uploading JARs failed (gh auth?)." >&2
-  echo "JARs are ready in $DIST_DIR — upload with:" >&2
-  echo "  gh auth login" >&2
-  echo "  gh release create \"$TAG\" \"$DIST_DIR\"/rpcnode-server.jar \"$DIST_DIR\"/rpcnode-agent.jar \"$DIST_DIR\"/rpcnode-cdn.jar \"$DIST_DIR/rpcnode-${TAG}.sha256\" --title \"RpcNode ${TAG}\" --generate-notes" >&2
-  echo "  # or if the release already exists:" >&2
-  echo "  gh release upload \"$TAG\" \"$DIST_DIR\"/rpcnode-server.jar \"$DIST_DIR\"/rpcnode-agent.jar \"$DIST_DIR\"/rpcnode-cdn.jar \"$DIST_DIR/rpcnode-${TAG}.sha256\" --clobber" >&2
+  echo "tag $TAG is on origin, but publishing JARs failed." >&2
+  echo "JARs are ready in $DIST_DIR — retry with:" >&2
+  echo "  ./scripts/release.sh $VERSION -m $(printf %q "$COMMENT")" >&2
   exit 1
 fi
 
 echo "released $TAG"
-gh release view "$TAG" --json url -q .url
+gh release view "$TAG" --json url,isDraft,isLatest -q '"\(.url)  draft=\(.isDraft)  latest=\(.isLatest)"'

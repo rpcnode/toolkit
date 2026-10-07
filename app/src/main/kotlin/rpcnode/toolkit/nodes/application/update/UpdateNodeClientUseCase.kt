@@ -9,6 +9,7 @@ import rpcnode.toolkit.clients.application.InstallPlanFile
 import rpcnode.toolkit.clients.application.InstallPlanWriter
 import rpcnode.toolkit.clients.application.downloadone.DownloadClientProgramResult
 import rpcnode.toolkit.clients.application.downloadone.DownloadClientProgramUseCase
+import rpcnode.toolkit.clients.application.formatPinsVersion
 import rpcnode.toolkit.clients.application.inferArchFromFileName
 import rpcnode.toolkit.clients.application.inferLaunch
 import rpcnode.toolkit.clients.application.installPlanFilesIncludingVersion
@@ -241,9 +242,12 @@ class UpdateNodeClientUseCase(
         {
             return Prepare.Err(UpdateNodeClientResult.AgentUnreachable("missing agent url or key"))
         }
-        val pin = clients.find(node.network, node.env, clientConfig.program)
-        // Target install version = Clients pin latest (fallback current after download).
-        val clientVersion = pin?.latestVersion.orEmpty().ifEmpty { pin?.currentVersion.orEmpty() }
+        val pins = clients.list().filter { it.network == node.network && it.env == node.env }
+        // Target install version = Clients pin latest(s); multi-program → composite string.
+        val clientVersion = formatPinsVersion(pins, preferLatest = true).ifEmpty {
+            val pin = clients.find(node.network, node.env, clientConfig.program)
+            pin?.latestVersion.orEmpty().ifEmpty { pin?.currentVersion.orEmpty() }
+        }
         return Prepare.Ready(
             nodeId = node.id.value,
             agentUrl = server.agentUrl,

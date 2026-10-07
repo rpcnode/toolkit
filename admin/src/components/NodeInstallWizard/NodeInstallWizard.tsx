@@ -18,6 +18,7 @@ import { PortsStep } from './steps/ports/PortsStep'
 import { DisksStep } from './steps/disks/DisksStep'
 import { NodeTypeStep } from './steps/nodeType/NodeTypeStep'
 import { ClientsStep } from './steps/clients/ClientsStep'
+import { HostDepsStep } from './steps/hostDeps/HostDepsStep'
 import { SnapshotStep } from './steps/snapshot/SnapshotStep'
 import { StartStep } from './steps/start/StartStep'
 import { SyncStep } from './steps/sync/SyncStep'
@@ -99,6 +100,7 @@ export function NodeInstallWizard(props: NodeInstallWizardProps) {
           {!stepPending && active === 'disks' && <DisksStep />}
           {!stepPending && active === 'node_type' && wantsNodeTypeStep && <NodeTypeStep />}
           {!stepPending && active === 'clients' && <ClientsStep />}
+          {!stepPending && active === 'host_deps' && <HostDepsStep />}
           {allowSnap && active === 'snapshot' && <SnapshotStep />}
           {active === 'start' && <StartStep />}
           {active === 'sync' && <SyncStep />}

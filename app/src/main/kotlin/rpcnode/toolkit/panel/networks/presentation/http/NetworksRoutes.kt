@@ -228,7 +228,7 @@ fun Application.networksApiRoutes(toolkit: Toolkit)
                         NetworkTestConnectResponse(
                             ok = false,
                             error = "bad_kind",
-                            message = "unknown testConnect.kind — use eth_rpc or beacon_genesis",
+                            message = "unknown testConnect.kind — use eth_rpc, beacon_genesis, or tron_http",
                         ),
                     )
                 TestConfigConnectUseCase.Result.BadUrl ->
