@@ -6,11 +6,16 @@
 #   ./scripts/release.sh 0.2.0 -m "Fix agent install"
 #   ./scripts/release.sh -m "notes" --dry-run
 #   ./scripts/release.sh 0.2.0 -m "notes" --no-push
+#   ./scripts/release.sh -m "notes" --no-agent-bump
 #
 # Comment (-m) is required: used for the Release commit, annotated tag, and GitHub notes.
 # On failure before the release commit, version files are restored to HEAD.
 # If the tag already exists but the GitHub Release is missing/incomplete, re-run with
 # the same version and -m to rebuild jars and finish publishing (no second tag).
+#
+# The host agent updates itself only when the panel's chainAgentVersion differs from its own,
+# so every release also bumps chainAgentVersion (patch): otherwise installed agents keep
+# reporting "up to date" and never pick up the new agent jar. --no-agent-bump skips that.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -25,6 +30,8 @@ PANEL_REL="admin/PANEL_VERSION"
 
 DRY_RUN=0
 NO_PUSH=0
+NO_AGENT_BUMP=0
+RESTORE_AGENT_VER=""
 EXPLICIT_VERSION=""
 COMMENT=""
 VERSION_TOUCHED=0
@@ -33,7 +40,7 @@ RESTORE_VER=""
 UPLOAD_ONLY=0
 
 usage() {
-  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -42,6 +49,7 @@ while [[ $# -gt 0 ]]; do
     -h|--help) usage 0 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --no-push) NO_PUSH=1; shift ;;
+    --no-agent-bump) NO_AGENT_BUMP=1; shift ;;
     -m|--message|--notes|--comment)
       if [[ $# -lt 2 || -z "${2:-}" ]]; then
         echo "missing value for $1" >&2
@@ -89,6 +97,16 @@ bump_patch() {
   minor="${minor:-0}"
   patch="${patch:-0}"
   printf '%s.%s.%s\n' "$major" "$minor" "$((patch + 1))"
+}
+
+read_git_agent_version() {
+  git -C "$ROOT" show HEAD:"$BUILD_REL" 2>/dev/null \
+    | sed -n 's/^val chainAgentVersion = "\([^"]*\)".*/\1/p' \
+    | head -1
+}
+
+set_agent_version() {
+  sed -i -E "s/^(val chainAgentVersion = \")[^\"]+(\")/\1${1}\2/" "$BUILD_FILE"
 }
 
 set_server_version() {
@@ -159,7 +177,10 @@ restore_version_if_needed() {
     return 0
   fi
   set_server_version "$RESTORE_VER"
-  echo "release failed — restored version to $RESTORE_VER" >&2
+  if [[ -n "$RESTORE_AGENT_VER" ]]; then
+    set_agent_version "$RESTORE_AGENT_VER"
+  fi
+  echo "release failed — restored version to $RESTORE_VER (agent $RESTORE_AGENT_VER)" >&2
 }
 
 release_notes_body() {
@@ -224,6 +245,14 @@ FILE_VER="${FILE_VER:-0.0.0}"
 GIT_VER="$(read_git_version)"
 GIT_VER="${GIT_VER:-0.0.0}"
 RESTORE_VER="$GIT_VER"
+GIT_AGENT_VER="$(read_git_agent_version)"
+GIT_AGENT_VER="${GIT_AGENT_VER:-0.0.0}"
+RESTORE_AGENT_VER="$GIT_AGENT_VER"
+# Always bump from HEAD, so a retry after a failed attempt does not bump twice.
+NEW_AGENT_VER="$GIT_AGENT_VER"
+if [[ "$NO_AGENT_BUMP" -eq 0 ]]; then
+  NEW_AGENT_VER="$(bump_patch "$GIT_AGENT_VER")"
+fi
 
 if [[ -n "$EXPLICIT_VERSION" ]]; then
   VERSION="$EXPLICIT_VERSION"
@@ -285,7 +314,11 @@ fi
 
 if [[ "$UPLOAD_ONLY" -eq 0 && "$NEED_VERSION_COMMIT" -eq 1 ]]; then
   set_server_version "$VERSION"
+  set_agent_version "$NEW_AGENT_VER"
   VERSION_TOUCHED=1
+  if [[ "$NEW_AGENT_VER" != "$GIT_AGENT_VER" ]]; then
+    echo "agent version $GIT_AGENT_VER -> $NEW_AGENT_VER (installed agents update when this changes)"
+  fi
 fi
 
 echo "building jars…"
