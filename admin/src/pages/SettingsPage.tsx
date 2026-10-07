@@ -252,7 +252,7 @@ export function SettingsPage() {
             />
             <Text size="sm" c="dimmed">
               Host nginx from <Code>deploy/nginx-cdn</Code>, then{' '}
-              <Code>sudo ./scripts/install-rpcnode-cdn.sh</Code>.
+              <Code>sudo ./scripts/rpcnode.sh install cdn</Code>.
             </Text>
             <Group>
               <Button

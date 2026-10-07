@@ -9,3 +9,6 @@ database/
 
 .codex
 .cursor
+
+# Built agent jar staged for /install/binaries: a committed copy goes stale and gets served to new hosts.
+/public/install/binaries/

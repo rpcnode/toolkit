@@ -8,7 +8,7 @@ serves the **Next.js** public site (HTML) and those archive files from disk.
 ## Enable
 
 ```bash
-./scripts/build-rpcnode-cdn.sh 0
+./scripts/rpcnode.sh build cdn
 # on the CDN host:
 sudo java -jar rpcnode-cdn.jar install   # asks which disk to use
 # add what to mirror (TTY menu):

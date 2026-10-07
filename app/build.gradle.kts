@@ -15,7 +15,7 @@ group = "rpcnode"
 version = "0.1.8"
 
 /** Host agent JAR (`rpcnode-agent.jar`). Separate from the server `version`. */
-val chainAgentVersion = "0.1.4"
+val chainAgentVersion = "0.1.5"
 
 /** Snapshot CDN sync JAR (`rpcnode-cdn.jar`). */
 val cdnVersion = "0.2.5"

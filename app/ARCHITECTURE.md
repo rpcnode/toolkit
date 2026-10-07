@@ -349,7 +349,7 @@ flowchart LR
 | Disk store | `cdn/infrastructure/filesystem/DiskSnapshotMirrorStore.kt` |
 | CDN preference (panel) | `networks/application/snapshot/PreferCdnSnapshotUseCase.kt` |
 | Settings model | `settings/domain/model/SnapshotCdnOrigin.kt` |
-| nginx / install | `deploy/nginx-cdn/`, `scripts/install-rpcnode-cdn.sh` |
+| nginx / install | `deploy/nginx-cdn/`, `scripts/rpcnode.sh install cdn` |
 
 Entrypoint: **`cdn/presentation/CdnMain.kt`** (`sync` / `menu`).
 

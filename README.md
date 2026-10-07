@@ -174,17 +174,31 @@ Full user and operations documentation is available at
 
 ### Publishing a release
 
-Use the release script. It bumps the server/`PANEL_VERSION`, builds the three
-JARs, commits, tags `vX.Y.Z`, pushes, and creates a GitHub Release with the
-artifacts:
+Everything goes through **one script**, `scripts/rpcnode.sh` (run it with no
+arguments for a menu, or `./scripts/rpcnode.sh help`). On Windows use
+`scripts\rpcnode.cmd` (build, release, stop; install/remove run on the Linux
+host). The implementation pieces live in `scripts/lib/` — you never call them.
+
+`release` bumps the server version, `PANEL_VERSION` and the **agent version**
+(installed agents update only when it changes) and builds the three JARs. In a
+terminal it asks how far to go; the same choice is available as a flag:
+
+| Mode | Flag | What happens |
+| --- | --- | --- |
+| Build only | `--build-only` | Jars and checksums in `dist/release/`; version files are put back, nothing is committed or tagged. |
+| Commit + tag | `--tag-only` | Also a version commit and the tag `vX.Y.Z` on this machine; nothing is pushed. |
+| Full release | `--publish` (default) | Also pushes the tag and creates the GitHub Release with the jars. |
+
 
 ```bash
-./scripts/release.sh          # bump patch (e.g. 0.1.1 -> 0.1.2)
-./scripts/release.sh 0.2.0    # set an explicit version
-./scripts/release.sh --dry-run
+./scripts/rpcnode.sh release -m "notes"            # bump patch (e.g. 0.1.1 -> 0.1.2)
+./scripts/rpcnode.sh release 0.2.0 -m "notes"      # set an explicit version
+./scripts/rpcnode.sh release -m "notes" --dry-run
+./scripts/rpcnode.sh release -m "notes" --build-only
+./scripts/rpcnode.sh release -m "notes" --no-agent-bump
 ```
 
-Requires a clean git tree, `gh` auth, and push access to `origin`.
+Tag and full-release modes need a clean git tree; full release also needs `gh` auth and push access to `origin`.
 
 ## Local development
 
@@ -221,19 +235,29 @@ See the [backend](app/README.md), [admin panel](admin/README.md), and
 
 ## Deployment
 
-Build artifacts from the repository root. Argument `0` keeps the current
-version; `1` increments the patch version.
+All operations are subcommands of `scripts/rpcnode.sh`:
 
 ```bash
-./scripts/build-rpcnode-server.sh 0
-./scripts/build-rpcnode-agent.sh 0
-./scripts/build-rpcnode-cdn.sh 0
+./scripts/rpcnode.sh build [server|agent|cdn|all] [--bump-agent]   # jars -> app/build/libs
+./scripts/rpcnode.sh install server|agent|cdn      # this host (asks for sudo itself)
+./scripts/rpcnode.sh update  server|agent|cdn
+./scripts/rpcnode.sh remove  nodes|agent|server|cdn|all [--purge] [-y]
+./scripts/rpcnode.sh status                        # services and agent versions
 ```
+
+Without a release, build the agent first and the server second
+(`build all` does it): the server jar carries the agent version, and agents
+update when the version the panel announces differs from their own. Add
+`--bump-agent` to change it.
+
+`remove nodes` stops and deletes all node services (chain data stays on disk).
+`remove all` removes nodes, agent, panel and CDN service from the host;
+`--purge` additionally deletes the panel database and admin account.
 
 Install the server on the control-plane host:
 
 ```bash
-sudo ./scripts/install-rpcnode-server.sh --install
+./scripts/rpcnode.sh install server
 ```
 
 An agent host is the machine that will run nodes. Download the agent from
@@ -245,7 +269,7 @@ curl -fsSL -o rpcnode-agent.jar http://<control-host>:8094/install/binaries/rpcn
   && sudo java -jar rpcnode-agent.jar install
 ```
 
-`install-rpcnode-server.sh` listens on **8094** (`PANEL_PORT`). The admin UI
+`install server` listens on **8094** (`PANEL_PORT`). The admin UI
 stays on **8093** (Docker container, or pm2 — see below). When there is no
 local `app/build/libs/rpcnode-server.jar`, the installer downloads the jar of
 this checkout's version from GitHub Releases (`RPCNODE_VERSION=0.1.8` picks
@@ -325,9 +349,8 @@ You can run the public CDN site through Docker from `cdn-site/`; nginx must
 serve `/snapshots/*` from disk. See the complete guide in
 [deploy/nginx-cdn/README.md](deploy/nginx-cdn/README.md).
 
-Install scripts support updates and uninstalls without deleting data:
-`--update` and `--uninstall` for the server/CDN, and `update` and `uninstall`
-for the agent.
+`update` replaces the jar and keeps all data; `remove` deletes the service
+but keeps the database (`remove server --purge` deletes it too).
 
 ## Adding a network
 

@@ -32,10 +32,10 @@ Connect / RPC clients use the public Go RPC base. Humans open the admin UI at `h
 
 Panel first start: empty htpasswd → open `http://127.0.0.1:8093/setup` (admin UI).  
 API origin for agents is **rpcnode-server** `:8094`. From Docker use the host IP or DNS, not `127.0.0.1`.
-Server install (control host), from the repo root after `./scripts/build-rpcnode-server.sh`:
+Server install (control host), from the repo root after `./scripts/rpcnode.sh build server`:
 
 ```bash
-sudo ./scripts/install-rpcnode-server.sh
+sudo ./scripts/rpcnode.sh install server
 ```
 
 Agent install: download the jar from the panel, then self-install (same pattern as the CDN jar):
@@ -45,7 +45,7 @@ curl -fsSL -o rpcnode-agent.jar "$PANEL/install/binaries/rpcnode-agent.jar"
 sudo java -jar rpcnode-agent.jar install
 ```
 
-From a repo checkout you can also run `sudo ./scripts/install-rpcnode-agent.sh` (thin wrapper around the jar).
+From a repo checkout you can also run `sudo ./scripts/rpcnode.sh install agent` (thin wrapper around the jar).
 
 Set the same origin (scheme + host + port, no `/install` suffix) in panel **Settings → Install origin**. There is no shared public install URL.  
 Network/env is bound in the panel when adding a node.

@@ -46,9 +46,9 @@ class GetSettingsUseCase(
                 uninstall = uninstallCmd,
             ),
             panelScripts = ScriptBundle(
-                install = "sudo ./scripts/install-rpcnode-server.sh",
-                update = "sudo ./scripts/install-rpcnode-server.sh --update",
-                uninstall = "sudo ./scripts/install-rpcnode-server.sh --uninstall",
+                install = "sudo ./scripts/rpcnode.sh install server",
+                update = "sudo ./scripts/rpcnode.sh update server",
+                uninstall = "sudo ./scripts/rpcnode.sh remove server",
             ),
             presets = OriginPresets(
                 panel = panel,

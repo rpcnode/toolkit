@@ -14,7 +14,7 @@ admin/dist/
 # Docker bind-mount for rpcnode-server (toolkit.db, panel.htpasswd, …)
 /data/
 
-# Local release staging (scripts/release.sh → dist/release/*.jar)
+# Local release staging (scripts/rpcnode.sh release → dist/release/*.jar)
 /dist/
 
 # app (also listed in app/.gitignore)
@@ -24,3 +24,6 @@ app/.idea/
 app/.kotlin/
 app/database/
 *.log
+
+# stray agent jars (a committed copy goes stale)
+scripts/*.jar
