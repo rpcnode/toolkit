@@ -32,6 +32,7 @@ import rpcnode.toolkit.agent.application.client.ClientSyncResult
 import rpcnode.toolkit.agent.application.client.ClientUpdateAcceptResult
 import rpcnode.toolkit.agent.application.client.ClientUpdateCommand
 import rpcnode.toolkit.agent.application.client.ClientUpdateSnapshot
+import rpcnode.toolkit.agent.application.client.combinedLog
 import rpcnode.toolkit.agent.application.client.ClientRollbackResult
 import rpcnode.toolkit.agent.application.client.SyncClientFromPanelUseCase
 import rpcnode.toolkit.agent.application.client.UpdateClientOnHostUseCase
@@ -2010,7 +2011,7 @@ private fun ClientUpdateSnapshot.toResponse() = AgentClientUpdateInfoResponse(
     detail = detail,
     pct = pct,
     lastError = lastError,
-    logTail = logTail,
+    logTail = combinedLog(),
 )
 
 private suspend fun ApplicationCall.authorized(expected: String): Boolean

@@ -88,7 +88,8 @@ export function ClientUpdateModal({
   const pct = Math.max(0, Math.min(100, Number(info?.pct) || 0))
   const idx = failed ? -1 : done ? STEPS.length - 1 : Math.max(0, stepIndex(step, info?.events))
   const startErr = String(startError || '').trim()
-  const detail = hideURL(startErr || info?.detail || '')
+  // The alert shows the first line only; the full text (with the stack trace) is in the logs below.
+  const detail = hideURL(startErr.split('\n')[0] || info?.detail || '')
   const err = hideURL(info?.last_error || '')
   // Panel/agent error text goes first, then the host log tail — everything needed to debug is in this window.
   const logTail = [startErr ? `# update request failed\n${startErr}` : '', String(info?.log_tail || '').trim()]

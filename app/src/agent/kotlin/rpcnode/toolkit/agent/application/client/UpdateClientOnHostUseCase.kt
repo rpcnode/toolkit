@@ -128,7 +128,9 @@ class UpdateClientOnHostUseCase(
         scope.launch(Dispatchers.IO) {
             runJob(command)
         }
-        return ClientUpdateAcceptResult.Accepted(snap)
+        note(nodeId, "update accepted: ${command.network}/${command.env}, node dir $nodeDir, client ${latest.ifBlank { "(version unknown)" }}")
+        note(nodeId, "current client: ${local.ifBlank { "(unknown)" }}, previous copy: ${previousHint.ifBlank { "(none)" }}")
+        return ClientUpdateAcceptResult.Accepted(state.get(nodeId))
     }
 
     suspend fun rollback(
@@ -229,11 +231,19 @@ class UpdateClientOnHostUseCase(
             patch(nodeId) {
                 it.copy(step = "stopped", detail = "Stopping unit before update", pct = 10)
             }
-            HostNodeLaunchSupport.stopUnit(network, env, nodeDir)
+            note(nodeId, "stopping unit ${HostNodeLaunchSupport.unitName(network, env)} (waits for a clean shutdown)")
+            val stopStarted = System.currentTimeMillis()
+            when (val stopped = HostNodeLaunchSupport.stopUnit(network, env, nodeDir))
+            {
+                is HostNodeStartResult.Failed -> note(nodeId, "stop reported a problem: ${stopped.detail}")
+                else -> note(nodeId, "unit stopped in ${(System.currentTimeMillis() - stopStarted) / 1000}s")
+            }
             report(nodeId, eventId = "stopped", eventLabel = "Stopped")
 
             val staging = ClientStagingLayout.updateDir(nodeDir)
             ClientStagingLayout.ensureEmptyDir(staging)
+            note(nodeId, "staging folder ready: $staging")
+            note(nodeId, "downloading the client and config from the panel")
             patch(nodeId) {
                 it.copy(step = "updating", detail = "Downloading client into staging", pct = 25)
             }
@@ -253,7 +263,7 @@ class UpdateClientOnHostUseCase(
                 )
             )
             {
-                is ClientSyncResult.Ok -> Unit
+                is ClientSyncResult.Ok -> note(nodeId, "client files downloaded and config patched")
                 ClientSyncResult.MissingPanelUrl ->
                     return fail(nodeId, nodeDir, network, env, logFile, "missing_panel_url", "Agent is not enrolled (no panel URL)")
                 ClientSyncResult.InvalidNodeDir ->
@@ -271,8 +281,11 @@ class UpdateClientOnHostUseCase(
             }
             report(nodeId)
             val artifactNames = ClientStagingLayout.listArtifactNames(staging)
+            note(nodeId, "files in staging: ${artifactNames.joinToString(", ").ifBlank { "(none)" }}")
             val previousVersion = ClientStagingLayout.snapshotLiveToPrevious(nodeDir, artifactNames)
+            note(nodeId, "previous client kept as ${previousVersion.ifBlank { "(first install, nothing to keep)" }}")
             ClientStagingLayout.promoteStagingToLive(nodeDir, staging)
+            note(nodeId, "new client promoted into the node folder")
             val newVersion = readNodeClientVersion(nodeDir.toString())
                 .ifEmpty { command.clientVersion.trim() }
 
@@ -286,6 +299,7 @@ class UpdateClientOnHostUseCase(
                 )
             }
             report(nodeId)
+            note(nodeId, "starting the node on client $newVersion")
 
             when (
                 val started = startNode(
@@ -338,6 +352,7 @@ class UpdateClientOnHostUseCase(
             }
             report(nodeId)
             val unit = HostNodeLaunchSupport.unitName(network, env)
+            note(nodeId, "watching $unit: it must stay up without restarts for the trial period")
             val unstable = stability.verify(unit)
             if (unstable != null)
             {
@@ -353,6 +368,7 @@ class UpdateClientOnHostUseCase(
                 )
             }
 
+            note(nodeId, "unit is stable — update finished, client $newVersion is running")
             patch(nodeId) {
                 it.copy(
                     phase = "idle",
@@ -370,7 +386,9 @@ class UpdateClientOnHostUseCase(
         }
         catch (e: Exception)
         {
-            log.warn("client update failed for {}: {}", nodeId, e.message)
+            log.warn("client update failed for {}", nodeId, e)
+            note(nodeId, "unexpected error: ${e.javaClass.name}: ${e.message}")
+            e.stackTrace.take(10).forEach { note(nodeId, "    at $it") }
             fail(nodeId, nodeDir, network, env, logFile, "update_failed", e.message ?: "update failed")
         }
     }
@@ -402,6 +420,9 @@ class UpdateClientOnHostUseCase(
         }
         // The crash evidence lives in the log the previous client is about to keep appending to.
         val crashLog = readLogTail(nodeDir, logFile)
+        note(nodeId, "new client failed ($error): $message")
+        noteUnitJournal(nodeId, network, env)
+        note(nodeId, "restoring the previous client and starting it")
         patch(nodeId) {
             it.copy(step = "rollback", detail = "New client is not stable — restoring the previous one", pct = 90)
         }
@@ -450,6 +471,8 @@ class UpdateClientOnHostUseCase(
         message: String,
     )
     {
+        note(nodeId, "FAILED ($error): $message")
+        noteUnitJournal(nodeId, network, env)
         val previous = ClientStagingLayout.readPreviousVersion(nodeDir)
             .ifEmpty { state.get(nodeId).previousVersion }
         state.update(nodeId) {
@@ -465,6 +488,32 @@ class UpdateClientOnHostUseCase(
         }
         report(nodeId, eventId = "error", eventLabel = "Failed")
         runCatching { HostNodeLaunchSupport.stopUnit(network, env, nodeDir) }
+    }
+
+    /** One timestamped line in the update log the admin shows (every process the job runs). */
+    private fun note(nodeId: String, line: String)
+    {
+        val stamp = java.time.LocalTime.now().withNano(0)
+        state.update(nodeId) { it.copy(jobLog = (it.jobLog + "[$stamp] $line").takeLast(400)) }
+    }
+
+    /** Last lines the systemd unit wrote — why it exited is usually here, not in the node log file. */
+    private fun noteUnitJournal(nodeId: String, network: String, env: String)
+    {
+        val unit = HostNodeLaunchSupport.unitName(network, env)
+        val text = runCatching {
+            val p = ProcessBuilder("journalctl", "-u", unit, "-n", "40", "--no-pager", "-o", "cat")
+                .redirectErrorStream(true)
+                .start()
+            val out = p.inputStream.bufferedReader().readText()
+            p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
+            out.trim()
+        }.getOrDefault("")
+        if (text.isNotEmpty())
+        {
+            note(nodeId, "journal of $unit (last lines):")
+            text.lines().takeLast(40).forEach { note(nodeId, "  $it") }
+        }
     }
 
     private fun patch(nodeId: String, transform: (ClientUpdateSnapshot) -> ClientUpdateSnapshot)
@@ -497,7 +546,7 @@ class UpdateClientOnHostUseCase(
                     previousVersion = snap.previousVersion,
                     updateAvailable = snap.updateAvailable,
                     lastError = snap.lastError,
-                    logTail = snap.logTail,
+                    logTail = snap.combinedLog(),
                     eventId = eventId.ifEmpty { snap.step },
                     eventLabel = eventLabel.ifEmpty { snap.step },
                 )

@@ -11,6 +11,8 @@ import io.ktor.server.request.uri
 import io.ktor.server.response.respondText
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger("rpcnode.http.error")
@@ -36,7 +38,13 @@ fun Application.installUnhandledErrors()
                     return@on
                 }
                 val reason = (cause.message ?: cause.javaClass.simpleName).take(600)
-                val body = """{"ok":false,"error":"internal_error","message":${JsonPrimitive(reason)}}"""
+                val frames = cause.stackTrace.take(12).joinToString("\n") { "  at $it" }
+                val body = buildJsonObject {
+                    put("ok", JsonPrimitive(false))
+                    put("error", JsonPrimitive("internal_error"))
+                    put("message", JsonPrimitive(reason))
+                    put("trace", JsonPrimitive("${cause.javaClass.name}: ${cause.message}\n$frames"))
+                }.toString()
                 call.respondText(body, ContentType.Application.Json, HttpStatusCode.InternalServerError)
             }
         },

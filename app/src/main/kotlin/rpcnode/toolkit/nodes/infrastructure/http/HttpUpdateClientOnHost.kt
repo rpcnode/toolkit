@@ -162,7 +162,10 @@ class HttpUpdateClientOnHost(
     {
         val obj = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull()
         val error = obj?.get("error")?.jsonPrimitive?.contentOrNull ?: "http_$status"
-        val message = obj?.get("message")?.jsonPrimitive?.contentOrNull ?: "HTTP $status"
+        val trace = obj?.get("trace")?.jsonPrimitive?.contentOrNull.orEmpty()
+        // The agent sends the stack trace of an unexpected failure: keep it, the update dialog shows it as the log.
+        val message = (obj?.get("message")?.jsonPrimitive?.contentOrNull ?: "HTTP $status") +
+            (if (trace.isNotBlank()) "\n$trace" else "")
         return if (status in 200 until 300)
         {
             ClientUpdateOnHostResult.Accepted(parseInfo(obj?.get("client_update")?.jsonObject))

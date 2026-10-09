@@ -19,7 +19,16 @@ data class ClientUpdateSnapshot(
     val pct: Int = 0,
     val lastError: String = "",
     val logTail: String = "",
+    /** Timestamped lines for every step the update job runs (stop, download, patch, promote, start, checks). */
+    val jobLog: List<String> = emptyList(),
 )
+
+/** What the admin shows as «Logs»: the job steps first, then the node log tail. */
+fun ClientUpdateSnapshot.combinedLog(): String =
+    buildList {
+        if (jobLog.isNotEmpty()) add(jobLog.joinToString("\n"))
+        if (logTail.isNotBlank()) add("--- node log (last lines) ---\n" + logTail.trim())
+    }.joinToString("\n\n")
 
 /**
  * In-memory client-update progress keyed by node id (one job per node).
