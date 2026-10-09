@@ -1,5 +1,6 @@
 package rpcnode.toolkit.agent.infrastructure.node
 
+import rpcnode.toolkit.agent.infrastructure.filesystem.AtomicFile
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
@@ -94,7 +95,7 @@ class FileRunningNodeRegistry(
                     )
                 },
             )
-            Files.writeString(storeFile, json.encodeToString(payload))
+            AtomicFile.writeString(storeFile, json.encodeToString(payload))
         }
         catch (_: Exception)
         {

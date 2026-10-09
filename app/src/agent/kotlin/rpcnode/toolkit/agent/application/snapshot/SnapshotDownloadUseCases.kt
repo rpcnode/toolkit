@@ -950,6 +950,22 @@ class GetSnapshotProgressUseCase(
         {
             return null
         }
-        return store.read(id)
+        store.read(id)?.let { return it }
+        if (store.exists(id))
+        {
+            // The job file is there but unreadable: the host lost power / was reset while the agent was
+            // rewriting it. Say so (and let the operator start again) instead of "no job yet".
+            val message = "Snapshot job state was damaged by a host restart — start the snapshot again"
+            return SnapshotJob(
+                jobId = id,
+                url = "",
+                destDir = "",
+                phase = "failed",
+                detail = message,
+                failed = true,
+                error = message,
+            )
+        }
+        return null
     }
 }

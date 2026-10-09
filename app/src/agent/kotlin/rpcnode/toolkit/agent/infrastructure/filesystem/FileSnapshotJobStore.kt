@@ -35,11 +35,12 @@ class FileSnapshotJobStore(
     override fun write(job: SnapshotJob)
     {
         val path = jobPath(job.jobId)
-        Files.createDirectories(path.parent)
-        Files.writeString(path, json.encodeToString(job.toPayload()))
+        AtomicFile.writeString(path, json.encodeToString(job.toPayload()))
     }
 
     override fun isRunning(jobId: String): Boolean = read(jobId)?.running == true
+
+    override fun exists(jobId: String): Boolean = Files.isRegularFile(jobPath(jobId))
 
     override fun list(): List<SnapshotJob>
     {

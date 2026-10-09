@@ -35,6 +35,7 @@ import rpcnode.toolkit.agent.application.node.ListLocalNodesUseCase
 import rpcnode.toolkit.agent.application.node.NodeHeightPusher
 import rpcnode.toolkit.agent.application.node.PushNodeHeightsUseCase
 import rpcnode.toolkit.agent.application.node.RemoveNodeHostUseCase
+import rpcnode.toolkit.agent.application.node.RemoveNodeStepsUseCase
 import rpcnode.toolkit.agent.application.node.StartNodeProcessUseCase
 import rpcnode.toolkit.agent.application.node.TestNodeUseCase
 import rpcnode.toolkit.agent.application.ports.CheckPortsUseCase
@@ -360,6 +361,10 @@ private fun runAgentServer()
                 controlNodeUnit = ControlNodeUnitUseCase(runningNodes),
                 removeNodeHost = RemoveNodeHostUseCase(runningNodes),
                 testNode = TestNodeUseCase(runningNodes, chainRuntimes),
+                removeNodeSteps = RemoveNodeStepsUseCase(
+                    runningNodes,
+                    CoroutineScope(SupervisorJob() + Dispatchers.IO),
+                ),
             )
         }.start(wait = true)
     }
@@ -423,6 +428,7 @@ fun Application.module(
     controlNodeUnit: ControlNodeUnitUseCase? = null,
     removeNodeHost: RemoveNodeHostUseCase? = null,
     testNode: TestNodeUseCase? = null,
+    removeNodeSteps: RemoveNodeStepsUseCase? = null,
 )
 {
     installHttpCallLogging()
@@ -461,5 +467,6 @@ fun Application.module(
         controlNodeUnit = controlNodeUnit,
         removeNodeHost = removeNodeHost,
         testNode = testNode,
+        removeNodeSteps = removeNodeSteps,
     )
 }

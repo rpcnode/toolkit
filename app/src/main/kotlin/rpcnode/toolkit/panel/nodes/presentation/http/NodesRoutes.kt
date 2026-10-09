@@ -2,6 +2,7 @@ package rpcnode.toolkit.panel.nodes.presentation.http
 
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
@@ -38,6 +39,8 @@ import rpcnode.toolkit.nodes.application.test.RunNodeLiveTestResult
 import rpcnode.toolkit.nodes.application.update.RollbackNodeClientResult
 import rpcnode.toolkit.nodes.application.update.UpdateNodeClientResult
 import rpcnode.toolkit.servers.application.probe.InvalidAgentKey
+import rpcnode.toolkit.nodes.application.process.StopAllState
+import rpcnode.toolkit.nodes.application.remove.NodeRemovalResult
 import rpcnode.toolkit.nodes.application.remove.RemoveNodeMode
 import rpcnode.toolkit.nodes.application.remove.RemoveNodeResult
 import rpcnode.toolkit.networks.domain.model.ClientConfigFacts
@@ -459,6 +462,94 @@ data class NodeRemoveBody(
     @SerialName("delete_files") val deleteFiles: Boolean = false,
     val force: Boolean = false,
 )
+
+@Serializable
+data class StopAllItemResponse(
+    @SerialName("node_id") val nodeId: String,
+    val name: String = "",
+    val network: String = "",
+    val env: String = "",
+    val status: String,
+    val detail: String = "",
+)
+
+@Serializable
+data class StopAllResponse(
+    val ok: Boolean = true,
+    val running: Boolean = false,
+    @SerialName("started_at") val startedAt: String = "",
+    @SerialName("finished_at") val finishedAt: String = "",
+    val total: Int = 0,
+    val done: Int = 0,
+    val failed: Int = 0,
+    val items: List<StopAllItemResponse> = emptyList(),
+)
+
+private fun StopAllState.toResponse() = StopAllResponse(
+    running = running,
+    startedAt = startedAt,
+    finishedAt = finishedAt,
+    total = items.size,
+    done = done,
+    failed = failed,
+    items = items.map { StopAllItemResponse(it.nodeId, it.name, it.network, it.env, it.status, it.detail) },
+)
+
+@Serializable
+data class NodeRemoveStartBody(
+    val mode: String = "wipe",
+)
+
+@Serializable
+data class NodeRemovalStepResponse(
+    val id: String,
+    val title: String,
+    val status: String,
+    val detail: String = "",
+)
+
+@Serializable
+data class NodeRemovalResponse(
+    val ok: Boolean = true,
+    @SerialName("node_id") val nodeId: String = "",
+    val steps: List<NodeRemovalStepResponse> = emptyList(),
+    val done: Boolean = false,
+    val failed: Boolean = false,
+    val error: String? = null,
+)
+
+private suspend fun ApplicationCall.respondNodeRemoval(result: NodeRemovalResult)
+{
+    when (result)
+    {
+        is NodeRemovalResult.Ok ->
+            respond(
+                NodeRemovalResponse(
+                    ok = !result.view.failed,
+                    nodeId = result.view.nodeId,
+                    steps = result.view.steps.map { NodeRemovalStepResponse(it.id, it.title, it.status, it.detail) },
+                    done = result.view.done,
+                    failed = result.view.failed,
+                    error = result.view.error.ifBlank { null },
+                ),
+            )
+        NodeRemovalResult.NotFound -> respond(HttpStatusCode.NotFound, NodeErrorResponse(error = "not_found"))
+        NodeRemovalResult.ServerNotFound ->
+            respond(HttpStatusCode.BadRequest, NodeErrorResponse(error = "server_not_found", message = "Server not found"))
+        NodeRemovalResult.AgentUnreachable ->
+            respond(
+                HttpStatusCode.BadGateway,
+                NodeErrorResponse(error = "agent_unreachable", message = "Host agent did not answer"),
+            )
+        NodeRemovalResult.InvalidAgentKey ->
+            respond(
+                HttpStatusCode.Unauthorized,
+                NodeErrorResponse(error = InvalidAgentKey.ERROR, message = InvalidAgentKey.MESSAGE),
+            )
+        is NodeRemovalResult.Failed ->
+            respond(HttpStatusCode.BadGateway, NodeErrorResponse(error = result.error, message = result.message))
+    }
+}
 
 @Serializable
 data class NodeRemoveResponse(
@@ -1305,6 +1396,14 @@ fun Application.nodesApiRoutes(toolkit: Toolkit)
             }
         }
 
+        post("/api/nodes/stop-all") {
+            call.respond(toolkit.stopAllNodes.start().toResponse())
+        }
+
+        get("/api/nodes/stop-all/progress") {
+            call.respond(toolkit.stopAllNodes.progress().toResponse())
+        }
+
         post("/api/nodes/{id}/process/stop") {
             val id = call.parameters["id"].orEmpty()
             when (val result = toolkit.controlNodeProcess.stop(id))
@@ -1505,6 +1604,22 @@ fun Application.nodesApiRoutes(toolkit: Toolkit)
         post("/api/nodes/status") {
             val body = call.receive<NodeStatusBody>()
             call.respondNodeStatus(toolkit.updateNodeStatus(body.id, body.status))
+        }
+
+        post("/api/nodes/{id}/remove/start") {
+            val id = call.parameters["id"].orEmpty()
+            val body = runCatching { call.receive<NodeRemoveStartBody>() }.getOrDefault(NodeRemoveStartBody())
+            val mode = RemoveNodeMode.parse(body.mode)
+            if (mode == null)
+            {
+                call.respond(HttpStatusCode.BadRequest, NodeErrorResponse(error = "unknown_mode"))
+                return@post
+            }
+            call.respondNodeRemoval(toolkit.removeNodeSteps.start(id, mode))
+        }
+
+        get("/api/nodes/{id}/remove/progress") {
+            call.respondNodeRemoval(toolkit.removeNodeSteps.progress(call.parameters["id"].orEmpty()))
         }
 
         post("/api/nodes/remove") {

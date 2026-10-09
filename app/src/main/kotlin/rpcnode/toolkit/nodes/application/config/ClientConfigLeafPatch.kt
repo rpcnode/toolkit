@@ -25,6 +25,11 @@ object ClientConfigLeafPatch
             var replaced = false
             for (key in keys)
             {
+                // `version` alone would hit unrelated keys such as node.p2p.version
+                if (key == "version" && path != "version")
+                {
+                    continue
+                }
                 val next = replaceHoconAssign(text, key, value)
                 if (next != null)
                 {

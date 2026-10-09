@@ -1,5 +1,6 @@
 package rpcnode.toolkit.agent.application.files
 
+import rpcnode.toolkit.agent.infrastructure.filesystem.AtomicFile
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -31,7 +32,7 @@ class WriteHostFileUseCase
             {
                 Files.createDirectories(parent)
             }
-            Files.writeString(file, content)
+            AtomicFile.writeString(file, content, keepPermissions = true)
             WriteHostFileResult.Ok(path)
         }
         catch (e: Exception)

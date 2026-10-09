@@ -154,8 +154,49 @@ object HostNodeLaunchSupport
         {
             return stopped
         }
-        val toRemove = companions + unit
-        for (name in toRemove.distinct())
+        val removed = deleteUnitFiles(companions + unit)
+        if (removed is HostNodeStartResult.Failed)
+        {
+            return removed
+        }
+        if (nodeDir != null)
+        {
+            runCatching { Files.deleteIfExists(nodeDir.resolve(".toolkit/systemd.unit")) }
+            runCatching { Files.deleteIfExists(nodeDir.resolve(".toolkit/systemd.companions")) }
+            runCatching { Files.deleteIfExists(nodeDir.resolve(".toolkit/systemd.unit.body")) }
+            for (c in companions)
+            {
+                runCatching { Files.deleteIfExists(companionBodyPath(nodeDir, c)) }
+            }
+        }
+        log.info("systemd unit={} removed ({} / {})", unit, network, env)
+        return HostNodeStartResult.Started(pid = 0)
+    }
+
+    /**
+     * Every systemd unit of a node: its companions (e.g. lighthouse next to geth) plus the main unit.
+     * The companion names live in the node directory, so collect them BEFORE that directory is wiped.
+     */
+    fun nodeUnits(network: String, env: String, nodeDir: Path?): List<String> =
+        (readCompanions(nodeDir) + resolveUnit(network, env, nodeDir)).distinct()
+
+    /** Stop everything in [units] (companions first), then `disable`, delete the files and reload systemd. */
+    fun removeUnits(units: List<String>, network: String, env: String): HostNodeStartResult
+    {
+        for (name in units.asReversed())
+        {
+            val stopped = stopOneUnit(name, network, env)
+            if (stopped is HostNodeStartResult.Failed)
+            {
+                return stopped
+            }
+        }
+        return deleteUnitFiles(units)
+    }
+
+    private fun deleteUnitFiles(units: List<String>): HostNodeStartResult
+    {
+        for (name in units.distinct())
         {
             val unitPath = Path.of("/etc/systemd/system", name)
             if (!Files.isRegularFile(unitPath))
@@ -182,17 +223,6 @@ object HostNodeLaunchSupport
         {
             return HostNodeStartResult.Failed("systemctl daemon-reload failed: ${reload.out}")
         }
-        if (nodeDir != null)
-        {
-            runCatching { Files.deleteIfExists(nodeDir.resolve(".toolkit/systemd.unit")) }
-            runCatching { Files.deleteIfExists(nodeDir.resolve(".toolkit/systemd.companions")) }
-            runCatching { Files.deleteIfExists(nodeDir.resolve(".toolkit/systemd.unit.body")) }
-            for (c in companions)
-            {
-                runCatching { Files.deleteIfExists(companionBodyPath(nodeDir, c)) }
-            }
-        }
-        log.info("systemd unit={} removed ({} / {})", unit, network, env)
         return HostNodeStartResult.Started(pid = 0)
     }
 

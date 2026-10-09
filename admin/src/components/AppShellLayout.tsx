@@ -3,6 +3,7 @@ import {
   Anchor,
   AppShell,
   Burger,
+  Button,
   Group,
   Text,
   Tooltip,
@@ -17,6 +18,7 @@ import {
   IconHeartHandshake,
   IconBell,
   IconPackage,
+  IconPlayerStop,
   IconBrandGithub,
   IconSettings,
   IconWorld,
@@ -30,6 +32,7 @@ import { api } from '../api'
 import { BrandLogo } from './BrandLogo'
 import { ThemeToggle } from './ThemeToggle'
 import { AddServerModal } from './AddServerModal'
+import { StopAllModal } from './StopAllModal'
 import { ApiDocsButton, ApiDocsModal } from './ApiDocsModal'
 import { DonateModal } from './DonateModal'
 import { PANEL_VERSION } from '../panelVersion'
@@ -72,6 +75,7 @@ function AppShellInner({ route, children, openInstall = false }: Props) {
   const [navOpened, { toggle: toggleNav, close: closeNav }] = useDisclosure()
   const [installOpen, setInstallOpen] = useState(openInstall)
   const [apiOpen, setApiOpen] = useState(false)
+  const [stopAllOpen, setStopAllOpen] = useState(false)
   const [donateOpen, setDonateOpen] = useState(false)
   const [publicBase, setPublicBase] = useState(window.location.origin)
 
@@ -188,6 +192,18 @@ function AppShellInner({ route, children, openInstall = false }: Props) {
               <span className="panel-id__page">{pageLabel}</span>
             </Group>
             <Group gap={4} wrap="nowrap">
+              <Tooltip label="Stop all nodes — safe before shutting the machine down" withArrow>
+                <Button
+                  variant="light"
+                  color="red"
+                  size="compact-sm"
+                  leftSection={<IconPlayerStop size={14} />}
+                  aria-label="Stop all nodes"
+                  onClick={() => setStopAllOpen(true)}
+                >
+                  Stop all
+                </Button>
+              </Tooltip>
               <ThemeToggle />
               <ApiDocsButton onClick={() => setApiOpen(true)} />
               <Tooltip label="Log out" withArrow>
@@ -310,6 +326,7 @@ function AppShellInner({ route, children, openInstall = false }: Props) {
       </AppShell>
 
       <AddServerModal opened={installOpen} onClose={closeInstall} />
+      <StopAllModal opened={stopAllOpen} onClose={() => setStopAllOpen(false)} />
       <ApiDocsModal opened={apiOpen} onClose={() => setApiOpen(false)} baseUrl={publicBase} />
       <DonateModal opened={donateOpen} onClose={() => setDonateOpen(false)} />
     </>

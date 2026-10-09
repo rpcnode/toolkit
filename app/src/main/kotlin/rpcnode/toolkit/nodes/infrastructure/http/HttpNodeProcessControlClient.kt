@@ -23,6 +23,8 @@ import rpcnode.toolkit.nodes.application.process.NodeProcessControlResult
 /** POST /api/v1/node/process/stop|start on the host agent. */
 class HttpNodeProcessControlClient(
     private val timeout: Duration = Duration.ofSeconds(30),
+    /** A graceful stop waits for the chain client to flush its database; systemd allows up to 10 minutes. */
+    private val stopTimeout: Duration = Duration.ofMinutes(12),
 ) : ControlNodeProcessOnHost
 {
     private val log = LoggerFactory.getLogger(HttpNodeProcessControlClient::class.java)
@@ -57,7 +59,7 @@ class HttpNodeProcessControlClient(
                 ),
             )
             val req = HttpRequest.newBuilder(URI(agentUrl.trimEnd('/') + path))
-                .timeout(timeout)
+                .timeout(if (action.trim().equals("stop", ignoreCase = true)) stopTimeout else timeout)
                 .header("Authorization", "Bearer $token")
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))

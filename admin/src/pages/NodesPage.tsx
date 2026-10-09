@@ -51,17 +51,7 @@ import { LifecycleStepper } from '../components/LifecycleStepper'
 import { NodeStatusIcon, NodeStatusSpin } from '../components/NodeStatusIcon'
 import { NetworkIcon } from '../components/NetworkIcon'
 import { NodeLifecycleDates } from '../components/NodeLifecycleDates'
-import {
-  RemoveConfirmInput,
-  removeConfirmPhrase,
-  removePhraseMatches,
-} from '../components/RemoveConfirmInput'
-import {
-  RemoveNodeModePicker,
-  removeModeToRequest,
-  removeSubmitLabel,
-  type RemoveNodeMode,
-} from '../components/RemoveNodeModePicker'
+import { RemoveNodeModal } from '../components/RemoveNodeModal'
 import {
   deriveNodeLifecycle,
   splitStepHeadline,
@@ -553,21 +543,7 @@ export function NodesPage() {
   }, [addOpen, hasClients])
 
   const [removeTarget, setRemoveTarget] = useState<NodeCard | null>(null)
-  const [removeMode, setRemoveMode] = useState<RemoveNodeMode>('wipe')
-  const [removing, setRemoving] = useState(false)
-  const [removeTyped, setRemoveTyped] = useState('')
   const [refreshing, setRefreshing] = useState(false)
-  const removePhrase = removeTarget
-    ? removeConfirmPhrase(removeTarget.network, removeTarget.env)
-    : ''
-  const removeConfirmed = !!removeTarget && removePhraseMatches(removeTyped, removePhrase)
-
-  useEffect(() => {
-    if (removeTarget) {
-      setRemoveTyped('')
-      setRemoveMode('wipe')
-    }
-  }, [removeTarget])
 
   useEffect(() => {
     const onPop = () => {
@@ -881,66 +857,6 @@ export function NodesPage() {
     syncNodesQuery([], [], groupBy, '')
   }
 
-  async function confirmRemove() {
-    if (!removeTarget) return
-    setRemoving(true)
-    const targetId = removeTarget.id
-    const targetLabel = `${removeTarget.network}/${removeTarget.env}`
-    try {
-      const req = removeModeToRequest(removeMode)
-      const res = await api.workloadsRemove({
-        id: targetId,
-        ...req,
-        force: false,
-      })
-      if (!res.ok) throw new Error(res.message || res.error || 'remove failed')
-      notifications.show({
-        color: 'teal',
-        title: removeMode === 'panel' ? 'Removed from panel' : 'Removing…',
-        message:
-          removeMode === 'panel'
-            ? `${targetLabel} — panel row dropped; host was not changed`
-            : removeMode === 'agents'
-              ? `${targetLabel} — tip stops the node and leaf agents; chain data stays`
-              : `${targetLabel} — tip wipes folders; row stays until they are gone`,
-      })
-      setRemoveTarget(null)
-      setRemoveMode('wipe')
-      setCards((prev) =>
-        removeMode === 'panel'
-          ? prev.filter((c) => c.id !== targetId)
-          : prev.map((c) =>
-              c.id === targetId
-                ? {
-                    ...c,
-                    status: 'removing',
-                    lifecycle: {
-                      phase: 'removing',
-                      label: 'removing',
-                      detail: 'Wiping host folders — row drops when they are gone',
-                      color: 'orange',
-                      busy: true,
-                      height: c.lifecycle.height ?? null,
-                    },
-                  }
-                : c,
-            ),
-      )
-      await load({ silent: true })
-    } catch (e) {
-      const msg = String((e as Error).message || e)
-      notifications.show({
-        color: 'red',
-        title: 'Remove failed',
-        message: msg,
-        autoClose: 12_000,
-      })
-      await load({ silent: true })
-    } finally {
-      setRemoving(false)
-    }
-  }
-
   if (loading && cards.length === 0) {
     return (
       <Center mih={240}>
@@ -1223,66 +1139,24 @@ export function NodesPage() {
 
       <AddNodeModal opened={addOpen} onClose={() => setAddOpen(false)} onAdded={() => void load()} />
 
-      <Modal
-        {...blockProps('modal.remove-node')}
+      <RemoveNodeModal
         opened={!!removeTarget}
-        onClose={() => (!removing ? setRemoveTarget(null) : undefined)}
-        title="Remove node?"
-        centered
-        size="md"
-      >
-        <Stack gap="md">
-          <Text size="sm">
-            Remove{' '}
-            <Text span fw={700}>
-              {removeTarget?.network?.toUpperCase()} · {removeTarget?.env}
-            </Text>
-          </Text>
-          {(removeTarget?.status || '').toLowerCase() === 'removing' ||
-          (removeTarget?.status || '').toLowerCase() === 'remove_error' ? (
-            <Alert color="orange" icon={<IconAlertTriangle size={16} />}>
-              Tip remove did not finish — pick a mode and retry. Host modes re-kick tip (leaf
-              agent may already be down). Panel-only drops the row without touching the host.
-            </Alert>
-          ) : null}
-          <RemoveNodeModePicker value={removeMode} onChange={setRemoveMode} disabled={removing} />
-          {removeMode === 'wipe' && (
-            <Alert color="red" icon={<IconAlertTriangle size={16} />} title="Destructive">
-              Chain data will be deleted on the server.
-            </Alert>
-          )}
-          {removeMode === 'panel' && (
-            <Alert color="orange" icon={<IconAlertTriangle size={16} />}>
-              The node keeps running. Re-add later may hit busy ports until you remove it on the
-              host.
-            </Alert>
-          )}
-          <RemoveConfirmInput
-            phrase={removePhrase}
-            value={removeTyped}
-            onChange={setRemoveTyped}
-            disabled={removing}
-          />
-          <Group justify="flex-end">
-            <Button variant="default" disabled={removing} onClick={() => setRemoveTarget(null)}>
-              Cancel
-            </Button>
-            <Button
-              color="red"
-              loading={removing}
-              disabled={!removeConfirmed}
-              leftSection={<IconTrash size={14} />}
-              onClick={() => void confirmRemove()}
-            >
-              {removeSubmitLabel(
-                removeMode,
-                (removeTarget?.status || '').toLowerCase() === 'removing' ||
-                  (removeTarget?.status || '').toLowerCase() === 'remove_error',
-              )}
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+        nodeId={removeTarget?.id || ''}
+        network={removeTarget?.network || ''}
+        env={removeTarget?.env || ''}
+        retry={
+          (removeTarget?.status || '').toLowerCase() === 'removing' ||
+          (removeTarget?.status || '').toLowerCase() === 'remove_error'
+        }
+        onClose={() => setRemoveTarget(null)}
+        onRemoved={() => {
+          const id = removeTarget?.id
+          setRemoveTarget(null)
+          if (id) setCards((prev) => prev.filter((c) => c.id !== id))
+          void load({ silent: true })
+        }}
+        onChanged={() => void load({ silent: true })}
+      />
     </AppChrome>
   )
 }

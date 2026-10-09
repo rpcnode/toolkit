@@ -237,4 +237,30 @@ class ResolveClientConfigAssignmentsTest
         assertEquals("tcp://127.0.0.1:28332", on["zmqpubrawblock"])
         assertEquals("tcp://127.0.0.1:28333", on["zmqpubrawtx"])
     }
+
+    @Test
+    fun env_scoped_binding_is_emitted_only_for_that_env()
+    {
+        val config = ClientConfigFacts(
+            program = "FullNode.jar",
+            format = "hoocon",
+            bindings = listOf(
+                ClientConfigBindingFacts(
+                    path = "storage.checkpoint.version",
+                    source = "literal",
+                    value = "2",
+                    onlyEnv = listOf("mainnet"),
+                ),
+            ),
+        )
+        fun resolve(env: String) = resolveClientConfigAssignments(
+            config = config,
+            layout = null,
+            ports = emptyList(),
+            installOptionsJson = "{}",
+            env = env,
+        )
+        assertEquals(mapOf("storage.checkpoint.version" to "2"), resolve("mainnet"))
+        assertEquals(emptyMap(), resolve("nile"))
+    }
 }

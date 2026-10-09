@@ -60,6 +60,7 @@ import rpcnode.toolkit.networks.application.tip.NetworkTipProbeRegistry
 import rpcnode.toolkit.nodes.application.height.GetNodeHeightUseCase
 import rpcnode.toolkit.nodes.application.logs.GetNodeLogsUseCase
 import rpcnode.toolkit.nodes.application.process.ControlNodeProcessUseCase
+import rpcnode.toolkit.nodes.application.process.StopAllNodesUseCase
 import rpcnode.toolkit.nodes.application.version.GetNodeClientVersionUseCase
 import rpcnode.toolkit.nodes.infrastructure.http.HttpNodeClientVersionHostClient
 import rpcnode.toolkit.nodes.application.rpcauth.GetNodeRpcAuthUseCase
@@ -152,6 +153,8 @@ import rpcnode.toolkit.nodes.application.snapshot.StartNodeSnapshotUseCase
 import rpcnode.toolkit.nodes.application.snapshot.StopNodeSnapshotUseCase
 import rpcnode.toolkit.nodes.application.status.UpdateNodeStatusUseCase
 import rpcnode.toolkit.nodes.application.remove.RemoveNodeUseCase
+import rpcnode.toolkit.nodes.application.remove.NodeRemovalSteps
+import rpcnode.toolkit.nodes.infrastructure.http.HttpNodeRemovalOnHost
 import rpcnode.toolkit.nodes.domain.repository.NodeRepository
 import rpcnode.toolkit.nodes.infrastructure.http.HttpHostDiskReader
 import rpcnode.toolkit.nodes.infrastructure.http.HttpHostSysctlReader
@@ -274,6 +277,7 @@ class Toolkit(
     val getNode: GetNodeUseCase,
     val addNode: AddNodeUseCase,
     val removeNode: RemoveNodeUseCase,
+    val removeNodeSteps: NodeRemovalSteps,
     val getNodePorts: GetNodePortsUseCase,
     val checkHostPorts: CheckHostPortsUseCase,
     val getHostDisks: GetHostDisksUseCase,
@@ -295,6 +299,7 @@ class Toolkit(
     val startNodeHostDeps: StartNodeHostDepsUseCase,
     val getNodeHostDepsProgress: GetNodeHostDepsProgressUseCase,
     val controlNodeProcess: ControlNodeProcessUseCase,
+    val stopAllNodes: StopAllNodesUseCase,
     val runNodeLiveTest: RunNodeLiveTestUseCase,
     val getNodeConfig: GetNodeConfigUseCase,
     val saveNodeConfig: SaveNodeConfigUseCase,
@@ -783,6 +788,12 @@ class Toolkit(
                     resolveDestDir = { node -> resolveSnapshotDestDir(node) },
                     removeOnHost = HttpRemoveNodeOnHost(),
                 ),
+                removeNodeSteps = NodeRemovalSteps(
+                    nodes = nodeRepository,
+                    servers = serverRepository,
+                    resolveDestDir = { node -> resolveSnapshotDestDir(node) },
+                    host = HttpNodeRemovalOnHost(),
+                ),
                 getNodePorts = GetNodePortsUseCase(
                     nodes = nodeRepository,
                     servers = serverRepository,
@@ -812,6 +823,7 @@ class Toolkit(
                 startNodeHostDeps = startNodeHostDeps,
                 getNodeHostDepsProgress = getNodeHostDepsProgress,
                 controlNodeProcess = controlNodeProcess,
+                stopAllNodes = StopAllNodesUseCase(nodeRepository, { id -> controlNodeProcess.stop(id) }, backgroundScope),
                 runNodeLiveTest = runNodeLiveTest,
                 getNodeConfig = getNodeConfig,
                 saveNodeConfig = saveNodeConfig,

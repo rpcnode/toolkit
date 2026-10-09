@@ -39,6 +39,10 @@ import rpcnode.toolkit.agent.application.metrics.CollectHostMetricsUseCase
 import rpcnode.toolkit.agent.infrastructure.node.readNodeClientVersion
 import rpcnode.toolkit.agent.application.node.RemoveNodeHostResult
 import rpcnode.toolkit.agent.application.node.RemoveNodeHostUseCase
+import rpcnode.toolkit.agent.application.node.RemoveNodeStepsUseCase
+import rpcnode.toolkit.agent.application.node.RemoveStepsCommand
+import rpcnode.toolkit.agent.application.node.RemovalState
+import rpcnode.toolkit.agent.application.node.StartRemovalResult
 import rpcnode.toolkit.agent.application.node.ControlNodeUnitResult
 import rpcnode.toolkit.agent.application.node.ControlNodeUnitUseCase
 import rpcnode.toolkit.agent.application.node.GetNodeClientVersionResult
@@ -675,6 +679,7 @@ fun Application.agentApiRoutes(
     controlNodeUnit: ControlNodeUnitUseCase? = null,
     removeNodeHost: RemoveNodeHostUseCase? = null,
     testNode: TestNodeUseCase? = null,
+    removeNodeSteps: RemoveNodeStepsUseCase? = null,
 )
 {
     routing {
@@ -1734,8 +1739,111 @@ fun Application.agentApiRoutes(
                     )
             }
         }
+        post("/api/v1/node/remove/start") {
+            if (!call.authorized(cfg.token))
+            {
+                return@post
+            }
+            val steps = removeNodeSteps
+            if (steps == null)
+            {
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    AgentNodeRemovalResponse(error = "not_wired", message = "Node removal not configured"),
+                )
+                return@post
+            }
+            val body = call.receive<AgentNodeRemovalStartBody>()
+            val result = steps.start(
+                RemoveStepsCommand(
+                    nodeId = body.nodeId,
+                    network = body.network,
+                    env = body.env,
+                    dirs = body.dirs,
+                    wipeData = body.wipeData,
+                ),
+            )
+            when (result)
+            {
+                is StartRemovalResult.Started -> call.respond(result.state.toResponse())
+                is StartRemovalResult.AlreadyRunning -> call.respond(result.state.toResponse())
+                StartRemovalResult.NotRoot ->
+                    call.respond(
+                        HttpStatusCode.Forbidden,
+                        AgentNodeRemovalResponse(
+                            error = "not_root",
+                            message = "Agent must run as root to remove systemd units and files",
+                        ),
+                    )
+                is StartRemovalResult.Invalid ->
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        AgentNodeRemovalResponse(error = "invalid", message = result.message),
+                    )
+            }
+        }
+        get("/api/v1/node/remove/progress") {
+            if (!call.authorized(cfg.token))
+            {
+                return@get
+            }
+            val steps = removeNodeSteps
+            if (steps == null)
+            {
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    AgentNodeRemovalResponse(error = "not_wired", message = "Node removal not configured"),
+                )
+                return@get
+            }
+            val state = steps.progress(call.request.queryParameters["node_id"].orEmpty())
+            if (state == null)
+            {
+                call.respond(
+                    HttpStatusCode.NotFound,
+                    AgentNodeRemovalResponse(error = "no_job", message = "No removal job for this node"),
+                )
+                return@get
+            }
+            call.respond(state.toResponse())
+        }
     }
 }
+
+@Serializable
+data class AgentNodeRemovalStartBody(
+    @SerialName("node_id") val nodeId: String = "",
+    val network: String = "",
+    val env: String = "",
+    val dirs: List<String> = emptyList(),
+    @SerialName("wipe_data") val wipeData: Boolean = true,
+)
+
+@Serializable
+data class AgentNodeRemovalStepResponse(
+    val id: String,
+    val title: String,
+    val status: String,
+    val detail: String = "",
+)
+
+@Serializable
+data class AgentNodeRemovalResponse(
+    @SerialName("node_id") val nodeId: String = "",
+    val steps: List<AgentNodeRemovalStepResponse> = emptyList(),
+    val done: Boolean = false,
+    val failed: Boolean = false,
+    val error: String? = null,
+    val message: String? = null,
+)
+
+private fun RemovalState.toResponse() = AgentNodeRemovalResponse(
+    nodeId = nodeId,
+    steps = steps.map { AgentNodeRemovalStepResponse(it.id, it.title, it.status, it.detail) },
+    done = done,
+    failed = failed,
+    error = error.ifBlank { null },
+)
 
 private suspend fun ApplicationCall.respondNodeUnitControl(
     result: ControlNodeUnitResult,

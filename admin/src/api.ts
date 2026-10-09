@@ -1116,6 +1116,45 @@ export type RegistryUpsertInput = {
   panel_url?: string
 }
 
+export type NodeRemovalStep = {
+  id: string
+  title: string
+  /** pending | running | done | skipped | failed */
+  status: string
+  detail?: string
+}
+
+export type NodeRemovalProgress = {
+  ok?: boolean
+  node_id?: string
+  steps?: NodeRemovalStep[]
+  done?: boolean
+  failed?: boolean
+  error?: string
+  message?: string
+}
+
+export type StopAllItem = {
+  node_id: string
+  name?: string
+  network?: string
+  env?: string
+  /** pending | running | done | failed */
+  status: string
+  detail?: string
+}
+
+export type StopAllProgress = {
+  ok?: boolean
+  running?: boolean
+  started_at?: string
+  finished_at?: string
+  total?: number
+  done?: number
+  failed?: number
+  items?: StopAllItem[]
+}
+
 export const api = {
   probeServer,
   authStatus: () => getJSON<AuthStatus>('/api/auth/status'),
@@ -1777,6 +1816,15 @@ export const api = {
       agent?: { message?: string; steps?: string[]; removed_paths?: string[] }
       delete_files_async?: boolean
     }>('/api/nodes/remove', body),
+  /** Gracefully stops every running node, all in parallel. */
+  stopAllNodes: () => postJSON<StopAllProgress>("/api/nodes/stop-all", {}),
+  stopAllProgress: () => getJSON<StopAllProgress>("/api/nodes/stop-all/progress"),
+
+  /** Step-by-step removal: starts the host job (stop → delete files → delete service). */
+  nodeRemoveStart: (id: string, mode: 'wipe' | 'agents' | 'panel') =>
+    postJSON<NodeRemovalProgress>(`/api/nodes/${encodeURIComponent(id)}/remove/start`, { mode }),
+  nodeRemoveProgress: (id: string) =>
+    getJSON<NodeRemovalProgress>(`/api/nodes/${encodeURIComponent(id)}/remove/progress`),
 
   instances: () =>
     getJSON<{ ok?: boolean; agent_env?: string; items?: StatusPayload['instances'] }>('/api/instances.json'),

@@ -28,6 +28,7 @@ fun resolveClientConfigAssignments(
     ports: List<ProgramPort>,
     installOptionsJson: String,
     snapshotTypes: List<SnapshotTypeFacts> = emptyList(),
+    env: String = "",
 ): Map<String, String>
 {
     val options = parseInstallOptions(installOptionsJson)
@@ -42,6 +43,10 @@ fun resolveClientConfigAssignments(
     val out = linkedMapOf<String, String>()
     for (b in config.bindings)
     {
+        if (b.onlyEnv.isNotEmpty() && env.trim().lowercase() !in b.onlyEnv)
+        {
+            continue
+        }
         if (b.source.trim().lowercase() == "disk_role_dir" && !shouldEmitDiskRoleDir(b, layout, byRole))
         {
             continue

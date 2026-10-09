@@ -44,6 +44,8 @@ import rpcnode.toolkit.nodes.application.hostdeps.StartHostDepsOnHostResult
 import rpcnode.toolkit.nodes.application.hostdeps.StartNodeHostDepsUseCase
 import rpcnode.toolkit.nodes.application.process.ControlNodeProcessOnHost
 import rpcnode.toolkit.nodes.application.process.ControlNodeProcessUseCase
+import rpcnode.toolkit.nodes.application.process.StopAllNodesUseCase
+import rpcnode.toolkit.nodes.application.process.ControlNodeProcessResult
 import rpcnode.toolkit.nodes.application.process.NodeProcessControlResult
 import rpcnode.toolkit.catalog.domain.NetworkId
 import rpcnode.toolkit.chains.bitcore.infrastructure.BitcoreChainWiring
@@ -121,6 +123,12 @@ import rpcnode.toolkit.nodes.application.ports.GetNodePortsUseCase
 import rpcnode.toolkit.nodes.application.remove.RemoveNodeOnHost
 import rpcnode.toolkit.nodes.application.remove.RemoveNodeOnHostResult
 import rpcnode.toolkit.nodes.application.remove.RemoveNodeUseCase
+import rpcnode.toolkit.nodes.application.remove.NodeRemovalOnHost
+import rpcnode.toolkit.nodes.application.remove.NodeRemovalSteps
+import rpcnode.toolkit.nodes.application.remove.NodeRemovalView
+import rpcnode.toolkit.nodes.application.remove.RemovalOnHostResult
+import rpcnode.toolkit.nodes.application.remove.RemovalStepView
+import rpcnode.toolkit.nodes.application.remove.StartRemovalOnHostCommand
 import rpcnode.toolkit.nodes.application.snapshot.GetNodeSnapshotPlanUseCase
 import rpcnode.toolkit.nodes.application.snapshot.ResolveSnapshotDestDirUseCase
 import rpcnode.toolkit.nodes.application.snapshot.GetNodeSnapshotProgressUseCase
@@ -534,6 +542,28 @@ internal fun testToolkit(
             resolveDestDir = { node -> resolveSnapshotDestDir(node) },
             removeOnHost = RemoveNodeOnHost { _, _, _ -> RemoveNodeOnHostResult.Ok },
         ),
+        removeNodeSteps = NodeRemovalSteps(
+            nodes = nodeRepository,
+            servers = serverRepository,
+            resolveDestDir = { node -> resolveSnapshotDestDir(node) },
+            host = object : NodeRemovalOnHost
+            {
+                private fun finished(nodeId: String) = RemovalOnHostResult.Ok(
+                    NodeRemovalView(
+                        nodeId = nodeId,
+                        steps = listOf(RemovalStepView("stop", "Stop the node", "skipped", "not running")),
+                        done = true,
+                        failed = false,
+                        error = "",
+                    ),
+                )
+
+                override suspend fun start(agentUrl: String, token: String, command: StartRemovalOnHostCommand) =
+                    finished(command.nodeId)
+
+                override suspend fun progress(agentUrl: String, token: String, nodeId: String) = finished(nodeId)
+            },
+        ),
         getNodePorts = GetNodePortsUseCase(
             nodes = nodeRepository,
             servers = serverRepository,
@@ -636,6 +666,11 @@ internal fun testToolkit(
                 NodeProcessControlResult(ok = true, pid = 1, action = "start")
             },
             startNode = startNode,
+        ),
+        stopAllNodes = StopAllNodesUseCase(
+            nodes = nodeRepository,
+            stop = { id -> ControlNodeProcessResult.Ok(id, 0, "stop") },
+            scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO),
         ),
         getNodeConfig = GetNodeConfigUseCase(
             nodes = nodeRepository,

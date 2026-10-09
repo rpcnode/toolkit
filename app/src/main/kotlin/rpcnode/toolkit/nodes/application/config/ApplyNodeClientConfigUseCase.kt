@@ -157,6 +157,7 @@ class ApplyNodeClientConfigUseCase(
             ports = ports,
             installOptionsJson = fresh.installOptionsJson,
             snapshotTypes = snapshotTypes,
+            env = node.env.value,
         )
         // format: flags — still create datadir paths on the host; do not patch a conf file.
         val patchAssignments = if (flagsOnly)

@@ -67,6 +67,7 @@ fun Application.module(
 )
 {
     installHttpCallLogging(cfg.dev)
+    installUnhandledErrors()
     installServerCors(cfg.corsOrigins)
     install(ContentNegotiation) {
         json(

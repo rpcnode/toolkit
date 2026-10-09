@@ -30,6 +30,8 @@ data class ClientConfigBindingFacts(
      * [whenInstallOptionValue] (default `"1"`). Used for optional catalog ports on Start.
      */
     val whenInstallOption: String? = null,
+    /** When non-empty the binding applies only to these envs (e.g. a mainnet-only config switch). */
+    val onlyEnv: List<String> = emptyList(),
     val whenInstallOptionValue: String? = null,
     /** Optional Start-step live probe (e.g. L1 eth_rpc / beacon_genesis). */
     val testConnect: ClientConfigTestConnectFacts? = null,

@@ -1,5 +1,6 @@
 package rpcnode.toolkit.agent.infrastructure.enroll
 
+import rpcnode.toolkit.agent.infrastructure.filesystem.AtomicFile
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlinx.coroutines.Dispatchers
@@ -51,8 +52,7 @@ class FilePanelEnrollmentStore(
     }
 
     override suspend fun write(enrollment: PanelEnrollment) = withContext(Dispatchers.IO) {
-        Files.createDirectories(file.parent)
-        Files.writeString(file, json.encodeToString(enrollment.toStored()))
+        AtomicFile.writeString(file, json.encodeToString(enrollment.toStored()))
         Unit
     }
 

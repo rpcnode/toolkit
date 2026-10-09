@@ -310,6 +310,7 @@ class SaveNodeConfigUseCase(
             ports = ports,
             installOptionsJson = node.installOptionsJson,
             snapshotTypes = snapshotTypesFor(facts, node.network, node.env.value),
+            env = node.env.value,
         )
         val lockedPaths = config.bindings.filter { it.isLocked() }.map { it.path }.toSet()
         val locked = assignments.filterKeys { it in lockedPaths }

@@ -267,4 +267,22 @@ class ClientConfigLeafPatchTest
         assertEquals("main", clientConfigIniSection(config, "mainnet"))
         assertEquals(null, clientConfigIniSection(config.copy(format = "hoocon"), "mainnet"))
     }
+
+    @Test
+    fun hocon_dotted_path_never_rewrites_an_unrelated_bare_version_key()
+    {
+        val template = """
+            node {
+              p2p {
+                version = 11111
+              }
+            }
+            storage {
+              db.directory = "database"
+            }
+        """.trimIndent()
+        val out = ClientConfigLeafPatch.applyHocon(template, mapOf("storage.checkpoint.version" to "2"))
+        assertTrue(out.contains("version = 11111"), out)
+        assertTrue(out.contains("storage.checkpoint.version = 2"), out)
+    }
 }

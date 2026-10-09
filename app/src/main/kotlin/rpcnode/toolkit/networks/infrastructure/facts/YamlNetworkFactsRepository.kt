@@ -219,6 +219,7 @@ private fun parseClientConfigBinding(raw: Any?): ClientConfigBindingFacts?
             ?: (m["default"] as? Number)?.toString(),
         map = parseStringMap(m["map"]),
         whenInstallOption = (m["whenInstallOption"] as? String)?.trim()?.ifEmpty { null },
+        onlyEnv = (m["onlyEnv"] as? List<*>)?.mapNotNull { (it as? String)?.trim()?.lowercase()?.ifEmpty { null } }.orEmpty(),
         whenInstallOptionValue = (m["whenInstallOptionValue"] as? String)?.trim()?.ifEmpty { null },
         testConnect = parseTestConnect(m["testConnect"]),
     )

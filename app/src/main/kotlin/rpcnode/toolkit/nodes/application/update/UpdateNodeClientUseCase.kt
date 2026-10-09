@@ -200,6 +200,7 @@ class UpdateNodeClientUseCase(
             ports = ports,
             installOptionsJson = node.installOptionsJson,
             snapshotTypes = snapshotTypes,
+            env = node.env.value,
         )
         val patchAssignments = if (flagsOnly)
         {

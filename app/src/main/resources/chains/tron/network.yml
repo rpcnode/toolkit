@@ -126,6 +126,13 @@ clientConfig:
       source: catalog_port
       role: grpc_pbft
       description: PBFT gRPC port
+    # Official mainnet snapshots are checkpoint-v2 databases. java-tron refuses to open them with the
+    # default (v1) config: "checkpoint version of database not match your config file".
+    - path: storage.checkpoint.version
+      source: literal
+      value: "2"
+      onlyEnv: [mainnet]
+      description: Checkpoint format of the mainnet snapshot database (must match the DB or the node exits)
     - path: storage.transHistory.switch
       source: snapshot_kind
       description: Transaction history DB — on for full/archive, off for lite (from Snapshot type)

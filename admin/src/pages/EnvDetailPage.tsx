@@ -54,17 +54,7 @@ import {
   needsInstallWizard,
 } from '../components/NodeInstallWizard'
 import { LifecycleStepper } from '../components/LifecycleStepper'
-import {
-  RemoveConfirmInput,
-  removeConfirmPhrase,
-  removePhraseMatches,
-} from '../components/RemoveConfirmInput'
-import {
-  RemoveNodeModePicker,
-  removeModeToRequest,
-  removeSubmitLabel,
-  type RemoveNodeMode,
-} from '../components/RemoveNodeModePicker'
+import { RemoveNodeModal } from '../components/RemoveNodeModal'
 import { ClientUpdateModal } from '../components/ClientUpdateModal'
 import { buildHeaderChips } from '../lib/labels'
 import { NodeMetaAside } from '../components/NodeMetaAside'
@@ -198,9 +188,6 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
   /** Wizard reached Finish — hide NODE SETUP even if SQLite status lags (Kotlin panel). */
   const [setupComplete, setSetupComplete] = useState(false)
   const [removeOpen, setRemoveOpen] = useState(false)
-  const [removeMode, setRemoveMode] = useState<RemoveNodeMode>('wipe')
-  const [removing, setRemoving] = useState(false)
-  const [removeTyped, setRemoveTyped] = useState('')
   const [restartOpen, setRestartOpen] = useState(false)
   const [restartBusy, setRestartBusy] = useState(false)
   const [stopOpen, setStopOpen] = useState(false)
@@ -241,14 +228,6 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
     nodeIdToEnv(nodeId || '') ||
     envProp ||
     ''
-  const removePhrase = removeConfirmPhrase(network, env)
-  const removeConfirmed = removePhraseMatches(removeTyped, removePhrase)
-  useEffect(() => {
-    if (removeOpen) {
-      setRemoveTyped('')
-      setRemoveMode('wipe')
-    }
-  }, [removeOpen])
   useEffect(() => {
     setSetupComplete(false)
   }, [nodeId, workload?.id])
@@ -425,42 +404,6 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
       window.clearInterval(t)
     }
   }, [clientOpen, workloadId])
-
-  async function confirmRemove() {
-    if (!workloadId) return
-    setRemoving(true)
-    try {
-      const req = removeModeToRequest(removeMode)
-      const res = await api.workloadsRemove({
-        id: workloadId,
-        ...req,
-        force: false,
-      })
-      if (!res.ok) throw new Error(res.message || res.error || 'remove failed')
-      notifications.show({
-        color: 'teal',
-        title: removeMode === 'panel' ? 'Removed from panel' : 'Removing…',
-        message:
-          removeMode === 'panel'
-            ? `${network}/${env} — panel row dropped; host was not changed`
-            : removeMode === 'agents'
-              ? `${network}/${env} — tip stops the node and leaf agents; chain data stays`
-              : `${network}/${env} — tip wipes folders; row stays until they are gone`,
-      })
-      setRemoveOpen(false)
-      navigate({ name: 'nodes' })
-    } catch (e) {
-      notifications.show({
-        color: 'red',
-        title: 'Remove failed',
-        message: String((e as Error).message || e),
-        autoClose: 12_000,
-      })
-      await reloadWorkload({ soft: true })
-    } finally {
-      setRemoving(false)
-    }
-  }
 
   const reloadWorkload = useCallback(async (opts?: { soft?: boolean }) => {
     const id = (nodeId || '').trim()
@@ -1360,66 +1303,22 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
         onRollback={() => void confirmClientRollback()}
       />
 
-      <Modal
-        {...blockProps('modal.remove-node')}
+      <RemoveNodeModal
         opened={removeOpen}
-        onClose={() => (!removing ? setRemoveOpen(false) : undefined)}
-        title="Remove node?"
-        centered
-        size="md"
-      >
-        <Stack gap="md">
-          <Text size="sm">
-            Remove{' '}
-            <Text span fw={700}>
-              {network}/{env}
-            </Text>
-          </Text>
-          {(workload?.status || '').toLowerCase() === 'removing' ||
-          (workload?.status || '').toLowerCase() === 'remove_error' ? (
-            <Alert color="orange" icon={<IconAlertTriangle size={16} />}>
-              Tip remove did not finish — pick a mode and retry. Host modes re-kick tip (leaf
-              agent may already be down). Panel-only drops the row without touching the host.
-            </Alert>
-          ) : null}
-          <RemoveNodeModePicker value={removeMode} onChange={setRemoveMode} disabled={removing} />
-          {removeMode === 'wipe' && (
-            <Alert color="red" icon={<IconAlertTriangle size={16} />} title="Destructive">
-              Chain data will be deleted on the server.
-            </Alert>
-          )}
-          {removeMode === 'panel' && (
-            <Alert color="orange" icon={<IconAlertTriangle size={16} />}>
-              The node keeps running. Re-add later may hit busy ports until you remove it on the
-              host.
-            </Alert>
-          )}
-          <RemoveConfirmInput
-            phrase={removePhrase}
-            value={removeTyped}
-            onChange={setRemoveTyped}
-            disabled={removing}
-          />
-          <Group justify="flex-end">
-            <Button variant="default" disabled={removing} onClick={() => setRemoveOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              color="red"
-              loading={removing}
-              disabled={!removeConfirmed}
-              leftSection={<IconTrash size={14} />}
-              onClick={() => void confirmRemove()}
-            >
-              {removeSubmitLabel(
-                removeMode,
-                (workload?.status || '').toLowerCase() === 'removing' ||
-                  (workload?.status || '').toLowerCase() === 'remove_error',
-              )}
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+        nodeId={workloadId || ''}
+        network={network}
+        env={env}
+        retry={
+          (workload?.status || '').toLowerCase() === 'removing' ||
+          (workload?.status || '').toLowerCase() === 'remove_error'
+        }
+        onClose={() => setRemoveOpen(false)}
+        onRemoved={() => {
+          setRemoveOpen(false)
+          navigate({ name: 'nodes' })
+        }}
+        onChanged={() => void reloadWorkload({ soft: true })}
+      />
     </AppChrome>
   )
 }
