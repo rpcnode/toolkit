@@ -262,6 +262,9 @@ tasks.register<ShadowJar>("agentFatJar") {
         include("rpcnode/toolkit/nodes/application/config/**")
         include("rpcnode/toolkit/nodes/infrastructure/host/**")
         include("rpcnode/toolkit/catalog/domain/**")
+        // Client update compares host/panel client versions (UpdateClientOnHostUseCase.accept).
+        include("rpcnode/toolkit/clients/application/ClientProgramsVersion*")
+        include("rpcnode/toolkit/clients/domain/model/ClientVersionPin*")
         // Bsc/Base SnapshotResolver companions are referenced from the agent download path.
         include("rpcnode/toolkit/networks/application/snapshot/SnapshotResolver*")
         include("rpcnode/toolkit/networks/domain/model/SnapshotArchive*")
@@ -278,6 +281,38 @@ tasks.register<ShadowJar>("agentFatJar") {
     mergeServiceFiles()
     manifest {
         attributes["Main-Class"] = "rpcnode.toolkit.agent.presentation.http.AgentMainKt"
+    }
+    finalizedBy("checkAgentJar")
+}
+
+// rpcnode-agent.jar ships the agent code plus a short list of main packages. A class the agent calls that is
+// not on that list compiles fine and then dies on the host with NoClassDefFoundError (the client update did).
+// This fails the build when agent code references a rpcnode class that is missing from the jar.
+val checkAgentJar by tasks.registering {
+    group = "verification"
+    description = "Fails when rpcnode-agent.jar is missing a class the agent code references"
+    val jarFile = layout.buildDirectory.file("libs/rpcnode-agent.jar")
+    val jdeps = File(System.getProperty("java.home"), "bin/" + if (System.getProperty("os.name").lowercase().contains("win")) "jdeps.exe" else "jdeps")
+    doLast {
+        if (!jdeps.isFile) {
+            logger.warn("checkAgentJar: jdeps not found at ${jdeps}, skipped")
+            return@doLast
+        }
+        val process = ProcessBuilder(jdeps.absolutePath, "--multi-release", "base", "-verbose:class", jarFile.get().asFile.absolutePath)
+            .redirectErrorStream(true)
+            .start()
+        val missing = sortedSetOf<String>()
+        val pattern = Regex("""^\s+(rpcnode\.toolkit\.agent\.\S+)\s+->\s+(rpcnode\.toolkit\.\S+)\s+not found$""")
+        process.inputStream.bufferedReader().forEachLine { line ->
+            pattern.find(line)?.let { missing += "${it.groupValues[2]}  (used by ${it.groupValues[1]})" }
+        }
+        process.waitFor()
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "rpcnode-agent.jar is missing classes the agent uses — add them to agentFatJar in build.gradle.kts:\n  " +
+                    missing.joinToString("\n  "),
+            )
+        }
     }
 }
 

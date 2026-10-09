@@ -2103,6 +2103,13 @@ export function useWizardOrchestration({
 
   async function continueFromSnapshot() {
     setError(null)
+    // The wizard step follows the panel status before uiStep (see `derived`): host_deps_complete,
+    // needs_snapshot, snapshot_running and snapshot_error all map to the Snapshot step. A via-node
+    // snapshot (Solana) never reaches snapshot_complete, so without this the click only flipped uiStep
+    // and the wizard snapped back to Snapshot — Continue looked dead.
+    if (snapshotViaNode && wizardStepFromPanelStatus(workload?.status, allowSnap) === 'snapshot') {
+      await setWlStatus('ready_to_start')
+    }
     setUiStep('start')
     agentAckedStep.current = 'start'
     stopSnapshotPolling()

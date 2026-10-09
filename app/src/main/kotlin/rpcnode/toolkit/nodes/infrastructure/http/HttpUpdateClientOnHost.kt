@@ -164,7 +164,10 @@ class HttpUpdateClientOnHost(
         val error = obj?.get("error")?.jsonPrimitive?.contentOrNull ?: "http_$status"
         val trace = obj?.get("trace")?.jsonPrimitive?.contentOrNull.orEmpty()
         // The agent sends the stack trace of an unexpected failure: keep it, the update dialog shows it as the log.
-        val message = (obj?.get("message")?.jsonPrimitive?.contentOrNull ?: "HTTP $status") +
+        // No JSON `message` means an old agent or something in between (proxy, firewall page): show what came back.
+        val raw = if (obj == null) body.trim().take(500) else ""
+        val message = (obj?.get("message")?.jsonPrimitive?.contentOrNull
+            ?: ("HTTP $status" + if (raw.isNotEmpty()) " — agent answered: $raw" else " — the agent sent an empty body (an old agent version has no error details; update the host agent)")) +
             (if (trace.isNotBlank()) "\n$trace" else "")
         return if (status in 200 until 300)
         {

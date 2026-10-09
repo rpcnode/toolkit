@@ -35,7 +35,6 @@ import rpcnode.toolkit.agent.application.node.ListLocalNodesUseCase
 import rpcnode.toolkit.agent.application.node.NodeHeightPusher
 import rpcnode.toolkit.agent.application.node.PushNodeHeightsUseCase
 import rpcnode.toolkit.agent.application.node.RemoveNodeHostUseCase
-import rpcnode.toolkit.panel.presentation.http.installUnhandledErrors
 import rpcnode.toolkit.agent.application.node.RemoveNodeStepsUseCase
 import rpcnode.toolkit.agent.application.node.StartNodeProcessUseCase
 import rpcnode.toolkit.agent.application.node.TestNodeUseCase

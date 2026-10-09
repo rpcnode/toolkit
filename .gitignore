@@ -27,3 +27,4 @@ app/database/
 
 # stray agent jars (a committed copy goes stale)
 scripts/*.jar
+scripts/deploy-local.sh
