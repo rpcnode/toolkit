@@ -27,4 +27,8 @@ npm ci && npm run build
 pm2 start ecosystem.config.cjs && pm2 save
 ```
 
+Update: `git pull && npm ci && npm run build` (no restart needed — `dist/` is read per request).
+Restart only after changing `server.mjs`, `ecosystem.config.cjs` or the env:
+`pm2 restart rpcnode-admin --update-env`.
+
 See "Admin UI without Docker (pm2)" in the root README (firewall, first-run origin, CORS).

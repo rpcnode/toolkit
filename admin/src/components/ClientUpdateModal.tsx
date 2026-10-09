@@ -1,4 +1,5 @@
 import { Alert, Button, Code, Group, Modal, Progress, ScrollArea, Stack, Text, ThemeIcon } from '@mantine/core'
+import { useEffect, useRef } from 'react'
 import {
   IconAlertTriangle,
   IconCheck,
@@ -50,6 +51,8 @@ type Props = {
   latest?: string
   updateAvailable?: boolean
   info?: ClientUpdateInfo | null
+  /** The update request itself was rejected (panel or host agent) — shown as a failure with the full text. */
+  startError?: string
   started: boolean
   requestBusy: boolean
   rollbackBusy?: boolean
@@ -66,6 +69,7 @@ export function ClientUpdateModal({
   latest,
   updateAvailable,
   info,
+  startError,
   started,
   requestBusy,
   rollbackBusy,
@@ -75,7 +79,7 @@ export function ClientUpdateModal({
   const phase = (info?.phase || '').toLowerCase()
   const step = (info?.step || '').toLowerCase()
   const running = started || phase === 'updating'
-  const failed = started && phase === 'error'
+  const failed = (started && phase === 'error') || !!startError
   const done =
     !failed &&
     started &&
@@ -83,9 +87,18 @@ export function ClientUpdateModal({
   const showProgress = running || done || failed
   const pct = Math.max(0, Math.min(100, Number(info?.pct) || 0))
   const idx = failed ? -1 : done ? STEPS.length - 1 : Math.max(0, stepIndex(step, info?.events))
-  const detail = hideURL(info?.detail || '')
+  const startErr = String(startError || '').trim()
+  const detail = hideURL(startErr || info?.detail || '')
   const err = hideURL(info?.last_error || '')
-  const logTail = String(info?.log_tail || '').trim()
+  // Panel/agent error text goes first, then the host log tail — everything needed to debug is in this window.
+  const logTail = [startErr ? `# update request failed\n${startErr}` : '', String(info?.log_tail || '').trim()]
+    .filter(Boolean)
+    .join('\n\n')
+  const logViewport = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = logViewport.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [logTail])
   const previousVersion =
     formatClientVersion(info?.previous_version || current || '') || info?.previous_version || current || ''
   const curLabel = formatClientVersion(current || info?.local || '') || '—'
@@ -107,7 +120,7 @@ export function ClientUpdateModal({
       onClose={() => (!running || done || failed ? onClose() : undefined)}
       title={title}
       centered
-      size={failed && logTail ? 'lg' : 'md'}
+      size={logTail ? 'lg' : 'md'}
       onClick={(e) => e.stopPropagation()}
     >
       <Stack gap="md">
@@ -169,18 +182,6 @@ export function ClientUpdateModal({
                   {detail || 'Update failed'}
                   {err && err !== detail ? ` — ${err}` : ''}
                 </Alert>
-                {logTail ? (
-                  <Stack gap={4}>
-                    <Text size="sm" fw={600}>
-                      Logs
-                    </Text>
-                    <ScrollArea h={180} type="auto">
-                      <Code block style={{ whiteSpace: 'pre-wrap', fontSize: 11 }}>
-                        {logTail}
-                      </Code>
-                    </ScrollArea>
-                  </Stack>
-                ) : null}
               </>
             ) : done ? (
               <Alert color="teal" variant="light" icon={<IconCheck size={16} />}>
@@ -191,11 +192,28 @@ export function ClientUpdateModal({
                 {detail || 'Working…'}
               </Text>
             )}
+            {logTail ? (
+              <Stack gap={4}>
+                <Text size="sm" fw={600}>
+                  Logs
+                </Text>
+                <ScrollArea h={failed ? 220 : 160} type="auto" viewportRef={logViewport}>
+                  <Code block style={{ whiteSpace: 'pre-wrap', fontSize: 11, wordBreak: 'break-all' }}>
+                    {logTail}
+                  </Code>
+                </ScrollArea>
+              </Stack>
+            ) : null}
             <Group justify="flex-end">
               <Button variant="default" disabled={running && !done && !failed} onClick={onClose}>
                 {done || failed ? 'Close' : 'Cancel'}
               </Button>
-              {failed && onRollback && previousVersion ? (
+              {startErr ? (
+                <Button color="orange" loading={requestBusy} onClick={onStart}>
+                  Try again
+                </Button>
+              ) : null}
+              {failed && !startErr && onRollback && previousVersion ? (
                 <Button
                   color="orange"
                   leftSection={<IconHistory size={14} />}

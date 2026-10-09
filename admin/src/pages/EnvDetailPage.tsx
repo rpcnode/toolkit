@@ -198,6 +198,7 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
   const [clientOpen, setClientOpen] = useState(false)
   const [clientBusy, setClientBusy] = useState(false)
   const [clientStarted, setClientStarted] = useState(false)
+  const [clientStartError, setClientStartError] = useState('')
   const [clientInfo, setClientInfo] = useState<ClientUpdateInfo | null>(null)
   const [clientRollbackBusy, setClientRollbackBusy] = useState(false)
   const [logsOpen, setLogsOpen] = useState(false)
@@ -352,6 +353,7 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
     if (!workloadId) return
     setClientBusy(true)
     setClientStarted(true)
+    setClientStartError('')
     try {
       const res = await api.clientUpdate(workloadId)
       if (res.ok === false) throw new Error(res.message || res.error || 'client update failed')
@@ -359,7 +361,7 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
       void reloadWorkload({ soft: true })
     } catch (err) {
       setClientStarted(false)
-      notifications.show({ color: 'red', message: String((err as Error).message || err) })
+      setClientStartError(String((err as Error).message || err))
     } finally {
       setClientBusy(false)
     }
@@ -736,6 +738,7 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
               fullnodeEndpoint={fullnodeEndpoint}
               onClientUpdate={() => {
                 setClientStarted(false)
+                setClientStartError('')
                 setClientOpen(true)
               }}
             />
@@ -1296,6 +1299,7 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
           !!status?.client_update?.update_available
         }
         info={clientInfo || status?.client_update}
+        startError={clientStartError}
         started={clientStarted}
         requestBusy={clientBusy}
         rollbackBusy={clientRollbackBusy}

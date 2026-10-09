@@ -1216,6 +1216,7 @@ function NodeCardView({
   const [clientBusy, setClientBusy] = useState(false)
   const [clientOpen, setClientOpen] = useState(false)
   const [clientStarted, setClientStarted] = useState(false)
+  const [clientStartError, setClientStartError] = useState('')
   const [clientRollbackBusy, setClientRollbackBusy] = useState(false)
   const [restartBusy, setRestartBusy] = useState(false)
   const [restartOpen, setRestartOpen] = useState(false)
@@ -1253,13 +1254,14 @@ function NodeCardView({
   async function confirmClientUpdate() {
     setClientBusy(true)
     setClientStarted(true)
+    setClientStartError('')
     try {
       const res = await api.clientUpdate(id)
       if (res.ok === false) throw new Error(res.message || res.error || 'client update failed')
       if (res.client_update) setClientInfo(res.client_update)
     } catch (err) {
       setClientStarted(false)
-      notifications.show({ color: 'red', message: String((err as Error).message || err) })
+      setClientStartError(String((err as Error).message || err))
     } finally {
       setClientBusy(false)
     }
@@ -1636,6 +1638,7 @@ function NodeCardView({
                   if (!clientUpdateClickable(phase)) return
                   e.stopPropagation()
                   setClientStarted(false)
+                  setClientStartError('')
                   setClientOpen(true)
                 }}
               >
@@ -1856,7 +1859,8 @@ function NodeCardView({
       latest={clientLatest}
       updateAvailable={clientOutdated}
       info={clientInfo}
-      started={clientStarted}
+      startError={clientStartError}
+        started={clientStarted}
       requestBusy={clientBusy}
       rollbackBusy={clientRollbackBusy}
       onStart={() => void confirmClientUpdate()}

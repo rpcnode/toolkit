@@ -324,14 +324,37 @@ An empty value means "any origin" (as in `compose.yaml`); use
 enter the admin's own address (`http://<host>:8093`) as the server: requests
 then go through the proxy on the same origin and no CORS setting is needed.
 
-Update after `git pull`: `npm ci && npm run build` — no restart is needed,
-the server reads `dist/` on every request. Other commands:
+**Update** (after `git pull`):
+
+```bash
+cd admin
+npm ci && npm run build     # new UI → admin/dist
+```
+
+That is all for a UI change: `server.mjs` reads `dist/` on every request, so no
+restart is needed — reload the browser tab (Ctrl+F5).
+
+Restart the process only when `server.mjs`, `ecosystem.config.cjs` or its
+environment changed:
+
+```bash
+pm2 restart rpcnode-admin --update-env   # re-reads ADMIN_HOST / ADMIN_PORT / PANEL_URL
+# changed ecosystem.config.cjs itself? reload it from the file:
+pm2 reload ecosystem.config.cjs --update-env
+```
+
+Other commands:
 
 ```bash
 pm2 status                   # is it running
 pm2 logs rpcnode-admin       # proxy errors show up here (502 panel_unreachable)
-pm2 restart rpcnode-admin    # after changing PANEL_URL / ADMIN_PORT
+pm2 stop rpcnode-admin       # stop (pm2 start rpcnode-admin starts it again)
+pm2 delete rpcnode-admin     # remove from pm2; run pm2 save afterwards
 ```
+
+The process name is `rpcnode-admin` (set in `ecosystem.config.cjs`). The server
+(`rpcnode-server`) and the agent are systemd services, not pm2: update them with
+`bash ./scripts/rpcnode.sh update server` and `... update agent`.
 
 `server.mjs` speaks plain HTTP. For HTTPS put nginx/Caddy in front and set
 `ADMIN_HOST=127.0.0.1`.
