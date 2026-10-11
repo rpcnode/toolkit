@@ -51,7 +51,7 @@ object XrplHostBinaries
             {
                 return Result.Failed("dpkg-deb extract failed: $DEB_NAME")
             }
-            val found = findNamed(extractDir, BIN)
+            val found = findBinary(extractDir)
                 ?: return Result.Failed("xrpld binary not found inside $DEB_NAME")
             Files.copy(found, nodeDest, StandardCopyOption.REPLACE_EXISTING)
             makeExecutable(nodeDest)
@@ -67,8 +67,18 @@ object XrplHostBinaries
         }
     }
 
+    // ELF check too: a non-binary left in bin/ by an older install (the package's logrotate file is also named
+    // `xrpld`) must be replaced, not reused — systemd fails on it with 203/EXEC "Exec format error".
     private fun ready(path: Path): Boolean =
-        Files.isRegularFile(path) && Files.isExecutable(path)
+        Files.isRegularFile(path) && Files.isExecutable(path) && isElf(path)
+
+    internal fun isElf(path: Path): Boolean =
+        runCatching {
+            Files.newInputStream(path).use { input ->
+                val head = ByteArray(4)
+                input.read(head) == 4 && head.contentEquals(byteArrayOf(0x7f, 'E'.code.toByte(), 'L'.code.toByte(), 'F'.code.toByte()))
+            }
+        }.getOrDefault(false)
 
     private fun extractDeb(deb: Path, dest: Path): Boolean
     {
@@ -104,15 +114,27 @@ object XrplHostBinaries
         }
     }
 
-    private fun findNamed(root: Path, name: String): Path?
+    /**
+     * The package also ships `etc/logrotate.d/xrpld` — a plain name match picked that text file. Take the usual
+     * install paths first, then any ELF file named `xrpld`.
+     */
+    internal fun findBinary(root: Path): Path?
     {
         if (!Files.isDirectory(root))
         {
             return null
         }
+        for (rel in listOf("usr/bin/$BIN", "opt/ripple/bin/$BIN", "opt/xrpld/bin/$BIN", "usr/local/bin/$BIN"))
+        {
+            val p = root.resolve(rel)
+            if (Files.isRegularFile(p) && isElf(p))
+            {
+                return p
+            }
+        }
         Files.walk(root, 6).use { stream ->
             return stream
-                .filter { Files.isRegularFile(it) && it.fileName.toString() == name }
+                .filter { Files.isRegularFile(it) && it.fileName.toString() == BIN && isElf(it) }
                 .findFirst()
                 .orElse(null)
         }

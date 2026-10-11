@@ -2108,7 +2108,28 @@ export function useWizardOrchestration({
     // snapshot (Solana) never reaches snapshot_complete, so without this the click only flipped uiStep
     // and the wizard snapped back to Snapshot — Continue looked dead.
     if (snapshotViaNode && wizardStepFromPanelStatus(workload?.status, allowSnap) === 'snapshot') {
-      await setWlStatus('ready_to_start')
+      // Not setWlStatus: it swallows failures, and a refused write leaves the status on Snapshot — Continue
+      // would then look dead. Say why instead.
+      if (!workload?.id) return
+      try {
+        const res = await api.workloadsSetStatus({ id: workload.id, status: 'ready_to_start' })
+        if (res.ok === false || res.error) {
+          throw new Error(res.error || 'the panel refused the status change')
+        }
+        // Read the row back: the wizard follows the panel status, so if the panel kept another value the
+        // click can only look dead — show that value instead of silently staying here.
+        const back = await api.workloadsGet(workload.id)
+        const kept = String(back?.item?.status || '').toLowerCase()
+        if (kept && kept !== 'ready_to_start') {
+          throw new Error(`the panel answered ok but keeps status «${kept}» (expected ready_to_start)`)
+        }
+        await onWorkloadUpdated?.()
+      } catch (e) {
+        const msg = String((e as Error).message || e)
+        setError(`Could not leave the Snapshot step: ${msg}`)
+        pushLog(`ERROR: continue from snapshot — ${msg}`)
+        return
+      }
     }
     setUiStep('start')
     agentAckedStep.current = 'start'

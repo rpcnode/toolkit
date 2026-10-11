@@ -379,7 +379,7 @@ fi
 echo "building jars…"
 (
   cd "$APP_DIR"
-  ./gradlew --no-daemon buildFatJar agentFatJar cdnFatJar --console=plain
+  sh ./gradlew --no-daemon buildFatJar agentFatJar cdnFatJar --console=plain
 )
 
 SERVER_JAR="$APP_DIR/build/libs/rpcnode-server.jar"

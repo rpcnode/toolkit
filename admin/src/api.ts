@@ -962,6 +962,15 @@ export type HostDiskInfo = {
   planned_mount?: string
 }
 
+export type NodeDiagnosticItem = {
+  id: string
+  /** ok | info | warn | error | unknown */
+  level: string
+  title: string
+  detail?: string
+  hint?: string
+}
+
 export type HostMountInfo = {
   target: string
   source?: string
@@ -1114,6 +1123,23 @@ export type RegistryUpsertInput = {
   os_pretty?: string
   /** Public panel origin the host agent should push metrics to. */
   panel_url?: string
+}
+
+/**
+ * A bare 404 (no JSON body) on a newer endpoint means the panel server is older than this admin:
+ * say so instead of a mystery «HTTP 404».
+ */
+async function needsNewerPanel<T>(feature: string, call: () => Promise<T>): Promise<T> {
+  try {
+    return await call()
+  } catch (e) {
+    if (e instanceof Error && /^HTTP 404$|→ 404$/.test(e.message)) {
+      throw new Error(
+        `The panel server does not have «${feature}» yet — it is older than this admin. Restart/update rpcnode-server (in IDEA: re-run the server) and try again.`,
+      )
+    }
+    throw e
+  }
 }
 
 export type NodeRemovalStep = {
@@ -1272,6 +1298,11 @@ export const api = {
   workloadsGet: (id: string) =>
     getJSON<{ ok?: boolean; item?: Workload }>(`/api/nodes/${encodeURIComponent(id)}`),
   /** Fixed catalog ports for the node's network/env, live-checked on the host agent. */
+  /** Node checks from chains/<id>/network.yml → diagnostics, run on the host agent (NAT, advertised IP, catch-up…). */
+  nodeDiagnostics: (id: string) =>
+    getJSON<{ ok?: boolean; items?: NodeDiagnosticItem[]; error?: string; message?: string }>(
+      `/api/nodes/${encodeURIComponent(id)}/diagnostics`,
+    ),
   nodePorts: (id: string) =>
     getJSON<NodePortsResponse>(`/api/nodes/${encodeURIComponent(id)}/ports`),
   checkHostPorts: (opts: { server_id: string; network: string; env: string }) => {
@@ -1817,14 +1848,18 @@ export const api = {
       delete_files_async?: boolean
     }>('/api/nodes/remove', body),
   /** Gracefully stops every running node, all in parallel. */
-  stopAllNodes: () => postJSON<StopAllProgress>("/api/nodes/stop-all", {}),
-  stopAllProgress: () => getJSON<StopAllProgress>("/api/nodes/stop-all/progress"),
+  stopAllNodes: () => needsNewerPanel('Stop all', () => postJSON<StopAllProgress>('/api/nodes/stop-all', {})),
+  stopAllProgress: () => needsNewerPanel('Stop all', () => getJSON<StopAllProgress>('/api/nodes/stop-all/progress')),
 
   /** Step-by-step removal: starts the host job (stop → delete files → delete service). */
   nodeRemoveStart: (id: string, mode: 'wipe' | 'agents' | 'panel') =>
-    postJSON<NodeRemovalProgress>(`/api/nodes/${encodeURIComponent(id)}/remove/start`, { mode }),
+    needsNewerPanel('step-by-step node removal', () =>
+      postJSON<NodeRemovalProgress>(`/api/nodes/${encodeURIComponent(id)}/remove/start`, { mode }),
+    ),
   nodeRemoveProgress: (id: string) =>
-    getJSON<NodeRemovalProgress>(`/api/nodes/${encodeURIComponent(id)}/remove/progress`),
+    needsNewerPanel('step-by-step node removal', () =>
+      getJSON<NodeRemovalProgress>(`/api/nodes/${encodeURIComponent(id)}/remove/progress`),
+    ),
 
   instances: () =>
     getJSON<{ ok?: boolean; agent_env?: string; items?: StatusPayload['instances'] }>('/api/instances.json'),
@@ -1835,28 +1870,6 @@ export const api = {
       withAgentTarget('/api/snapshot/stop', asAgentTarget(target)),
     ),
   host: () => getJSON<{ ok?: boolean; host?: StatusPayload['host'] }>('/api/host'),
-  publicBaseGet: () =>
-    getJSON<{
-      ok?: boolean
-      public_base?: string
-      panel_base?: string
-      rpc_port?: number
-      panel_port?: number
-      host?: StatusPayload['host']
-    }>('/api/public-base'),
-  publicBaseApply: (body: { ip?: string; url?: string }) =>
-    postJSON<{
-      ok?: boolean
-      public_base?: string
-      panel_base?: string
-      panel_status?: string
-      env_updated?: boolean
-      env_error?: string
-      restart_hint?: string
-      env_snippet?: string
-      message?: string
-      error?: string
-    }>('/api/public-base', body),
 
   /** Host agent identity / CDN channel (panel proxies ?server=). */
   agentInfo: (target?: string | AgentTarget) =>

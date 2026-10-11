@@ -4,6 +4,8 @@ label: Toncoin
 hostPackages:
   - git
   - python3-pip
+  # MyTonCtrl compiles the TON node with clang 21 (not a plain distro package: LLVM repo of the base Ubuntu/Debian)
+  - clang-21
 diskRoles:
   - id: blockchain
     label: Blockchain DB
@@ -16,6 +18,20 @@ diskNotes:
   - "Only one TON env per host (validator/mytoncore units are shared)."
   - "Dump (~30d) is the product default; archive needs ≥12 TiB NVMe."
 oneEnvPerHost: true
+# Node page warnings, run by the host agent (GET /api/nodes/{id}/diagnostics). port = role from clients.yml.
+diagnostics:
+  # PMTU black hole (path smaller than interface MTU): full-size packets to peers are dropped.
+  - id: path_mtu
+  # Behind NAT the validator gets inbound peers only through a router forward of its UDP port.
+  - id: nat
+    port: p2p
+    protocol: udp
+  # addrs[] in /var/ton-work/db/config.json must be the public IP and the P2P port, or peers cannot connect back.
+  - id: ton_advertised_ip
+    port: p2p
+  # Catch-up after the dump (lag from validator STATUS lines); warn when it would take longer than warnHours.
+  - id: ton_catchup
+    warnHours: 12
 envs:
   - id: mainnet
     label: Toncoin Mainnet

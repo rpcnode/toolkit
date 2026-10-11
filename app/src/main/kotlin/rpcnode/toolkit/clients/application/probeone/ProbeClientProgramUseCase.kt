@@ -25,11 +25,11 @@ class ProbeClientProgramUseCase(
 {
     suspend operator fun invoke(spec: ClientProgramSpec): ClientVersionPin
     {
-        val resolved = resolveClientRelease(spec, githubReleaseClient, clientReleaseResolvers)
+        val existing = versionRepository.find(spec.network, spec.env, spec.programId)
+        val resolved = resolveClientRelease(spec, githubReleaseClient, clientReleaseResolvers, existing?.currentVersion.orEmpty())
         val now = Instant.now().toString()
         val key = ClientProgramKey(spec.network, spec.env, spec.programId)
 
-        val existing = versionRepository.find(spec.network, spec.env, spec.programId)
         val base = existing ?: previewStore.get(key) ?: ClientVersionPin(
             network = spec.network,
             env = spec.env,

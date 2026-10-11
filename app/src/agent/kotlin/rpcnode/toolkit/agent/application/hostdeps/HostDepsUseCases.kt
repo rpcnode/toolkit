@@ -194,7 +194,7 @@ class StartHostDepsInstallUseCase(
                         detail = again.detail.ifBlank { "present" }
                         return@repeat
                     }
-                    detail = again?.detail?.ifBlank { null } ?: detail
+                    // keep the installer's own reason (apt error text); the re-probe only says "missing"
                 }
             }
             if (!present)

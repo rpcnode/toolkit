@@ -179,7 +179,8 @@ val agentTest = tasks.register<Test>("agentTest") {
     testClassesDirs = sourceSets["agentTest"].output.classesDirs
     classpath = sourceSets["agentTest"].runtimeClasspath
     useJUnitPlatform()
-    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    // the RPC proxy sets these itself at runtime; tests share one JVM where another test may start a JDK HttpServer first
+    jvmArgs("--enable-native-access=ALL-UNNAMED", "-Dsun.net.httpserver.maxIdleConnections=1000000", "-Dsun.net.httpserver.nodelay=true")
 }
 
 val cdnTest = tasks.register<Test>("cdnTest") {

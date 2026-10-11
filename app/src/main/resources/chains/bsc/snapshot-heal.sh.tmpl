@@ -93,8 +93,8 @@ chmod 755 "$OPT/bin/fetch-snapshot.sh"
     sleep 8
     [ -f "$MARKER" ] && break
     FLAT=$(tr '\r' '\n' <"$LOG" 2>/dev/null | tail -n 800 || true)
-    APCT=$(printf '%s\n' "$FLAT" | grep -oE '\[#[0-9a-fA-F]+[^]]*\]' | tail -1 | grep -oE '\([0-9]+)%\)' | tr -dc '0-9' || true)
-    SIZE=$(printf '%s\n' "$FLAT" | grep -oE '[0-9][0-9,.]*GiB/[0-9][0-9,.]*GiB\([0-9]+)%\)' | tail -1 || true)
+    APCT=$(printf '%s\n' "$FLAT" | grep -oE '\[#[0-9a-fA-F]+[^]]*\]' | tail -1 | grep -oE '\(([0-9]+)%\)' | tr -dc '0-9' || true)
+    SIZE=$(printf '%s\n' "$FLAT" | grep -oE '[0-9][0-9,.]*GiB/[0-9][0-9,.]*GiB\(([0-9]+)%\)' | tail -1 || true)
     PARTS=$(printf '%s\n' "$FLAT" | grep -cE 'Download complete:|Extraction complete|Skipping [^ ]+ - already downloaded' || true)
     CSV=$(ls -1 "$SNAP"/${PREFIX}-*.csv 2>/dev/null | head -1 || true)
     TOTAL=0

@@ -89,6 +89,7 @@ object TonUnitBodies
                 "nr_open" to NR_OPEN.toString(),
                 "install_url" to shellQuote(TonClusters.INSTALL_URL),
                 "install_extra" to shellQuote(extra),
+                "clang_functions" to HostSystemdUnitTemplate.load("default", "clang-functions.sh").trimEnd(),
             ),
         )
     }

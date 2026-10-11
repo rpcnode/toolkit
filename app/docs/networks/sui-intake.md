@@ -69,10 +69,10 @@ Same binary family; network via genesis + `--network` for formal snapshot + yaml
 
 | Env | Role | Port |
 |---|---|---|
-| mainnet | http | 9000 |
+| mainnet | http | 9400 |
 | mainnet | metrics | 9184 |
 | mainnet | p2p | 8084 |
-| testnet | http | 9001 |
+| testnet | http | 9410 |
 | testnet | metrics | 9185 |
 | testnet | p2p | 8085 |
 

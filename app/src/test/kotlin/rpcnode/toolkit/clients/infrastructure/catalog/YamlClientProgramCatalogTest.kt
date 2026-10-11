@@ -41,13 +41,13 @@ class YamlClientProgramCatalogTest
 
         val mainnet = catalog.programsFor(NetworkId.BITCOIN, EnvId.MAINNET).single()
         assertEquals(
-            setOf("p2p" to 8333, "rpc" to 8332, "zmq_rawblock" to 28332, "zmq_rawtx" to 28333),
+            setOf("p2p" to 8333, "rpc" to 8332, "rpc_public" to 8432, "zmq_rawblock" to 28332, "zmq_rawtx" to 28333),
             mainnet.ports.map { it.role to it.port }.toSet(),
         )
 
         val regtest = catalog.programsFor(NetworkId.BITCOIN, EnvId.REGTEST).single()
         assertEquals(
-            setOf("p2p" to 18444, "rpc" to 18443, "zmq_rawblock" to 28362, "zmq_rawtx" to 28363),
+            setOf("p2p" to 18444, "rpc" to 18443, "rpc_public" to 18543, "zmq_rawblock" to 28362, "zmq_rawtx" to 28363),
             regtest.ports.map { it.role to it.port }.toSet(),
         )
 
@@ -129,5 +129,19 @@ class YamlClientProgramCatalogTest
         val catalog = YamlClientProgramCatalog()
         val unknown = NetworkId.parse("does-not-exist")!!
         assertTrue(catalog.programsFor(unknown, EnvId.MAINNET).isEmpty())
+    }
+
+    @Test
+    fun sepolia_lighthouse_follows_release_candidates_but_mainnet_stays_on_stable()
+    {
+        val catalog = YamlClientProgramCatalog()
+        fun lighthouse(env: EnvId) =
+            assertIs<ClientVersionSource.GitHubRelease>(
+                catalog.programsFor(NetworkId.ETHEREUM, env).single { it.programId == "lighthouse" }.source,
+            )
+        // Sepolia runs the Gloas fork; Lighthouse 8.2.x cannot read its checkpoint state (needs 8.3.0-rc).
+        assertTrue(lighthouse(EnvId.SEPOLIA).includePrerelease)
+        assertEquals("sigp/lighthouse", lighthouse(EnvId.SEPOLIA).repo)
+        assertEquals(false, lighthouse(EnvId.MAINNET).includePrerelease)
     }
 }

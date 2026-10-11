@@ -19,7 +19,7 @@ suspend fun resolveVersion(source: ClientVersionSource, githubReleaseClient: Git
         ResolvedVersion(version = source.version, tag = source.tag, sourceLabel = source.label)
     is ClientVersionSource.GitHubRelease ->
     {
-        val release = githubReleaseClient.latestRelease(source.repo, source.tagPrefix)
+        val release = githubReleaseClient.latestRelease(source.repo, source.tagPrefix, source.includePrerelease)
         if (release == null)
         {
             ResolvedVersion(version = "", tag = "", sourceLabel = source.repo, error = "no releases found for ${source.repo}")
@@ -40,6 +40,7 @@ suspend fun resolveClientRelease(
     spec: ClientProgramSpec,
     githubReleaseClient: GitHubReleaseClient,
     clientReleaseResolvers: Map<NetworkId, ClientReleaseResolver>,
+    installedVersion: String = "",
 ): ResolvedVersion
 {
     val release = clientReleaseResolvers[spec.network]?.resolve(spec.env)
@@ -58,5 +59,17 @@ suspend fun resolveClientRelease(
         }
         return ResolvedVersion(version = release.version, tag = release.tag, sourceLabel = release.sourceLabel)
     }
-    return resolveVersion(spec.source, githubReleaseClient)
+    val fallback = resolveVersion(spec.source, githubReleaseClient)
+    // The live feed was unreachable and the hand-maintained catalog pin is older than what is installed:
+    // offering it would downgrade the client (and "Update" would really install the older build).
+    if (fallback.error == null && installedVersion.isNotBlank() && isOlderClientVersion(fallback.version, installedVersion))
+    {
+        return ResolvedVersion(
+            version = "",
+            tag = "",
+            sourceLabel = fallback.sourceLabel,
+            error = "release feed unreachable — catalog pin ${fallback.version} is older than the installed $installedVersion, keeping the installed one",
+        )
+    }
+    return fallback
 }

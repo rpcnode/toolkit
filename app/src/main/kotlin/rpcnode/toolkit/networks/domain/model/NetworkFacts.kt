@@ -141,4 +141,17 @@ data class NetworkFacts(
      */
     val hostPackages: List<String> = emptyList(),
     val clientConfig: ClientConfigFacts? = null,
+    /** Node page checks (`diagnostics` in chains/<id>/network.yml), run by the host agent. */
+    val diagnostics: List<NetworkDiagnosticFacts> = emptyList(),
+)
+
+/**
+ * One node check. [port] is a catalog port role from clients.yml (e.g. `p2p`), resolved to the env's port by the panel;
+ * [params] are check-specific (strings).
+ */
+data class NetworkDiagnosticFacts(
+    val id: String,
+    val port: String? = null,
+    val protocol: String? = null,
+    val params: Map<String, String> = emptyMap(),
 )

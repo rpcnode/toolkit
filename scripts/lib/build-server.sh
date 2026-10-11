@@ -66,7 +66,7 @@ fi
 echo "building rpcnode-server $VERSION"
 (
   cd "$APP_DIR"
-  ./gradlew buildFatJar --console=plain
+  sh ./gradlew buildFatJar --console=plain
 )
 
 JAR="$APP_DIR/build/libs/rpcnode-server.jar"

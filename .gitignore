@@ -11,6 +11,9 @@ admin/dist/
 !.github/workflows/
 !.github/workflows/**
 
+#Local
+/local/
+
 # Docker bind-mount for rpcnode-server (toolkit.db, panel.htpasswd, …)
 /data/
 

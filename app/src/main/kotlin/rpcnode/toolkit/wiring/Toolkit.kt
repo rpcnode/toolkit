@@ -59,6 +59,7 @@ import rpcnode.toolkit.networks.application.tip.NetworkTipCache
 import rpcnode.toolkit.networks.application.tip.NetworkTipProbeRegistry
 import rpcnode.toolkit.nodes.application.height.GetNodeHeightUseCase
 import rpcnode.toolkit.nodes.application.logs.GetNodeLogsUseCase
+import rpcnode.toolkit.nodes.application.diagnostics.GetNodeDiagnosticsUseCase
 import rpcnode.toolkit.nodes.application.process.ControlNodeProcessUseCase
 import rpcnode.toolkit.nodes.application.process.StopAllNodesUseCase
 import rpcnode.toolkit.nodes.application.version.GetNodeClientVersionUseCase
@@ -72,6 +73,7 @@ import rpcnode.toolkit.nodes.application.hostdeps.GetNodeHostDepsProgressUseCase
 import rpcnode.toolkit.nodes.application.hostdeps.StartNodeHostDepsUseCase
 import rpcnode.toolkit.nodes.infrastructure.http.HttpHostDepsClient
 import rpcnode.toolkit.nodes.infrastructure.http.HttpNodeLogsHostClient
+import rpcnode.toolkit.nodes.infrastructure.http.HttpNodeDiagnosticsHostClient
 import rpcnode.toolkit.nodes.infrastructure.http.HttpNodeProcessControlClient
 import rpcnode.toolkit.nodes.infrastructure.http.HttpRemoveNodeOnHost
 import rpcnode.toolkit.clients.application.ClientDownloadTracker
@@ -292,6 +294,7 @@ class Toolkit(
     val rollbackNodeClient: RollbackNodeClientUseCase,
     val getNodeHeight: GetNodeHeightUseCase,
     val getNodeLogs: GetNodeLogsUseCase,
+    val getNodeDiagnostics: GetNodeDiagnosticsUseCase,
     val getNodeClientVersion: GetNodeClientVersionUseCase,
     val getNodeRpcAuth: GetNodeRpcAuthUseCase,
     val discoverServerNodes: DiscoverServerNodesUseCase,
@@ -576,6 +579,13 @@ class Toolkit(
                 resolveDestDir = resolveSnapshotDestDir,
                 fetchOnHost = HttpNodeLogsHostClient(),
             )
+            val getNodeDiagnostics = GetNodeDiagnosticsUseCase(
+                nodes = nodeRepository,
+                servers = serverRepository,
+                facts = networkFacts,
+                catalog = clientProgramCatalog,
+                runOnHost = HttpNodeDiagnosticsHostClient(),
+            )
             val getNodeClientVersion = GetNodeClientVersionUseCase(
                 nodes = nodeRepository,
                 servers = serverRepository,
@@ -816,6 +826,7 @@ class Toolkit(
                 rollbackNodeClient = rollbackNodeClient,
                 getNodeHeight = getNodeHeight,
                 getNodeLogs = getNodeLogs,
+                getNodeDiagnostics = getNodeDiagnostics,
                 getNodeClientVersion = getNodeClientVersion,
                 getNodeRpcAuth = getNodeRpcAuth,
                 discoverServerNodes = discoverServerNodes,

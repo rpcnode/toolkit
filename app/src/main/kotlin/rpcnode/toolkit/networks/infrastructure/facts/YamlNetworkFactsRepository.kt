@@ -12,6 +12,7 @@ import rpcnode.toolkit.networks.domain.model.ClientConfigFacts
 import rpcnode.toolkit.networks.domain.model.ClientConfigTestConnectFacts
 import rpcnode.toolkit.networks.domain.model.NetworkDiskRoleFacts
 import rpcnode.toolkit.networks.domain.model.NetworkEnvFacts
+import rpcnode.toolkit.networks.domain.model.NetworkDiagnosticFacts
 import rpcnode.toolkit.networks.domain.model.NetworkFacts
 import rpcnode.toolkit.networks.domain.model.SnapshotTypeFacts
 import rpcnode.toolkit.networks.domain.repository.NetworkFactsRepository
@@ -70,7 +71,25 @@ private fun parseFacts(yamlText: String): NetworkFacts
         oneEnvPerHost = root["oneEnvPerHost"] as? Boolean ?: false,
         hostPackages = parseHostPackages(root["hostPackages"]),
         clientConfig = parseClientConfigFacts(root["clientConfig"]),
+        diagnostics = parseDiagnostics(root["diagnostics"]),
     )
+}
+
+private fun parseDiagnostics(raw: Any?): List<NetworkDiagnosticFacts>
+{
+    val list = raw as? List<*> ?: return emptyList()
+    return list.mapNotNull { item ->
+        val m = item as? Map<*, *> ?: return@mapNotNull null
+        val id = (m["id"] as? String)?.trim()?.ifEmpty { null } ?: return@mapNotNull null
+        NetworkDiagnosticFacts(
+            id = id,
+            port = (m["port"] as? String)?.trim()?.ifEmpty { null },
+            protocol = (m["protocol"] as? String)?.trim()?.lowercase()?.ifEmpty { null },
+            params = m.filterKeys { it !in setOf("id", "port", "protocol") }
+                .mapNotNull { (k, v) -> if (k is String && v != null) k to v.toString() else null }
+                .toMap(),
+        )
+    }
 }
 
 private fun parseHostPackages(raw: Any?): List<String>

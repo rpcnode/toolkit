@@ -90,3 +90,7 @@ clientConfig:
       source: catalog_port
       role: p2p
       description: P2P listen port
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

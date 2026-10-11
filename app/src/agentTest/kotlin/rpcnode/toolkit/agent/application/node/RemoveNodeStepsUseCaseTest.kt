@@ -29,6 +29,7 @@ class RemoveNodeStepsUseCaseTest
         var failStop: String? = null,
         var failDelete: String? = null,
         var failService: String? = null,
+        var runningSnapshots: Int = 0,
         val existing: MutableSet<Path> = mutableSetOf(),
     ) : RemovalOps
     {
@@ -48,6 +49,12 @@ class RemoveNodeStepsUseCaseTest
         {
             calls += "units:${units.joinToString(",")}"
             return failService?.let { HostNodeStartResult.Failed(it) } ?: HostNodeStartResult.Started(pid = 0)
+        }
+
+        override fun stopSnapshots(dirs: List<Path>): Int
+        {
+            calls += "stop-snapshots:${dirs.size}"
+            return runningSnapshots
         }
 
         override fun removeSnapshotUnit(nodeId: String)
@@ -107,6 +114,7 @@ class RemoveNodeStepsUseCaseTest
         assertEquals(listOf("done", "done", "done"), state.steps.map { it.status })
         assertEquals(
             listOf(
+                "stop-snapshots:2",
                 "stop",
                 "delete:${Path.of("/data/tron/nile/fullnode")}",
                 "delete:${Path.of("/opt/tron/nile")}",
@@ -116,6 +124,19 @@ class RemoveNodeStepsUseCaseTest
             ops.calls,
         )
         assertNull(registry.get("n1"), "the node is forgotten by the agent")
+    }
+
+    @Test
+    fun a_snapshot_download_is_stopped_before_any_file_is_deleted()
+    {
+        val ops = FakeOps(active = false, runningSnapshots = 1, existing = mutableSetOf(Path.of("/data/tron/nile/fullnode")))
+        val uc = useCase(ops)
+        uc.start(command())
+        val state = uc.await()
+        assertEquals("done", state.steps[0].status)
+        assertTrue(state.steps[0].detail.contains("1 snapshot download"), state.steps[0].detail)
+        val firstDelete = ops.calls.indexOfFirst { it.startsWith("delete:") }
+        assertTrue(ops.calls.indexOf("stop-snapshots:2") in 0 until firstDelete, ops.calls.toString())
     }
 
     @Test

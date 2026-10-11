@@ -217,6 +217,7 @@ Panel → agent HTTP: **`servers/infrastructure/http/HttpHostAgentClient.kt`**
 | GET | `/api/nodes/{id}/ports` | `GetNodePortsUseCase` | `NodesRoutes.kt` |
 | POST | `/api/nodes/{id}/ports/check` | `CheckNodePortsUseCase` | `NodesRoutes.kt` |
 | POST | `/api/nodes/remove` | `RemoveNodeUseCase` | `NodesRoutes.kt` |
+| GET | `/api/nodes/{id}/diagnostics` | `GetNodeDiagnosticsUseCase` (checks from `chains/<id>/network.yml` → `diagnostics`) | `NodesRoutes.kt` |
 
 ### Install
 
@@ -310,6 +311,7 @@ sequenceDiagram
 | POST `/api/v1/unenroll` | `UnenrollPanelUseCase` | AgentRoutes |
 | POST `/api/v1/agent/update` | `UpdateAgentUseCase` | AgentRoutes |
 | POST `/api/v1/agent/ports/check` | `CheckPortsUseCase` | AgentRoutes |
+| POST `/api/v1/node/diagnostics` | `HostNodeDiagnostics` (`nat`; TON: `chains/ton/.../TonDiagnostics`) | AgentRoutes |
 
 Entrypoint: **`agent/presentation/http/AgentMain.kt`**.
 

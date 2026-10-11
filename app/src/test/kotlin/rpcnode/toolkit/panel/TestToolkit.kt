@@ -22,6 +22,9 @@ import rpcnode.toolkit.nodes.application.test.RunNodeLiveTestUseCase
 import rpcnode.toolkit.nodes.application.test.TestNodeOnHost
 import rpcnode.toolkit.nodes.application.logs.FetchNodeLogsResult
 import rpcnode.toolkit.nodes.application.logs.GetNodeLogsUseCase
+import rpcnode.toolkit.nodes.application.diagnostics.GetNodeDiagnosticsUseCase
+import rpcnode.toolkit.nodes.application.diagnostics.RunNodeDiagnosticsOnHost
+import rpcnode.toolkit.nodes.application.diagnostics.RunNodeDiagnosticsOnHostResult
 import rpcnode.toolkit.nodes.application.logs.NodeHostLogs
 import rpcnode.toolkit.nodes.application.version.FetchNodeClientVersionOnHost
 import rpcnode.toolkit.nodes.application.version.FetchNodeClientVersionResult
@@ -605,6 +608,13 @@ internal fun testToolkit(
             fetchOnHost = FetchNodeLogsOnHost { _, _, _, _, _, _ ->
                 FetchNodeLogsResult.Ok(NodeHostLogs())
             },
+        ),
+        getNodeDiagnostics = GetNodeDiagnosticsUseCase(
+            nodes = nodeRepository,
+            servers = serverRepository,
+            facts = networkFacts,
+            catalog = clientProgramCatalog,
+            runOnHost = RunNodeDiagnosticsOnHost { _, _, _, _ -> RunNodeDiagnosticsOnHostResult.Ok(emptyList()) },
         ),
         getNodeClientVersion = GetNodeClientVersionUseCase(
             nodes = nodeRepository,

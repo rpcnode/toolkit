@@ -107,3 +107,7 @@ clientConfig:
           Panel GETs {url}/eth/v1/beacon/genesis. Expect JSON with data.genesis_time.
           Beacon / blob API is required for Nitro parent-chain data.
           Local example: http://127.0.0.1:5053 (sepolia) or http://127.0.0.1:5052 (mainnet).
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

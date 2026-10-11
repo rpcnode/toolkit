@@ -24,11 +24,13 @@ class BuildNodeHostDepsPlanUseCase(
             {
                 return
             }
+            // `clang-21` in hostPackages = that LLVM major as the default `clang` (not a plain distro package)
+            val clangMajor = CLANG_MAJOR.matchEntire(pkg)?.groupValues?.get(1)
             packages[pkg] = NodeHostDepPlanItem(
                 id = pkg,
-                kind = "package",
+                kind = if (clangMajor != null) "clang" else "package",
                 name = pkg,
-                label = pkg,
+                label = if (clangMajor != null) "clang $clangMajor (LLVM)" else pkg,
             )
         }
         for (pkg in COMMON_HOST_PACKAGES)
@@ -62,3 +64,5 @@ class BuildNodeHostDepsPlanUseCase(
         )
     }
 }
+
+private val CLANG_MAJOR = Regex("""clang-(\d{1,3})""")

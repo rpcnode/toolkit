@@ -61,12 +61,17 @@ interface RemovalOps
     fun removeUnits(units: List<String>, network: String, env: String): HostNodeStartResult
     fun removeSnapshotUnit(nodeId: String)
 
+    /** Stops running snapshot downloads that write under [dirs]; returns how many were stopped. */
+    fun stopSnapshots(dirs: List<Path>): Int
+
     /** Deletes [path] and everything below it; [onFile] is called as files go. false = there was nothing to delete. */
     fun deleteTree(path: Path, onFile: (deleted: Long) -> Unit): Boolean
 }
 
-object HostRemovalOps : RemovalOps
+class HostRemovalOps(private val stopSnapshotJobs: (List<Path>) -> Int = { 0 }) : RemovalOps
 {
+    override fun stopSnapshots(dirs: List<Path>): Int = stopSnapshotJobs(dirs)
+
     override fun unitActive(network: String, env: String): Boolean
     {
         val unit = HostNodeLaunchSupport.unitName(network, env)
@@ -138,7 +143,7 @@ object HostRemovalOps : RemovalOps
 class RemoveNodeStepsUseCase(
     private val registry: RunningNodeRegistry,
     private val scope: CoroutineScope,
-    private val ops: RemovalOps = HostRemovalOps,
+    private val ops: RemovalOps = HostRemovalOps(),
     private val isRoot: () -> Boolean = ::runningAsRoot,
     private val optRoot: Path = Path.of("/opt"),
 )
@@ -202,19 +207,22 @@ class RemoveNodeStepsUseCase(
         val env = command.env
         val hint = dirs.firstOrNull()
 
-        // 1. stop
+        // 1. stop — the node, and any snapshot download still writing into its folders (deleting files under a
+        // live aria2/tar leaves it filling an invisible deleted file and eating the disk)
         setStep(nodeId, "stop", "running", "")
+        val snapshotsStopped = ops.stopSnapshots(dirs + listOf(optRoot.resolve(network).resolve(env)))
         if (ops.unitActive(network, env))
         {
             when (val stopped = ops.stop(network, env, hint))
             {
                 is HostNodeStartResult.Failed -> return fail(nodeId, "stop", stopped.detail)
-                else -> setStep(nodeId, "stop", "done", "node stopped")
+                else -> setStep(nodeId, "stop", "done", if (snapshotsStopped > 0) "node and $snapshotsStopped snapshot download(s) stopped" else "node stopped")
             }
         }
         else
         {
-            setStep(nodeId, "stop", "skipped", "not running")
+            if (snapshotsStopped > 0) setStep(nodeId, "stop", "done", "$snapshotsStopped snapshot download(s) stopped")
+            else setStep(nodeId, "stop", "skipped", "not running")
         }
 
         // The service names (incl. companions such as lighthouse) are recorded inside the node folder:

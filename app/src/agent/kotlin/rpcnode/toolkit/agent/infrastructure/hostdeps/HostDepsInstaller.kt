@@ -7,6 +7,7 @@ import rpcnode.toolkit.agent.application.hostdeps.HostDepRequest
 import rpcnode.toolkit.agent.infrastructure.proc.EnsureHostCurl
 import rpcnode.toolkit.nodes.infrastructure.host.EnsureHostJava
 import rpcnode.toolkit.nodes.infrastructure.host.HostJavaBinary
+import rpcnode.toolkit.nodes.infrastructure.host.HostSystemdUnitTemplate
 
 /**
  * Probe / install OS packages and JDK majors on the host.
@@ -21,6 +22,7 @@ class HostDepsInstaller
             when (val kind = dep.kind.trim().lowercase())
             {
                 "java" -> probeJava(dep)
+                "clang" -> probeClang(dep)
                 "package", "binary" -> probePackageOrBinary(dep)
                 else -> HostDepProbeItem(id = dep.id, present = false, detail = "unknown kind: $kind")
             }
@@ -47,6 +49,7 @@ class HostDepsInstaller
                     )
                 }
             }
+            "clang" -> installClang(dep)
             "package", "binary" ->
             {
                 val pkg = dep.name.trim().ifEmpty { dep.id.trim() }
@@ -80,6 +83,83 @@ class HostDepsInstaller
             else -> HostDepProbeItem(id = dep.id, present = false, detail = "unknown kind")
         }
     }
+
+    /** `clang-21` → 21. */
+    private fun clangMajor(dep: HostDepRequest): Int? =
+        Regex("""clang-(\d{1,3})""").matchEntire(dep.name.trim().ifEmpty { dep.id.trim() })
+            ?.groupValues?.get(1)?.toIntOrNull()
+
+    private fun probeClang(dep: HostDepRequest): HostDepProbeItem
+    {
+        val major = clangMajor(dep)
+            ?: return HostDepProbeItem(id = dep.id, present = false, detail = "bad clang dependency '${dep.name}'")
+        val have = ClangVersion.major(runVersion("clang"))
+        return if (have == major)
+        {
+            HostDepProbeItem(id = dep.id, present = true, detail = "clang $major")
+        }
+        else
+        {
+            HostDepProbeItem(
+                id = dep.id,
+                present = false,
+                detail = if (have == null) "clang missing" else "clang $have, need $major",
+            )
+        }
+    }
+
+    /** Installs clang-N from apt.llvm.org (of the Ubuntu/Debian release the system is based on) as the default clang. */
+    private fun installClang(dep: HostDepRequest): HostDepProbeItem
+    {
+        val major = clangMajor(dep)
+            ?: return HostDepProbeItem(id = dep.id, present = false, detail = "bad clang dependency '${dep.name}'")
+        if (probeClang(dep).present)
+        {
+            return HostDepProbeItem(id = dep.id, present = true, detail = "already present")
+        }
+        return try
+        {
+            val functions = HostSystemdUnitTemplate.load("default", "clang-functions.sh")
+            val script = "set -euo pipefail\n$functions\nensure_clang_major $major\n"
+            // The script goes in on stdin, not as `bash -c`: nothing but its own output ends up in the logs.
+            val proc = ProcessBuilder("bash", "-s").redirectErrorStream(true).start()
+            proc.outputStream.use { it.write(script.toByteArray()) }
+            val out = proc.inputStream.bufferedReader().readText()
+            val finished = proc.waitFor(30, TimeUnit.MINUTES)
+            if (!finished)
+            {
+                proc.destroyForcibly()
+                return HostDepProbeItem(id = dep.id, present = false, detail = "clang install timed out")
+            }
+            val tail = out.lines().filter { it.isNotBlank() }.takeLast(3).joinToString(" | ")
+            if (proc.exitValue() != 0)
+            {
+                log.warn("clang-{} install failed: {}", major, tail)
+                return HostDepProbeItem(
+                    id = dep.id,
+                    present = false,
+                    detail = out.lines().lastOrNull { it.startsWith("ERROR") } ?: tail.ifBlank { "clang install failed" },
+                )
+            }
+            probeClang(dep).let { if (it.present) it.copy(detail = "installed") else it }
+        }
+        catch (e: Exception)
+        {
+            HostDepProbeItem(id = dep.id, present = false, detail = e.message?.ifBlank { null } ?: "clang install failed")
+        }
+    }
+
+    private fun runVersion(bin: String): String =
+        try
+        {
+            val p = ProcessBuilder(bin, "--version").redirectErrorStream(true).start()
+            val out = p.inputStream.bufferedReader().readText()
+            if (p.waitFor(10, TimeUnit.SECONDS)) out else ""
+        }
+        catch (_: Exception)
+        {
+            ""
+        }
 
     private fun probeJava(dep: HostDepRequest): HostDepProbeItem
     {
@@ -186,4 +266,13 @@ class HostDepsInstaller
         log.warn("host dep {} missing — installing via {}", pkg, mgr.tool)
         mgr.install(pkg)
     }
+}
+
+object ClangVersion
+{
+    private val re = Regex("""version\s+(\d+)""")
+
+    /** Major from the first line of `clang --version` ("Ubuntu clang version 21.1.8 (...)"), null when absent. */
+    fun major(versionOutput: String): Int? =
+        re.find(versionOutput.lineSequence().firstOrNull().orEmpty())?.groupValues?.get(1)?.toIntOrNull()
 }

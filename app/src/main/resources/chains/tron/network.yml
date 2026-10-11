@@ -170,3 +170,7 @@ clientConfig:
           TRON FullNode HTTP root — not eth-jsonrpc. QuickNode: https://…quiknode.pro/TOKEN without /jsonrpc
           (gateway serves /wallet/…). Panel probes {url}/wallet/getnodeinfo (codeVersion) and
           {url}/wallet/getnowblock (height). Local Nile example: http://192.168.0.59:18091
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

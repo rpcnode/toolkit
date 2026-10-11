@@ -6,8 +6,16 @@ import rpcnode.toolkit.catalog.domain.NetworkId
 /** How to find out the latest version of a [ClientProgramSpec]. */
 sealed interface ClientVersionSource
 {
-    /** Live-probed via the GitHub Releases API. [tagPrefix], when set, filters candidate tags. */
-    data class GitHubRelease(val repo: String, val tagPrefix: String? = null) : ClientVersionSource
+    /**
+     * Live-probed via the GitHub Releases API. [tagPrefix], when set, filters candidate tags.
+     * [includePrerelease] follows release candidates too (for a network that needs one, e.g. a testnet
+     * fork shipped before the stable release); the newest release wins, so stable takes over by itself.
+     */
+    data class GitHubRelease(
+        val repo: String,
+        val tagPrefix: String? = null,
+        val includePrerelease: Boolean = false,
+    ) : ClientVersionSource
 
     /**
      * No live probing — a manually maintained known-good build (e.g. tron, which has no public

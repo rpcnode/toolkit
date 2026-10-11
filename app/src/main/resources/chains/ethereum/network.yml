@@ -89,3 +89,7 @@ clientConfig:
       source: catalog_port
       role: beacon
       description: Lighthouse HTTP / beacon API port
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

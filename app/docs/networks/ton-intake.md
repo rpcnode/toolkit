@@ -69,9 +69,9 @@ Same install path; chain flag selects network.
 | Env | Role | Port |
 |---|---|---|
 | mainnet | http | 8081 |
-| mainnet | p2p | 30310 |
+| mainnet | p2p | 31310 |
 | testnet | http | 8082 |
-| testnet | p2p | 30311 |
+| testnet | p2p | 31311 |
 
 Height/tip use **http** (TON HTTP API). P2P = validator listen.
 

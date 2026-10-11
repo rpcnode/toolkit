@@ -13,6 +13,7 @@ programs:
     ports:
       - { role: p2p, port: 22556, label: "P2P", config: required }
       - { role: rpc, port: 22555, label: "RPC", config: required }
+      - { role: rpc_public, port: 22655, label: "RPC proxy (no login)", config: none }
   - env: testnet
     id: dogecoin
     source: { type: github, repo: dogecoin/dogecoin }
@@ -27,6 +28,7 @@ programs:
     ports:
       - { role: p2p, port: 44556, label: "P2P", config: required }
       - { role: rpc, port: 44555, label: "RPC", config: required }
+      - { role: rpc_public, port: 44655, label: "RPC proxy (no login)", config: none }
   - env: regtest
     id: dogecoin
     source: { type: github, repo: dogecoin/dogecoin }
@@ -39,5 +41,6 @@ programs:
       - name: dogecoin.conf
         urlTemplate: "https://raw.githubusercontent.com/dogecoin/dogecoin/{tag}/contrib/debian/examples/dogecoin.conf"
     ports:
-      - { role: p2p, port: 18444, label: "P2P", config: required }
-      - { role: rpc, port: 18332, label: "RPC", config: required }
+      - { role: p2p, port: 18474, label: "P2P", config: required }
+      - { role: rpc, port: 18473, label: "RPC", config: required }
+      - { role: rpc_public, port: 18433, label: "RPC proxy (no login)", config: none }

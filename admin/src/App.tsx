@@ -40,6 +40,8 @@ export function App() {
   const [setupNeeded, setSetupNeeded] = useState<boolean | null>(null)
   const [bootLoading, setBootLoading] = useState(true)
   const [catalogReady, setCatalogReady] = useState(false)
+  // The panel did not answer while the page was opening (restart, network blip): not the same as "logged out".
+  const [panelDown, setPanelDown] = useState(false)
 
   const syncRoute = useCallback(() => {
     setRoute(parseRoute(window.location.pathname))
@@ -59,9 +61,11 @@ export function App() {
       ])
       setAuth(st)
       setSetupNeeded(!!su.needed)
+      setPanelDown(false)
     } catch {
-      setAuth((prev) => prev ?? { ok: false, authenticated: false })
-      setSetupNeeded((prev) => prev ?? true)
+      // Keep what we knew. Without it (first load while the panel restarts) do NOT fall back to
+      // "not authenticated"/"setup needed": that threw a valid session onto the login or setup page.
+      setPanelDown(true)
     } finally {
       setBootLoading(false)
     }
@@ -74,6 +78,13 @@ export function App() {
   useEffect(() => {
     void refresh()
   }, [refresh, locationKey])
+
+  // While the panel is unreachable keep asking until it is back (a restart takes a few seconds).
+  useEffect(() => {
+    if (!panelDown) return
+    const t = window.setInterval(() => void refresh(), 3000)
+    return () => window.clearInterval(t)
+  }, [panelDown, refresh])
 
   useEffect(() => {
     function onApiReady() {
@@ -121,6 +132,20 @@ export function App() {
         <Stack align="center" gap="sm">
           <Loader color="teal" />
           <Text c="dimmed">Loading panel…</Text>
+        </Stack>
+      </Center>
+    )
+  }
+
+  if (panelDown && (!auth || setupNeeded == null)) {
+    return (
+      <Center mih="100vh" {...blockProps('app.panel-down')}>
+        <Stack align="center" gap="sm">
+          <Loader color="yellow" />
+          <Text>The panel server is not answering</Text>
+          <Text c="dimmed" size="sm">
+            It may be restarting. Retrying every few seconds — you stay signed in.
+          </Text>
         </Stack>
       </Center>
     )

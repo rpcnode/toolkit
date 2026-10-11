@@ -40,4 +40,4 @@ programs:
         urlTemplate: "https://raw.githubusercontent.com/zcash/zcash/{tag}/contrib/debian/examples/zcash.conf"
     ports:
       - { role: p2p, port: 18344, label: "P2P", config: required }
-      - { role: rpc, port: 18332, label: "RPC", config: required }
+      - { role: rpc, port: 18352, label: "RPC", config: required }

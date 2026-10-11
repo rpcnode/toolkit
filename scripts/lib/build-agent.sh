@@ -67,7 +67,7 @@ fi
 echo "building rpcnode-agent $VERSION"
 (
   cd "$APP_DIR"
-  ./gradlew agentFatJar --console=plain
+  sh ./gradlew agentFatJar --console=plain
 )
 
 JAR="$APP_DIR/build/libs/rpcnode-agent.jar"

@@ -11,8 +11,8 @@ programs:
         urlTemplate: "docker://offchainlabs/nitro-node:{tag}"
         urlTemplateAarch64: "docker://offchainlabs/nitro-node:{tag}"
     ports:
-      - { role: http, port: 8547, label: "HTTP RPC", config: required }
-      - { role: ws, port: 8548, label: "WebSocket RPC", config: required }
+      - { role: http, port: 8647, label: "HTTP RPC", config: required }
+      - { role: ws, port: 8648, label: "WebSocket RPC", config: required }
   - env: sepolia
     id: nitro
     source: { type: github, repo: OffchainLabs/nitro }

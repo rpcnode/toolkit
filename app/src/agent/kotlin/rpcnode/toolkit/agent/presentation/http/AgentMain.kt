@@ -10,6 +10,9 @@ import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -33,8 +36,10 @@ import rpcnode.toolkit.agent.application.node.GetNodeProcessLogsUseCase
 import rpcnode.toolkit.agent.application.node.GetNodeRpcAuthUseCase
 import rpcnode.toolkit.agent.application.node.ListLocalNodesUseCase
 import rpcnode.toolkit.agent.application.node.NodeHeightPusher
+import rpcnode.toolkit.agent.application.node.RpcProxyReconciler
 import rpcnode.toolkit.agent.application.node.PushNodeHeightsUseCase
 import rpcnode.toolkit.agent.application.node.RemoveNodeHostUseCase
+import rpcnode.toolkit.agent.application.node.HostRemovalOps
 import rpcnode.toolkit.agent.application.node.RemoveNodeStepsUseCase
 import rpcnode.toolkit.agent.application.node.StartNodeProcessUseCase
 import rpcnode.toolkit.agent.application.node.TestNodeUseCase
@@ -315,6 +320,28 @@ private fun runAgentServer()
         ),
         scope = pushScope,
     ).start()
+    // Login-free RPC front for the bitcoind family (their daemons answer 401 to a plain client).
+    // No cache, every method passes (the port is meant to be behind a firewall).
+    // RPCNODE_RPC_PROXY=off disables it; RPCNODE_RPC_PROXY_BIND=127.0.0.1 keeps it local only;
+    // RPCNODE_RPC_PROXY_METHODS=safe limits it to chain reads + broadcasting.
+    if (!System.getenv("RPCNODE_RPC_PROXY").equals("off", ignoreCase = true))
+    {
+        val rpcProxies = RpcProxyReconciler(
+            registry = runningNodes,
+            listenHost = System.getenv("RPCNODE_RPC_PROXY_BIND")?.trim()?.ifEmpty { null } ?: "0.0.0.0",
+            upstreamConcurrency = System.getenv("RPCNODE_RPC_PROXY_NODE_CALLS")?.trim()?.toIntOrNull() ?: 64,
+            allowedMethods = if (System.getenv("RPCNODE_RPC_PROXY_METHODS").equals("safe", ignoreCase = true))
+                rpcnode.toolkit.agent.infrastructure.proxy.RpcAuthProxy.READ_AND_BROADCAST else null,
+        )
+        pushScope.launch {
+            while (isActive)
+            {
+                runCatching { rpcProxies.reconcile() }
+                    .onFailure { log.warn("rpc proxy reconcile: {}", it.message) }
+                delay(5_000)
+            }
+        }
+    }
     log.info("log file {}", logFile)
     log.info("token file {}", cfg.tokenFile)
     log.info("HTTP access log → {}", logFile)
@@ -364,6 +391,7 @@ private fun runAgentServer()
                 removeNodeSteps = RemoveNodeStepsUseCase(
                     runningNodes,
                     CoroutineScope(SupervisorJob() + Dispatchers.IO),
+                    ops = HostRemovalOps(startSnapshot::stopJobsUnder),
                 ),
             )
         }.start(wait = true)

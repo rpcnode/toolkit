@@ -66,3 +66,19 @@ class DetectPortConflictsUseCaseTest
         assertTrue(detect(programs).isEmpty())
     }
 }
+
+class DetectPortConflictsOneEnvPerHostTest
+{
+    @Test
+    fun envs_of_a_one_env_per_host_network_may_share_ports_other_networks_may_not()
+    {
+        val programs = listOf(
+            spec(NetworkId.TON, EnvId.MAINNET, listOf(ProgramPort("p2p", 4001))),
+            spec(NetworkId.TON, EnvId.TESTNET, listOf(ProgramPort("p2p", 4001))),
+        )
+        assertTrue(DetectPortConflictsUseCase()(programs) { it == NetworkId.TON }.isEmpty())
+        assertEquals(1, DetectPortConflictsUseCase()(programs).size)
+        val cross = programs + spec(NetworkId.TRON, EnvId.MAINNET, listOf(ProgramPort("http", 4001)))
+        assertEquals(1, DetectPortConflictsUseCase()(cross) { it == NetworkId.TON }.size)
+    }
+}

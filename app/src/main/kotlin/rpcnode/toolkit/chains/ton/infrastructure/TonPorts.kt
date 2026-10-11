@@ -9,8 +9,8 @@ object TonPorts
     {
         return when (TonClusters.normalizeEnv(env))
         {
-            "testnet" -> Ports(http = 8082, p2p = 30311)
-            else -> Ports(http = 8081, p2p = 30310)
+            "testnet" -> Ports(http = 8082, p2p = 31311)
+            else -> Ports(http = 8081, p2p = 31310)
         }
     }
 }

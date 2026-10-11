@@ -53,6 +53,7 @@ import {
   NodeInstallWizard,
   needsInstallWizard,
 } from '../components/NodeInstallWizard'
+import { NodeDiagnosticsPanel } from '../components/NodeDiagnosticsPanel'
 import { LifecycleStepper } from '../components/LifecycleStepper'
 import { RemoveNodeModal } from '../components/RemoveNodeModal'
 import { ClientUpdateModal } from '../components/ClientUpdateModal'
@@ -178,6 +179,9 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
   const shellReadyRef = useRef(false)
   /** Avoid duplicate «not found» toasts under React Strict Mode. */
   const missingToastForRef = useRef('')
+  // A node being removed (dialog open) or already removed disappears from the panel on purpose: that is not an error.
+  const removalActiveRef = useRef(false)
+  const removedIdRef = useRef('')
   const [metrics, setMetrics] = useState<MetricsPayload | null>(null)
   /** Rolling chart series from successive `server_metrics` snapshots (DB keeps latest only). */
   const [hostHistory, setHostHistory] = useState<MetricsPayload['history']>()
@@ -188,6 +192,7 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
   /** Wizard reached Finish — hide NODE SETUP even if SQLite status lags (Kotlin panel). */
   const [setupComplete, setSetupComplete] = useState(false)
   const [removeOpen, setRemoveOpen] = useState(false)
+  removalActiveRef.current = removeOpen
   const [restartOpen, setRestartOpen] = useState(false)
   const [restartBusy, setRestartBusy] = useState(false)
   const [stopOpen, setStopOpen] = useState(false)
@@ -457,7 +462,7 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
       if (!hit) {
         if (!soft) {
           setServer(null)
-          if (missingToastForRef.current !== id) {
+          if (missingToastForRef.current !== id && !removalActiveRef.current && removedIdRef.current !== id) {
             missingToastForRef.current = id
             notifications.show({
               color: 'orange',
@@ -1026,6 +1031,8 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
           </div>
         ) : null}
 
+        {workloadId ? <NodeDiagnosticsPanel nodeId={workloadId} /> : null}
+
         {showWizard ? (
           <NodeInstallWizard
             env={env}
@@ -1318,6 +1325,7 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
         }
         onClose={() => setRemoveOpen(false)}
         onRemoved={() => {
+          removedIdRef.current = workloadId || ''
           setRemoveOpen(false)
           navigate({ name: 'nodes' })
         }}

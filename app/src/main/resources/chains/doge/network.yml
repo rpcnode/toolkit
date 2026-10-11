@@ -80,3 +80,15 @@ clientConfig:
       source: literal
       value: "1"
       description: Accept JSON-RPC commands
+    - key: rpcthreads
+      source: literal
+      value: "64"
+      description: RPC worker threads — the login-free RPC proxy keeps at most this many calls on the node at once
+    - key: rpcworkqueue
+      source: literal
+      value: "4096"
+      description: RPC request queue depth (the default 16 answers 503 "Work queue depth exceeded" under load)
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

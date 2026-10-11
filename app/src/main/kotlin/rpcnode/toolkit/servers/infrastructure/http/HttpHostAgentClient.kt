@@ -165,7 +165,8 @@ class HttpHostAgentClient(
             try
             {
                 val payload = json.encodeToString(PortsCheckBody(ports = ports))
-                val resp = post(agentUrl, "/api/v1/agent/ports/check", token, payload, timeout)
+                // A loaded host needs seconds just to name the process behind a port (ss -p walks all of /proc): wait for it.
+                val resp = post(agentUrl, "/api/v1/agent/ports/check", token, payload, maxOf(timeout, Duration.ofSeconds(30)))
                 if (resp.statusCode() !in 200 until 300)
                 {
                     log.warn("host agent {} ports/check: HTTP {}", agentUrl, resp.statusCode())

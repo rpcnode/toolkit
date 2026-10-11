@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import rpcnode.toolkit.catalog.domain.NetworkId
 import rpcnode.toolkit.clients.application.validate.DetectPortConflictsUseCase
 import rpcnode.toolkit.clients.application.validate.PortConflictUsage
 import rpcnode.toolkit.clients.domain.model.ClientProgramSpec
@@ -54,7 +55,7 @@ fun main()
     log.info("log file {}", logFile)
     log.info("HTTP access log → {}", logFile)
     val toolkit = Toolkit.production(cfg)
-    logPortCatalogConflicts(log, toolkit.clientProgramCatalog.all())
+    logPortCatalogConflicts(log, toolkit.clientProgramCatalog.all()) { toolkit.networkFacts.factsFor(it)?.oneEnvPerHost == true }
     toolkit.resumeServerRemovals()
     embeddedServer(Netty, port = cfg.port, host = cfg.listen) {
         module(cfg, toolkit)
@@ -133,9 +134,13 @@ private fun Application.startClientUpdateNotifications(toolkit: Toolkit)
 
 /** Catches a catalog authoring mistake early: two network/env pairs fixed to the same port
  *  can never run as separate nodes on the same host. */
-private fun logPortCatalogConflicts(log: Logger, programs: List<ClientProgramSpec>)
+private fun logPortCatalogConflicts(
+    log: Logger,
+    programs: List<ClientProgramSpec>,
+    oneEnvPerHost: (NetworkId) -> Boolean,
+)
 {
-    val conflicts = DetectPortConflictsUseCase()(programs)
+    val conflicts = DetectPortConflictsUseCase()(programs, oneEnvPerHost)
     if (conflicts.isEmpty())
     {
         log.info("client program ports catalog: no conflicts across {} program(s)", programs.size)

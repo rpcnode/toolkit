@@ -108,6 +108,8 @@ object EthereumEthRpc
         {
             return null
         }
+        val headerRe = Regex("""Syncing beacon headers\s+downloaded=([0-9,]+)\s+left=([0-9,]+)""", RegexOption.IGNORE_CASE)
+        val header = headerRe.findAll(logText).lastOrNull()
         val stateRe = Regex("""state download in progress\s+synced=([0-9]+(?:\.[0-9]+)?)%""", RegexOption.IGNORE_CASE)
         val chainRe = Regex("""chain download in progress\s+synced=([0-9]+(?:\.[0-9]+)?)%""", RegexOption.IGNORE_CASE)
         fun lastPct(re: Regex): Double?
@@ -117,6 +119,17 @@ object EthereumEthRpc
         }
         val state = lastPct(stateRe)
         val chain = lastPct(chainRe)
+        // Before the state/chain download starts geth only logs header progress («Syncing beacon headers
+        // downloaded=… left=…»). The later stage wins once its lines exist, so the bar never goes back.
+        if (header != null && state == null && chain == null)
+        {
+            val done = header.groupValues[1].replace(",", "").toDoubleOrNull()
+            val left = header.groupValues[2].replace(",", "").toDoubleOrNull()
+            if (done != null && left != null && done + left > 0)
+            {
+                return (done * 100.0 / (done + left)).coerceIn(0.0, 99.9)
+            }
+        }
         return when
         {
             state != null && chain != null -> minOf(state, chain)

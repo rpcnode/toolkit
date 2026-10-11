@@ -13,7 +13,7 @@ object ArbPortTable
         return when (env.trim().lowercase())
         {
             "sepolia" -> ArbPorts(http = 8657, ws = 8658)
-            else -> ArbPorts(http = 8547, ws = 8548)
+            else -> ArbPorts(http = 8647, ws = 8648)
         }
     }
 }

@@ -78,3 +78,7 @@ clientConfig:
       source: literal
       value: "1"
       description: Required acknowledgment for zcashd 6.x — daemon exits without this option
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

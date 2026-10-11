@@ -95,3 +95,7 @@ clientConfig:
       source: literal
       value: "1048576"
       description: systemd LimitNOFILE for sui-node
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

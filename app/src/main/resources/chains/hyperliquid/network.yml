@@ -55,3 +55,7 @@ clientConfig:
       source: literal
       value: "1048576"
       description: systemd open-file limit for hl-visor
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

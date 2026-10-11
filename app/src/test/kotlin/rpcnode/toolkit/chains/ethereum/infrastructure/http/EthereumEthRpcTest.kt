@@ -61,4 +61,27 @@ class EthereumEthRpcTest
         assertNull(EthereumEthRpc.parseSnapSyncPctFromLog("Forkchoice requested sync to new head"))
         assertNull(EthereumEthRpc.parseSnapSyncPctFromLog(null))
     }
+
+    @Test
+    fun header_sync_phase_gives_progress_from_downloaded_and_left()
+    {
+        val log = """
+            INFO [10-09|09:38:34.321] Looking for peers                        peercount=2 tried=22 static=0
+            INFO [10-09|09:38:36.893] Syncing beacon headers                   downloaded=8,214,528 left=3,667,778  eta=36m18.802s
+            INFO [10-09|09:38:45.935] Syncing beacon headers                   downloaded=8,220,672 left=3,661,634  eta=36m17.554s
+        """.trimIndent()
+        val pct = EthereumEthRpc.parseSnapSyncPctFromLog(log)!!
+        assertEquals(69.2, Math.round(pct * 10) / 10.0)
+    }
+
+    @Test
+    fun state_and_chain_download_lines_take_over_from_the_header_phase()
+    {
+        val log = """
+            INFO Syncing beacon headers                   downloaded=11,000,000 left=1,000
+            INFO Syncing: state download in progress      synced=4.00% state=1GiB
+            INFO Syncing: chain download in progress      synced=9.00% chain=1GiB
+        """.trimIndent()
+        assertEquals(4.0, EthereumEthRpc.parseSnapSyncPctFromLog(log))
+    }
 }

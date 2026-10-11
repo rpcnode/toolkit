@@ -66,7 +66,8 @@ class DownloadClientProgramUseCase(
         val key = ClientProgramKey(spec.network, spec.env, spec.programId)
         tracker.set(key, ClientDownloadProgress(ClientDownloadPhase.QUEUED))
 
-        val resolved = resolveClientRelease(spec, githubReleaseClient, clientReleaseResolvers)
+        val installed = versionRepository.find(spec.network, spec.env, spec.programId)?.currentVersion.orEmpty()
+        val resolved = resolveClientRelease(spec, githubReleaseClient, clientReleaseResolvers, installed)
         if (resolved.error != null)
         {
             tracker.set(key, ClientDownloadProgress(ClientDownloadPhase.FAIL, error = resolved.error))

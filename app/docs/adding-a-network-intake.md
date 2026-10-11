@@ -89,6 +89,12 @@ Questions:
 2. Which roles matter for height / RPC / P2P / ZMQ / HTTP?
 3. Conflicts with other networks on the same host? (`oneEnvPerHost`, port ranges)
 
+**Rule:** every port in `clients.yml` must be free across all shipped networks/envs — several node types run on
+one host. `ShippedPortCatalogTest` fails the build and lists the clashing ports; only envs of a network with
+`oneEnvPerHost: true` may reuse each other's ports. Also keep clear of ports a client opens implicitly
+(Lighthouse: consensus P2P + 1 for QUIC, Solana: the dynamic port range) and of upstream defaults another
+network already took (BCH runs beside Bitcoin, so it cannot keep 8332/8333).
+
 ---
 
 ## 5. Disks & sizing (`chains/<id>/network.yml`)
@@ -213,6 +219,7 @@ Cursor rule: `.cursor/rules/adding-a-network.mdc`.
       `LimitNOFILE`, …) visible on Start; values also applied in conf / flags / unit
 - [ ] `clients.yml` — programs, ports, **GitHub/CDN** artifact URLs (no Docker install path;
       + `snapshots:` mirrors if toolkit CDN)
+- [ ] Ports free across every network/env — `./gradlew test --tests '*ShippedPortCatalogTest*'` passes
 - [ ] `node.service.tmpl` — **required** systemd unit via `HostSystemdUnitTemplate.load/render`
 - [ ] Extra tmpls if needed (`lighthouse.service.tmpl`, `run-validator.sh.tmpl`, …)
 ### Catalog / policy

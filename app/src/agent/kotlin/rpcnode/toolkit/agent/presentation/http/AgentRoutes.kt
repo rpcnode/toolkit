@@ -1,5 +1,7 @@
 package rpcnode.toolkit.agent.presentation.http
 
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -49,6 +51,8 @@ import rpcnode.toolkit.agent.application.node.ControlNodeUnitUseCase
 import rpcnode.toolkit.agent.application.node.GetNodeClientVersionResult
 import rpcnode.toolkit.agent.application.node.GetNodeClientVersionUseCase
 import rpcnode.toolkit.agent.application.node.GetNodeProcessLogsResult
+import rpcnode.toolkit.nodes.infrastructure.host.diagnostics.DiagnosticRequest
+import rpcnode.toolkit.nodes.infrastructure.host.diagnostics.HostNodeDiagnostics
 import rpcnode.toolkit.agent.application.node.GetNodeProcessLogsUseCase
 import rpcnode.toolkit.agent.application.node.GetNodeRpcAuthResult
 import rpcnode.toolkit.agent.application.node.GetNodeRpcAuthUseCase
@@ -432,6 +436,36 @@ data class AgentNodeStartResponse(
     @SerialName("already_running") val alreadyRunning: Boolean = false,
     val error: String? = null,
     val message: String? = null,
+)
+
+@Serializable
+data class AgentDiagnosticCheck(
+    val id: String,
+    val port: Int = 0,
+    val protocol: String = "",
+    val params: Map<String, String> = emptyMap(),
+)
+
+@Serializable
+data class AgentDiagnosticsRequest(
+    @SerialName("node_id") val nodeId: String = "",
+    val checks: List<AgentDiagnosticCheck> = emptyList(),
+)
+
+@Serializable
+data class AgentDiagnosticItem(
+    val id: String,
+    val level: String,
+    val title: String,
+    val detail: String = "",
+    val hint: String = "",
+)
+
+@Serializable
+data class AgentDiagnosticsResponse(
+    val ok: Boolean = true,
+    val items: List<AgentDiagnosticItem> = emptyList(),
+    val error: String? = null,
 )
 
 @Serializable
@@ -1490,6 +1524,29 @@ fun Application.agentApiRoutes(
                         ),
                     )
             }
+        }
+        // Node checks declared in chains/<id>/network.yml → diagnostics (panel resolves the ports).
+        post("/api/v1/node/diagnostics") {
+            if (!call.authorized(cfg.token))
+            {
+                return@post
+            }
+            val body = runCatching { call.receive<AgentDiagnosticsRequest>() }.getOrNull()
+            if (body == null)
+            {
+                call.respond(HttpStatusCode.BadRequest, AgentDiagnosticsResponse(ok = false, error = "bad_request"))
+                return@post
+            }
+            val results = withContext(Dispatchers.IO) {
+                HostNodeDiagnostics.run(
+                    body.checks.map { DiagnosticRequest(id = it.id, port = it.port, protocol = it.protocol, params = it.params) },
+                )
+            }
+            call.respond(
+                AgentDiagnosticsResponse(
+                    items = results.map { AgentDiagnosticItem(it.id, it.level, it.title, it.detail, it.hint) },
+                ),
+            )
         }
         get("/api/v1/node/client-version") {
             if (!call.authorized(cfg.token))

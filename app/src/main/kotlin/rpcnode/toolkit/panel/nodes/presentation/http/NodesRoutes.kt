@@ -1,5 +1,6 @@
 package rpcnode.toolkit.panel.nodes.presentation.http
 
+import rpcnode.toolkit.nodes.application.diagnostics.GetNodeDiagnosticsResult
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
@@ -53,6 +54,23 @@ import rpcnode.toolkit.nodes.infrastructure.http.decodeDiskLayoutBody
 import rpcnode.toolkit.nodes.infrastructure.http.parseDiskLayoutJson
 import rpcnode.toolkit.nodes.infrastructure.http.toResponse
 import rpcnode.toolkit.wiring.Toolkit
+
+@Serializable
+data class NodeDiagnosticItemResponse(
+    val id: String,
+    val level: String,
+    val title: String,
+    val detail: String = "",
+    val hint: String = "",
+)
+
+@Serializable
+data class NodeDiagnosticsResponse(
+    val ok: Boolean = true,
+    val items: List<NodeDiagnosticItemResponse> = emptyList(),
+    val error: String? = null,
+    val message: String? = null,
+)
 
 @Serializable
 data class NodeUpsertBody(
@@ -1166,6 +1184,44 @@ fun Application.nodesApiRoutes(toolkit: Toolkit)
                             ok = false,
                             error = "unavailable",
                             message = "Node process log is not available on the host yet",
+                        ),
+                    )
+            }
+        }
+
+        get("/api/nodes/{id}/diagnostics") {
+            val id = call.parameters["id"].orEmpty()
+            when (val result = toolkit.getNodeDiagnostics(id))
+            {
+                is GetNodeDiagnosticsResult.Ok ->
+                    call.respond(
+                        NodeDiagnosticsResponse(
+                            items = result.items.map {
+                                NodeDiagnosticItemResponse(it.id, it.level, it.title, it.detail, it.hint)
+                            },
+                        ),
+                    )
+                GetNodeDiagnosticsResult.NotFound ->
+                    call.respond(HttpStatusCode.NotFound, NodeDiagnosticsResponse(ok = false, error = "not_found"))
+                GetNodeDiagnosticsResult.ServerNotFound ->
+                    call.respond(HttpStatusCode.NotFound, NodeDiagnosticsResponse(ok = false, error = "server_not_found"))
+                GetNodeDiagnosticsResult.AgentUnreachable ->
+                    call.respond(
+                        HttpStatusCode.BadGateway,
+                        NodeDiagnosticsResponse(ok = false, error = "agent_unreachable", message = "Host agent did not answer"),
+                    )
+                GetNodeDiagnosticsResult.InvalidAgentKey ->
+                    call.respond(
+                        HttpStatusCode.Unauthorized,
+                        NodeDiagnosticsResponse(ok = false, error = InvalidAgentKey.ERROR, message = InvalidAgentKey.MESSAGE),
+                    )
+                GetNodeDiagnosticsResult.AgentTooOld ->
+                    call.respond(
+                        HttpStatusCode.Conflict,
+                        NodeDiagnosticsResponse(
+                            ok = false,
+                            error = "agent_too_old",
+                            message = "The host agent has no node checks yet — update the agent",
                         ),
                     )
             }

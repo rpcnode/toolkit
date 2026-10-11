@@ -129,6 +129,7 @@ private fun parseSource(raw: Any?): ClientVersionSource?
             ClientVersionSource.GitHubRelease(
                 repo = repo,
                 tagPrefix = (m["tagPrefix"] as? String)?.trim()?.ifEmpty { null },
+                includePrerelease = m["prerelease"] as? Boolean ?: false,
             )
         }
         "pinned" ->

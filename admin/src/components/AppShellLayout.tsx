@@ -28,7 +28,7 @@ import { useEffect, useState, type MouseEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { Route } from '../lib/router'
 import { hrefFor, navigate } from '../lib/router'
-import { api } from '../api'
+import { api, apiBase } from '../api'
 import { BrandLogo } from './BrandLogo'
 import { ThemeToggle } from './ThemeToggle'
 import { AddServerModal } from './AddServerModal'
@@ -77,7 +77,8 @@ function AppShellInner({ route, children, openInstall = false }: Props) {
   const [apiOpen, setApiOpen] = useState(false)
   const [stopAllOpen, setStopAllOpen] = useState(false)
   const [donateOpen, setDonateOpen] = useState(false)
-  const [publicBase, setPublicBase] = useState(window.location.origin)
+  // API docs show the server the admin talks to (same origin when it sits behind the admin proxy).
+  const publicBase = apiBase() || window.location.origin
 
   useEffect(() => {
     setInstallOpen(openInstall)
@@ -104,17 +105,6 @@ function AppShellInner({ route, children, openInstall = false }: Props) {
       document.body.style.overflow = prev
     }
   }, [mobileOpen, wanted, asideOverlay])
-
-  useEffect(() => {
-    void api
-      .publicBaseGet()
-      .then((res) => {
-        if (res?.panel_base) setPublicBase(res.panel_base)
-      })
-      .catch(() => {
-        /* offline ok */
-      })
-  }, [])
 
   function go(name: (typeof MAIN_NAV)[number]['name'], e?: MouseEvent<HTMLAnchorElement>) {
     // Real <a href> for middle-click / open-in-new-tab; SPA navigate on plain left click.

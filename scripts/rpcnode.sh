@@ -5,10 +5,11 @@
 #
 #   ./scripts/rpcnode.sh build   [server|agent|cdn|all] [--bump-agent] [--bump-server]
 #   ./scripts/rpcnode.sh release -m "notes" [VERSION] [--build-only|--tag-only|--publish] [--dry-run]
-#   ./scripts/rpcnode.sh install server|agent|cdn      (this host; asks for sudo itself)
+#   ./scripts/rpcnode.sh install server|agent|cdn      (on the server; asks for sudo itself)
 #   ./scripts/rpcnode.sh update  server|agent|cdn
 #   ./scripts/rpcnode.sh remove  server|agent|cdn|nodes|all [--purge] [-y]
 #   ./scripts/rpcnode.sh status                        services + which agent version is where
+#   install/update/remove/status take --server local|server|solana (asked in a terminal when omitted)
 #   ./scripts/rpcnode.sh stop    server|agent          stop a dev JVM (IntelliJ run / local jar)
 #   ./scripts/rpcnode.sh watch                         rebuild + restart the agent on source changes
 #
@@ -18,13 +19,20 @@
 #            --build-only  jars in dist/release, nothing committed or tagged
 #            --tag-only    + version commit and tag vX.Y.Z on this machine, nothing pushed
 #            --publish     + push the tag and create the GitHub Release (default)
-# install  server/agent/cdn on this host. Without a local build the jar of this checkout's
-#          version is downloaded from GitHub Releases.
+# install  server/agent/cdn on the chosen machine. For a remote one the scripts and the jars you built
+#          (app/build/libs) are copied over ssh and the command runs there (ssh -t, so sudo can ask for a
+#          password). Without a built jar the machine downloads the jar of this checkout's version from
+#          GitHub Releases.
 # remove   nodes = stop+delete all node services (chain data stays on disk);
 #          all = nodes, agent, server, cdn. --purge also deletes the panel database/accounts.
+# servers  local   this machine (systemd: a Linux host or WSL)
+#          server  nekf@server
+#          solana  root@45.152.160.19
+#          --server NAME, or RPCNODE_SERVER=NAME; --local = --server local; RPCNODE_HOST=user@host = any other host.
+#          RPCNODE_REMOTE_DIR (default rpcnode-toolkit, in the login home), RPCNODE_SSH_OPTS
+#          (e.g. "-i ~/.ssh/key -p 2222"). build, release, stop, watch always run here.
 #
-# Windows: run it through Git Bash or scripts\rpcnode.cmd (build, release, stop only;
-# install/remove manage systemd, so they run on the Linux host or in WSL).
+# Windows: run it through Git Bash or scripts\rpcnode.cmd; install/update/remove/status work there for a remote server.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,11 +42,28 @@ ROOT="$(cd "$HERE/.." && pwd)"
 die() { echo "ERROR: $*" >&2; exit 1; }
 log() { printf '  %s\n' "$*"; }
 
+SERVERS=(local server solana)
+DEFAULT_SERVER="server"
+
+# server name -> user@host ("local" = this machine)
+server_host() {
+  case "$1" in
+    server) echo "nekf@server" ;;
+    solana) echo "root@45.152.160.19" ;;
+    *) return 1 ;;
+  esac
+}
+
+REMOTE_DIR="${RPCNODE_REMOTE_DIR:-rpcnode-toolkit}"
+SSH_OPTS=(${RPCNODE_SSH_OPTS:-})
+SERVER="${RPCNODE_SERVER:-}"          # chosen with --server / the prompt
+ON_HOST="${RPCNODE_ON_HOST:-0}"       # 1 = this is the copy already running on the target
+
 is_windows_shell() {
   case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) return 0 ;; *) return 1 ;; esac
 }
 
-usage() { sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,35p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 need_linux() {
   if is_windows_shell; then
@@ -53,6 +78,66 @@ need_root() {
     command -v sudo >/dev/null 2>&1 || die "run as root (sudo is not installed)"
     exec sudo -E bash "${BASH_SOURCE[0]}" "${ORIG_ARGS[@]}"
   fi
+}
+
+# install / update / remove / status act on the server, not on this machine: copy what the installers read from a
+# checkout (scripts, the version, the jars built here) and run the same command there. Returns 1 when the command
+# must run here (--local, or this is the copy already running on the server).
+choose_server() {
+  [ -n "${RPCNODE_HOST:-}" ] && { SERVER="custom"; return 0; }
+  [ -n "$SERVER" ] && return 0
+  if { [ -r /dev/tty ] && : >/dev/tty; } 2>/dev/null; then
+    local i=1 name pick
+    echo >/dev/tty
+    echo "  Where to run it?" >/dev/tty
+    for name in "${SERVERS[@]}"; do
+      printf '    %d) %-8s %s\n' "$i" "$name" "$([ "$name" = local ] && echo 'this machine' || server_host "$name")" >/dev/tty
+      i=$((i + 1))
+    done
+    printf '  choose [%s]: ' "$DEFAULT_SERVER" >/dev/tty
+    read -r pick </dev/tty || pick=""
+    pick="${pick:-$DEFAULT_SERVER}"
+    case "$pick" in
+      [0-9]*) SERVER="${SERVERS[$((pick - 1))]:-}" ;;
+      *) SERVER="$pick" ;;
+    esac
+  else
+    SERVER="$DEFAULT_SERVER"
+  fi
+  [ -n "$SERVER" ] || die "no such server"
+}
+
+run_on_server() {
+  [ "$ON_HOST" = 1 ] && return 1
+  choose_server
+  local host
+  if [ "$SERVER" = custom ]; then
+    host="$RPCNODE_HOST"
+  elif [ "$SERVER" = local ]; then
+    return 1
+  else
+    host="$(server_host "$SERVER")" || die "unknown server '$SERVER' (known: ${SERVERS[*]})"
+  fi
+  command -v ssh >/dev/null 2>&1 || die "ssh is not installed (use --server local to run on this machine)"
+  local files=(scripts app/build.gradle.kts) name uploaded=""
+  for name in rpcnode-agent rpcnode-server rpcnode-cdn; do
+    [ -f "$ROOT/app/build/libs/$name.jar" ] || continue
+    files+=("app/build/libs/$name.jar")
+    uploaded="$uploaded $name.jar"
+  done
+  log "$SERVER: $host:~/$REMOTE_DIR"
+  log "uploading scripts${uploaded:+ and$uploaded}"
+  # macOS tar adds com.apple.* xattr headers that GNU tar on the server complains about: leave them out.
+  local tar_opts=(--exclude=scripts/deploy-local.sh)
+  tar --no-xattrs -cf /dev/null /dev/null >/dev/null 2>&1 && tar_opts+=(--no-xattrs)
+  (cd "$ROOT" && COPYFILE_DISABLE=1 tar "${tar_opts[@]}" -cf - "${files[@]}") \
+    | ssh ${SSH_OPTS[@]+"${SSH_OPTS[@]}"} "$host" \
+      "mkdir -p '$REMOTE_DIR' && cd '$REMOTE_DIR' && rm -rf scripts app/build/libs && tar -xf -" \
+    || die "could not copy to $host"
+  local args
+  printf -v args '%q ' "$@"
+  exec ssh -t ${SSH_OPTS[@]+"${SSH_OPTS[@]}"} "$host" \
+    "cd '$REMOTE_DIR' && RPCNODE_ON_HOST=1 bash scripts/rpcnode.sh $args"
 }
 
 # `agent/version` inside a jar (unzip, else python3).
@@ -208,9 +293,9 @@ menu() {
   cat <<'EOF'
 
   RpcNode
-    1) build            server + agent (+ cdn)
+    1) build            server + agent (+ cdn)   (here)
     2) release          bump, build, tag, push
-    3) install          server | agent | cdn      (this host)
+    3) install          server | agent | cdn      (on the server)
     4) update           server | agent | cdn
     5) remove           nodes | agent | server | cdn | everything
     6) status
@@ -227,15 +312,27 @@ EOF
       [ -n "$msg" ] || die "notes are required"
       bash "$LIB/release.sh" -m "$msg"
       ;;
-    3) printf '  install what (server/agent/cdn): '; read -r sub; ORIG_ARGS=(install "$sub"); cmd_install "$sub" ;;
-    4) printf '  update what (server/agent/cdn): '; read -r sub; ORIG_ARGS=(update "$sub"); cmd_update "$sub" ;;
-    5) printf '  remove what (nodes/agent/server/cdn/all): '; read -r sub; ORIG_ARGS=(remove "$sub"); cmd_remove "$sub" ;;
-    6) cmd_status ;;
+    3) printf '  install what (server/agent/cdn): '; read -r sub; run_on_server install "$sub" || { ORIG_ARGS=(install "$sub"); cmd_install "$sub"; } ;;
+    4) printf '  update what (server/agent/cdn): '; read -r sub; run_on_server update "$sub" || { ORIG_ARGS=(update "$sub"); cmd_update "$sub"; } ;;
+    5) printf '  remove what (nodes/agent/server/cdn/all): '; read -r sub; run_on_server remove "$sub" || { ORIG_ARGS=(remove "$sub"); cmd_remove "$sub"; } ;;
+    6) run_on_server status || cmd_status ;;
     *) exit 0 ;;
   esac
 }
 
 # ---------------------------------------------------------------- dispatch
+
+ARGS=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --local) SERVER="local" ;;
+    --server) [ "$#" -ge 2 ] || die "--server needs a name (${SERVERS[*]})"; SERVER="$2"; shift ;;
+    --server=*) SERVER="${1#--server=}" ;;
+    *) ARGS+=("$1") ;;
+  esac
+  shift
+done
+set -- ${ARGS[@]+"${ARGS[@]}"}
 
 ORIG_ARGS=("$@")
 cmd="${1:-menu}"
@@ -243,10 +340,10 @@ shift || true
 case "$cmd" in
   build) cmd_build "$@" ;;
   release) bash "$LIB/release.sh" "$@" ;;
-  install) cmd_install "$@" ;;
-  update|upgrade) cmd_update "$@" ;;
-  remove|uninstall|delete) cmd_remove "$@" ;;
-  status) cmd_status ;;
+  install) run_on_server install "$@" || cmd_install "$@" ;;
+  update|upgrade) run_on_server "$cmd" "$@" || cmd_update "$@" ;;
+  remove|uninstall|delete) run_on_server "$cmd" "$@" || cmd_remove "$@" ;;
+  status) run_on_server status "$@" || cmd_status ;;
   stop)
     case "${1:-}" in
       server) bash "$LIB/stop-server.sh" ;;

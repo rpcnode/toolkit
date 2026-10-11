@@ -40,7 +40,9 @@ programs:
       - { role: consensus_p2p, port: 9100, label: "Consensus P2P", config: required }
   - env: sepolia
     id: lighthouse
-    source: { type: github, repo: sigp/lighthouse }
+    # Sepolia activated Gloas on 2026-10-06: Lighthouse v8.2.x cannot decode the checkpoint state (InvalidSsz).
+    # Sepolia needs the 8.3.0 release candidate; `prerelease: true` follows it and moves to 8.3.0 stable by itself.
+    source: { type: github, repo: sigp/lighthouse, prerelease: true }
     artifacts:
       - name: "lighthouse-x86_64.tar.gz"
         nameAarch64: "lighthouse-aarch64.tar.gz"

@@ -492,7 +492,8 @@ object AgentSystemInstall
             .header("Authorization", "Bearer $token")
             .GET()
             .build()
-        repeat(20)
+        // A busy host (snapshot download, big Solana node) can need a minute to start the JVM and bind the port.
+        repeat(120)
         {
             try
             {

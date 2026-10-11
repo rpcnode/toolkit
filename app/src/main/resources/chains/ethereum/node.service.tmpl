@@ -17,6 +17,7 @@ ExecStart={{bin}} \
   --gcmode {{gcmode}} \
   --state.scheme path \
   --cache {{cache_mb}} \
+  --ipcdisable \
   --maxpeers 100 \
   --rpc.batch-request-limit 2000{{history_flag}} \
   --port {{p2p_port}}{{network_flag}}

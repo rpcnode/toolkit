@@ -105,6 +105,12 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 export HOME="${HOME:-/root}"
+# MyTonCtrl pins fastcrc==0.3.2 (PyO3 0.22), which has no wheel and refuses to build on Python 3.13+ (Ubuntu 25.10+/26.04
+# ship 3.14: "configured Python interpreter version (3.14) is newer than PyO3's maximum supported version").
+# The stable-ABI switch lets the same release build anyway; it is harmless on older Python.
+export PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1
+export DEBIAN_FRONTEND=noninteractive
+export HOME="${HOME:-/root}"
 export USER="${USER:-root}"
 if ! command -v apt-get >/dev/null 2>&1; then
   echo "ERROR: TON/MyTonCtrl bootstrap is Debian/Ubuntu-only (apt-get required)." >&2
@@ -122,6 +128,36 @@ if ! curl -fsSL --connect-timeout 30 --max-time 180 --retry 8 --retry-delay 3 --
   exit 1
 fi
 chmod +x "$TMP/install.sh"
+
+# install.sh pip-installs MyTonCtrl and clones it from GitHub. When PyPI is not reachable (DNS, firewall, proxy, a pip
+# mirror without the package) it only fails at the very end with "No matching distribution found for setuptools>=64" —
+# check the network first and say so. Pip itself gets patient timeouts for a slow link.
+export PIP_DEFAULT_TIMEOUT="${PIP_DEFAULT_TIMEOUT:-60}"
+export PIP_RETRIES="${PIP_RETRIES:-10}"
+echo "pip/proxy env: $(env | grep -iE '^(PIP_|https?_proxy|all_proxy|no_proxy)' | tr '\n' ' ')"
+reachable() {
+  local code
+  code="$(curl -sS -o /dev/null -m 25 --retry 2 --retry-delay 3 -w '%{http_code}' "$1" 2>/dev/null)" || return 1
+  [[ "$code" =~ ^[234][0-9][0-9]$ ]]
+}
+for url in https://pypi.org/simple/setuptools/ https://files.pythonhosted.org/ https://github.com/ton-blockchain/mytonctrl; do
+  if ! reachable "$url"; then
+    echo "ERROR: cannot reach $url from this host (DNS / firewall / proxy) — MyTonCtrl needs PyPI and GitHub" >&2
+    exit 1
+  fi
+done
+
+# MyTonCtrl's install_clang.sh only knows Ubuntu 22.04/24.04/26.04 and Debian 12 (by `lsb_release -cs`) and exits with
+# "Unsupported distribution" on everything else (Linux Mint, LMDE, Pop!_OS, Debian 13, non-LTS Ubuntu ...). The node
+# wizard installs clang-21 in its host-deps step; this is the safety net for a start without it: on such a system get
+# clang 21 from the LLVM repo of the base release — install_clang.sh skips its own step when clang is already 21.
+{{clang_functions}}
+prepare_clang_for_unknown_distro() {
+  case "$(lsb_release -cs 2>/dev/null || true)" in jammy|noble|resolute|bookworm) return 0 ;; esac
+  wait_apt_lock || true
+  ensure_clang_major 21
+}
+prepare_clang_for_unknown_distro || echo "clang-21 pre-install failed — install.sh will report the details"
 
 export ARCHIVE_TTL STATE_TTL
 export VALIDATOR_PORT="$P2P"
@@ -258,7 +294,13 @@ if [[ -n "$VE_BIN" ]] && systemctl cat validator.service >/dev/null 2>&1; then
 fi
 
 if [[ $rc -ne 0 ]]; then
+  # The panel shows logs/ton.log; the reason lives in the much longer bootstrap.log — surface it there.
+  # Read it before printing our own "bootstrap failed" line (stderr goes to $LOG), and skip earlier ones of that kind,
+  # otherwise the "reason" is just the previous failure line again.
+  reason="$(grep -aE "error:|ERROR|Error:|E: |fatal|Traceback|No such file|not found|failed" "$LOG" 2>/dev/null \
+    | grep -avE "^[[:space:]]*(warning|note)|bootstrap (failed|FAILED)" | tail -n 1 | cut -c1-240)"
   echo "bootstrap failed rc=$rc" >&2
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] bootstrap FAILED rc=$rc: ${reason:-see logs/bootstrap.log} (retry in 60s)" >>"$LOG_DIR/ton.log" 2>/dev/null || true
   exit $rc
 fi
 date -u +%Y-%m-%dT%H:%M:%SZ >"$MARKER"

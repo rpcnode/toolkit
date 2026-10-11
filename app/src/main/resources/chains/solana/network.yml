@@ -168,3 +168,7 @@ clientConfig:
       option: sysctl_fs_nr_open
       default: "8388608"
       description: sysctl fs.nr_open (must be ≥ LimitNOFILE; recommended 8388608)
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

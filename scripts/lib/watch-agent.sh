@@ -121,7 +121,7 @@ WATCH_PATHS=(
 
 rebuild_and_restart() {
   log "building agentFatJar…"
-  if ! run_as_builder bash -c "cd \"$APP_DIR\" && ./gradlew agentFatJar --console=plain -q"; then
+  if ! run_as_builder bash -c "cd \"$APP_DIR\" && sh ./gradlew agentFatJar --console=plain -q"; then
     log "build FAILED — agent not restarted"
     return 1
   fi

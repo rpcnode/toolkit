@@ -216,6 +216,31 @@ private fun looksLikeProgramId(name: String): Boolean
     return n.any { it.isLetter() }
 }
 
+/**
+ * True when [candidate] is a strictly older build than [installed]. Compares the numbers inside the strings
+ * (`4.8.2.1`, `nile-v4.8.2.3-pq1-build1` -> 4,8,2,3,1,1), missing parts count as 0. Unparseable input is never "older".
+ */
+fun isOlderClientVersion(candidate: String, installed: String): Boolean
+{
+    fun parts(s: String) = Regex("\\d+").findAll(s).mapNotNull { it.value.toIntOrNull() }.toList()
+    val a = parts(candidate)
+    val b = parts(installed)
+    if (a.isEmpty() || b.isEmpty())
+    {
+        return false
+    }
+    for (i in 0 until maxOf(a.size, b.size))
+    {
+        val x = a.getOrElse(i) { 0 }
+        val y = b.getOrElse(i) { 0 }
+        if (x != y)
+        {
+            return x < y
+        }
+    }
+    return false
+}
+
 private fun looseVersionEqual(a: String, b: String): Boolean
 {
     fun norm(s: String) = s.trim().removePrefix("v").removePrefix("V").trim()

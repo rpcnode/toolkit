@@ -31,7 +31,14 @@ class HttpGitHubReleaseClient(
 {
     private val log = LoggerFactory.getLogger(HttpGitHubReleaseClient::class.java)
 
-    override suspend fun latestRelease(repo: String, tagPrefix: String?): GitHubRelease? = withContext(Dispatchers.IO) {
+    override suspend fun latestRelease(repo: String, tagPrefix: String?): GitHubRelease? =
+        latestRelease(repo, tagPrefix, includePrerelease = false)
+
+    override suspend fun latestRelease(
+        repo: String,
+        tagPrefix: String?,
+        includePrerelease: Boolean,
+    ): GitHubRelease? = withContext(Dispatchers.IO) {
         try
         {
             val client = HttpClient.newBuilder().connectTimeout(timeout).build()
@@ -51,7 +58,7 @@ class HttpGitHubReleaseClient(
                 return@withContext null
             }
             val releases = Json.parseToJsonElement(resp.body()).jsonArray
-            pickLatest(releases, tagPrefix)
+            pickLatest(releases, tagPrefix, includePrerelease)
         }
         catch (e: CancellationException)
         {
@@ -64,12 +71,12 @@ class HttpGitHubReleaseClient(
         }
     }
 
-    private fun pickLatest(releases: JsonArray, tagPrefix: String?): GitHubRelease?
+    private fun pickLatest(releases: JsonArray, tagPrefix: String?, includePrerelease: Boolean): GitHubRelease?
     {
         for (raw in releases)
         {
             val release = raw.jsonObject
-            if (release.isDraftOrPrerelease()) continue
+            if (release.isDraft() || (!includePrerelease && release.isPrerelease())) continue
             val tag = release["tag_name"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
             if (tag.isEmpty()) continue
             if (tagPrefix != null && !tag.startsWith(tagPrefix)) continue
@@ -83,8 +90,9 @@ class HttpGitHubReleaseClient(
         return null
     }
 
-    private fun JsonObject.isDraftOrPrerelease(): Boolean =
-        (this["draft"]?.jsonPrimitive?.boolean ?: false) || (this["prerelease"]?.jsonPrimitive?.boolean ?: false)
+    private fun JsonObject.isDraft(): Boolean = this["draft"]?.jsonPrimitive?.boolean ?: false
+
+    private fun JsonObject.isPrerelease(): Boolean = this["prerelease"]?.jsonPrimitive?.boolean ?: false
 
     private fun JsonObject.toAsset(): GitHubReleaseAsset = GitHubReleaseAsset(
         name = this["name"]?.jsonPrimitive?.contentOrNull.orEmpty(),

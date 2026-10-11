@@ -17,4 +17,8 @@ data class GitHubRelease(
 fun interface GitHubReleaseClient
 {
     suspend fun latestRelease(repo: String, tagPrefix: String?): GitHubRelease?
+
+    /** Same, optionally counting release candidates. Clients that cannot tell keep the stable-only answer. */
+    suspend fun latestRelease(repo: String, tagPrefix: String?, includePrerelease: Boolean): GitHubRelease? =
+        latestRelease(repo, tagPrefix)
 }

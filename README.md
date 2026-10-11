@@ -275,6 +275,38 @@ local `app/build/libs/rpcnode-server.jar`, the installer downloads the jar of
 this checkout's version from GitHub Releases (`RPCNODE_VERSION=0.1.8` picks
 another one).
 
+### Public RPC for Bitcoin, Litecoin, Dogecoin, Dash and Bitcoin Cash
+
+These daemons always demand a login (`rpcuser`/`rpcpassword`, or a cookie for Bitcoin Core), so a plain client
+gets `401`. The host agent therefore runs a small **login-free RPC proxy** per node on its own port: it adds the
+node's credentials itself and forwards the call to `127.0.0.1:<rpc port>`. The node stays closed.
+
+| Network | mainnet | testnet / testnet4 | signet | regtest |
+| --- | --- | --- | --- | --- |
+| Bitcoin | 8432 | 18432 | 38432 | 18543 |
+| Litecoin | 9432 | 19432 | – | 19543 |
+| Dogecoin | 22655 | 44655 | – | 18433 |
+| Dash | 10098 | 20098 | – | 20000 |
+| Bitcoin Cash | 8433 | 18434 | – | 18544 |
+
+```bash
+curl -s --data-binary '{"jsonrpc":"1.0","id":1,"method":"getblockcount","params":[]}' http://<host>:8432/
+```
+
+- **Nothing is cached or rewritten.** Every request goes to the node and its answer comes back untouched, so a client
+  always sees the live state (a new block, a transaction just broadcast).
+- **Every method passes.** The port has no login of its own, so put a firewall in front of it (open it only to your
+  own clients). `RPCNODE_RPC_PROXY_METHODS=safe` limits it to chain reads and `sendrawtransaction` for a port that
+  is not firewalled; then `stop`, `setban`, wallet calls … get `403`.
+- **Built for many clients.** Each connection runs on a virtual thread, so tens of thousands of clients need no thread
+  pool. At most 64 calls run on the node at once (its `rpcthreads` is 64, `rpcworkqueue` 4096 in the generated
+  config); a burst queues in the proxy instead of coming back as `503 Work queue depth exceeded`. The capacity for
+  uncached calls is the node's own: about 16 000 requests/s through the proxy against a stub node on one machine.
+- **Switches** (environment of the agent): `RPCNODE_RPC_PROXY=off` disables it, `RPCNODE_RPC_PROXY_BIND=127.0.0.1`
+  keeps it on the host only, `RPCNODE_RPC_PROXY_NODE_CALLS=128` changes the number of simultaneous node calls
+  (keep it at or below `rpcthreads`).
+- Ports come from `chains/<network>/clients.yml` (role `rpc_public`) and show up in «Check ports».
+
 ### Admin UI without Docker (pm2)
 
 The admin UI is a static React build. `admin/server.mjs` serves it and proxies

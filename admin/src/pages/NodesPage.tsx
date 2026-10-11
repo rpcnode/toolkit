@@ -12,6 +12,7 @@ import {
   ThemeIcon,
   Loader,
   Center,
+  Menu,
   Modal,
   Tooltip,
   UnstyledButton,
@@ -27,6 +28,7 @@ import {
   IconRefresh,
   IconFileText,
   IconFlask,
+  IconDots,
   IconList,
   IconServer,
 } from '@tabler/icons-react'
@@ -48,7 +50,7 @@ import { AppChrome } from '../components/AppChrome'
 import { AddNodeModal } from '../components/AddNodeModal'
 import { NodeLogsModal } from '../components/NodeLogsModal'
 import { LifecycleStepper } from '../components/LifecycleStepper'
-import { NodeStatusIcon, NodeStatusSpin } from '../components/NodeStatusIcon'
+import { NodeStatusIcon } from '../components/NodeStatusIcon'
 import { NetworkIcon } from '../components/NetworkIcon'
 import { NodeLifecycleDates } from '../components/NodeLifecycleDates'
 import { RemoveNodeModal } from '../components/RemoveNodeModal'
@@ -1394,152 +1396,131 @@ function NodeCardView({
       style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', height: '100%' }}
       onClick={() => navigate({ name: 'node', id })}
     >
-      <Group justify="space-between" mb="sm" align="flex-start" style={{ flexShrink: 0 }}>
-        <Group gap="sm">
+      <Group justify="space-between" mb="sm" align="flex-start" wrap="nowrap" style={{ flexShrink: 0 }}>
+        {/* One line: a long name is cut with «…» (full name in the tooltip) instead of wrapping under the icon. */}
+        <Group gap="sm" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
           <NodeStatusIcon phase={phase} busy={busy && !working} />
-          <div>
-            <Group gap={6} wrap="nowrap">
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
               <NetworkIcon network={network} size={16} />
-              <Text fw={700}>{title}</Text>
+              <Text fw={700} truncate="end" title={title} style={{ minWidth: 0 }}>
+                {title}
+              </Text>
+            </Group>
+            {/* The status word lives on the second line: next to the title it squeezed the name down to nothing. */}
+            <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+              <Text size="xs" c="dimmed" truncate="end" style={{ minWidth: 0 }}>
+                {network}/{env}
+              </Text>
+              {/* Only «Step N of M · status» from the install lane; a plain label («Synced») is already shown below. */}
               {stepParts.status ? (
-                <Text size="sm" fw={600} c={`${color}.4`} tt="uppercase">
-                  {stepParts.status}
+                <Text size="xs" fw={600} c={`${color}.4`} tt="uppercase" style={{ flexShrink: 0 }}>
+                  {stepParts.count} · {stepParts.status}
                 </Text>
               ) : null}
             </Group>
-            <Text size="xs" c="dimmed">
-              {network}/{env}
-            </Text>
           </div>
         </Group>
         <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}>
-          <Tooltip label="Node logs">
-            <ActionIcon
-              size="sm"
-              variant="subtle"
-              color="gray"
-              aria-label="Node logs"
-              onClick={(e) => void openLogs(e)}
-            >
-              <IconFileText size={14} />
-            </ActionIcon>
-          </Tooltip>
-          {nodeLiveTestAllowed(
-            { status: model.status, agent_port: model.agentPort },
-            phase,
-          ) ? (
-            <Tooltip
-              label={
-                liveTestStatus === 'fail'
-                  ? model.liveTestError || 'Tests failed'
-                  : liveTestStatus === 'pass'
-                    ? 'Tests passed'
-                    : 'Test'
-              }
-            >
-              <ActionIcon
-                size="sm"
-                variant="subtle"
-                color={
-                  liveTestStatus === 'fail' ? 'red' : liveTestStatus === 'pass' ? 'teal' : 'gray'
-                }
-                aria-label="Test"
-                loading={testBusy}
-                disabled={isRemoving || testBusy}
-                onClick={(e) => void runLiveTest(e)}
-              >
-                <IconFlask size={14} />
-              </ActionIcon>
-            </Tooltip>
-          ) : null}
-          <Tooltip label="Restart">
-            <ActionIcon
-              size="sm"
-              variant="subtle"
-              color="gray"
-              aria-label="Restart"
-              loading={restartBusy}
-              disabled={
-                isRemoving ||
-                !nodeRestartAllowed(
-                  { status: model.status, agent_port: model.agentPort },
-                  phase,
-                )
-              }
-              onClick={(e) => {
-                e.stopPropagation()
-                setRestartOpen(true)
-              }}
-            >
-              <IconRefresh size={14} />
-            </ActionIcon>
-          </Tooltip>
-          {nodeStartAllowed({ status: model.status, agent_port: model.agentPort }, phase) ? (
-            <Tooltip label="Start">
-              <ActionIcon
-                size="sm"
-                variant="subtle"
-                color="teal"
-                aria-label="Start"
-                loading={startBusy}
-                disabled={isRemoving || startBusy}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setStartOpen(true)
-                }}
-              >
-                <IconPlayerPlay size={14} />
-              </ActionIcon>
-            </Tooltip>
-          ) : (
-            <Tooltip label="Stop">
+          {/* Actions live in a «⋯» menu: five icon buttons took the whole header and squeezed the name out. */}
+          <Menu position="bottom-end" withinPortal shadow="md" width={190}>
+            <Menu.Target>
               <ActionIcon
                 size="sm"
                 variant="subtle"
                 color="gray"
-                aria-label="Stop"
-                loading={stopBusy}
+                aria-label="Node actions"
+                loading={testBusy || restartBusy || startBusy || stopBusy}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <IconDots size={16} />
+              </ActionIcon>
+            </Menu.Target>
+            {/* The dropdown is portaled, but React events still bubble to the card (it navigates on click). */}
+            <Menu.Dropdown onClick={(e) => e.stopPropagation()}>
+              <Menu.Item leftSection={<IconFileText size={14} />} onClick={(e) => void openLogs(e)}>
+                Node logs
+              </Menu.Item>
+              {nodeLiveTestAllowed(
+                { status: model.status, agent_port: model.agentPort },
+                phase,
+              ) ? (
+                <Menu.Item
+                  leftSection={<IconFlask size={14} />}
+                  color={
+                    liveTestStatus === 'fail' ? 'red' : liveTestStatus === 'pass' ? 'teal' : undefined
+                  }
+                  disabled={isRemoving || testBusy}
+                  onClick={(e) => void runLiveTest(e)}
+                >
+                  {liveTestStatus === 'fail'
+                    ? 'Test (failed)'
+                    : liveTestStatus === 'pass'
+                      ? 'Test (passed)'
+                      : 'Test'}
+                </Menu.Item>
+              ) : null}
+              <Menu.Item
+                leftSection={<IconRefresh size={14} />}
                 disabled={
                   isRemoving ||
-                  !nodeStopAllowed(
+                  restartBusy ||
+                  !nodeRestartAllowed(
                     { status: model.status, agent_port: model.agentPort },
                     phase,
                   )
                 }
                 onClick={(e) => {
                   e.stopPropagation()
-                  setStopOpen(true)
+                  setRestartOpen(true)
                 }}
               >
-                <IconPlayerStop size={14} />
-              </ActionIcon>
-            </Tooltip>
-          )}
-          <Tooltip label="Remove">
-            <ActionIcon
-              size="sm"
-              variant="subtle"
-              color="red"
-              aria-label="Remove"
-              onClick={(e) => {
-                e.stopPropagation()
-                onRemove()
-              }}
-            >
-              <IconTrash size={14} />
-            </ActionIcon>
-          </Tooltip>
-          <Badge
-            color={isRemoving ? 'orange' : color}
-            variant="outline"
-            leftSection={
-              busy || isRemoving ? (
-                <NodeStatusSpin size="xs" />
-              ) : undefined
-            }
-          >
-            {isRemoving ? 'removing' : stepParts.count || label}
-          </Badge>
+                Restart
+              </Menu.Item>
+              {nodeStartAllowed({ status: model.status, agent_port: model.agentPort }, phase) ? (
+                <Menu.Item
+                  leftSection={<IconPlayerPlay size={14} />}
+                  color="teal"
+                  disabled={isRemoving || startBusy}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setStartOpen(true)
+                  }}
+                >
+                  Start
+                </Menu.Item>
+              ) : (
+                <Menu.Item
+                  leftSection={<IconPlayerStop size={14} />}
+                  disabled={
+                    isRemoving ||
+                    stopBusy ||
+                    !nodeStopAllowed(
+                      { status: model.status, agent_port: model.agentPort },
+                      phase,
+                    )
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setStopOpen(true)
+                  }}
+                >
+                  Stop
+                </Menu.Item>
+              )}
+              <Menu.Divider />
+              <Menu.Item
+                color="red"
+                leftSection={<IconTrash size={14} />}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onRemove()
+                }}
+              >
+                Remove
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
         </Group>
       </Group>
 

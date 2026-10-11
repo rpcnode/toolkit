@@ -240,7 +240,7 @@ class StartSnapshotDownloadUseCase(
                 ),
             )
         }
-        processes.remove(id)?.destroyForcibly()
+        processes.remove(id)?.let { killProcessTree(it) }
         jobs.remove(id)?.cancel()
         if (existing != null && SuiSnapshotResolver.isOfficialUrl(existing.url))
         {
@@ -282,6 +282,39 @@ class StartSnapshotDownloadUseCase(
         {
             StopSnapshotDownloadResult.NotRunning
         }
+    }
+
+    /**
+     * Stops every running download whose destination lies under one of [dirs] (used before a node is removed:
+     * files must not be deleted under a live aria2/tar). Keeps what was downloaded; the caller deletes it.
+     * Returns how many jobs were stopped.
+     */
+    fun stopJobsUnder(dirs: List<Path>): Int
+    {
+        val roots = dirs.map { it.toAbsolutePath().normalize() }
+        var stopped = 0
+        for (job in store.list())
+        {
+            val running = store.isRunning(job.jobId) || jobs[job.jobId]?.isActive == true
+            if (!running)
+            {
+                continue
+            }
+            val dest = runCatching { Path.of(job.destDir.trim()).toAbsolutePath().normalize() }.getOrNull() ?: continue
+            if (roots.any { dest.startsWith(it) || it.startsWith(dest) })
+            {
+                stop(job.jobId, wipeDest = false)
+                stopped++
+            }
+        }
+        return stopped
+    }
+
+    /** The heal scripts run aria2/tar/lz4 as grandchildren: killing only the script orphans them. */
+    private fun killProcessTree(proc: Process)
+    {
+        runCatching { proc.toHandle().descendants().forEach { it.destroyForcibly() } }
+        proc.destroyForcibly()
     }
 
     private fun runDownload(initial: SnapshotJob)
@@ -475,11 +508,22 @@ class StartSnapshotDownloadUseCase(
             }
             val proc = bscOfficial.startProcess(script)
             processes[id] = proc
-            // Drain stdout so the heal script cannot block on a full pipe.
+            // Drain stdout so the heal script cannot block on a full pipe — and keep the last lines: when the
+            // script dies early (apt-get for aria2/lz4, network) that output is the only explanation.
+            val scriptTail = java.util.concurrent.ConcurrentLinkedDeque<String>()
             val drain = Thread {
                 try
                 {
-                    proc.inputStream.bufferedReader().use { it.readText() }
+                    proc.inputStream.bufferedReader().useLines { lines ->
+                        lines.forEach { raw ->
+                            val line = raw.trim()
+                            if (line.isNotEmpty())
+                            {
+                                scriptTail.addLast(line.take(300))
+                                while (scriptTail.size > 40) scriptTail.pollFirst()
+                            }
+                        }
+                    }
                 }
                 catch (_: Exception)
                 {
@@ -506,6 +550,15 @@ class StartSnapshotDownloadUseCase(
                             running = true,
                         ),
                     )
+                }
+                else
+                {
+                    // The script has not written its state file yet (installing aria2/lz4, resolving the latest
+                    // snapshot): show what it is doing instead of a silent empty bar.
+                    scriptTail.peekLast()?.let { last ->
+                        val cur = store.read(id) ?: initial
+                        update(cur.copy(detail = "Official BSC snapshot · $last".take(200), running = true))
+                    }
                 }
                 Thread.sleep(2_000)
             }
@@ -534,8 +587,9 @@ class StartSnapshotDownloadUseCase(
                 return
             }
             val state = bscOfficial.readState(paths.state)
+            val outputTail = scriptTail.toList().takeLast(15).joinToString("\n")
             val msg = state?.error?.takeIf { it.isNotBlank() }
-                ?: "official snapshot failed (exit=$code)"
+                ?: ("official snapshot failed (exit=$code)" + if (outputTail.isNotEmpty()) ":\n$outputTail" else "")
             error(msg)
         }
         catch (e: Throwable)

@@ -67,8 +67,8 @@ Same binary; network via `--chain.id`.
 
 | Env | Role | Port |
 |---|---|---|
-| mainnet | http | 8547 |
-| mainnet | ws | 8548 |
+| mainnet | http | 8647 |
+| mainnet | ws | 8648 |
 | sepolia | http | 8657 |
 | sepolia | ws | 8658 |
 
