@@ -179,6 +179,8 @@ class HttpHostAgentClient(
                         port = item["port"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0,
                         free = item["free"]?.jsonPrimitive?.contentOrNull == "true",
                         holder = item["holder"]?.jsonPrimitive?.contentOrNull,
+                        udpFree = item["udp_free"]?.jsonPrimitive?.contentOrNull?.let { it == "true" },
+                        udpHolder = item["udp_holder"]?.jsonPrimitive?.contentOrNull,
                     )
                 }.orEmpty()
             }

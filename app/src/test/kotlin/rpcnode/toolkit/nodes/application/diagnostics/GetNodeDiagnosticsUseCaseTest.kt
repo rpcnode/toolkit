@@ -46,11 +46,13 @@ class GetNodeDiagnosticsUseCaseTest
         val sent = mutableListOf<NodeDiagnosticCheck>()
         val result = useCase(NetworkId.TON, EnvId.TESTNET, sent)(nodeId.value)
         assertIs<GetNodeDiagnosticsResult.Ok>(result)
-        assertEquals(listOf("path_mtu", "nat", "ton_advertised_ip", "ton_catchup"), sent.map { it.id })
+        assertEquals(listOf("path_mtu", "nat", "ton_advertised_ip", "ton_network", "ton_http_api", "ton_catchup"), sent.map { it.id })
         val nat = sent.first { it.id == "nat" }
         assertEquals(31311, nat.port)
         assertEquals("udp", nat.protocol)
         assertEquals("12", sent.last().params["warnHours"])
+        assertEquals(8082, sent.first { it.id == "ton_http_api" }.port)
+        assertEquals("testnet", sent.first { it.id == "ton_network" }.params["env"])
     }
 
     @Test

@@ -20,7 +20,14 @@ class TcpPortProbe : PortProbe
     override fun probe(port: Int): PortCheck
     {
         val free = tcpPortFree(port)
-        return PortCheck(port = port, free = free, holder = if (free) null else occupant(port))
+        val udpFree = udpPortFree(port)
+        return PortCheck(
+            port = port,
+            free = free,
+            holder = if (free) null else occupant(port),
+            udpFree = udpFree,
+            udpHolder = if (udpFree) null else PortHolders.holderUdp(port),
+        )
     }
 }
 
@@ -36,6 +43,26 @@ private fun tcpPortFree(port: Int): Boolean = synchronized(bindLock)
             // HTTP API ports churn constantly), flapping the check free/busy even though no
             // process is actually listening.
             socket.reuseAddress = true
+            socket.bind(InetSocketAddress("0.0.0.0", port))
+        }
+        true
+    }
+    catch (_: Exception)
+    {
+        false
+    }
+}
+
+/**
+ * UDP has no TIME_WAIT and no SO_REUSEADDR sharing here: a plain wildcard bind says whether somebody holds the port
+ * (TON's validator and Solana's gossip are UDP — the TCP test alone calls them «free»).
+ */
+private fun udpPortFree(port: Int): Boolean = synchronized(bindLock)
+{
+    try
+    {
+        java.net.DatagramSocket(null).use { socket ->
+            socket.reuseAddress = false
             socket.bind(InetSocketAddress("0.0.0.0", port))
         }
         true
@@ -86,7 +113,35 @@ object PortHolders
 
     fun reset()
     {
-        synchronized(lock) { loaded = false; at = 0L; table = emptyMap(); ssMissing = false }
+        synchronized(lock) { loaded = false; at = 0L; table = emptyMap(); ssMissing = false; udpTable = emptyMap(); udpAt = 0L }
+    }
+
+    private var udpTable: Map<Int, String> = emptyMap()
+    private var udpAt = 0L
+
+    /** Process behind a UDP port (`ss -lunp`), shared and cached like the TCP table. */
+    fun holderUdp(port: Int, nowMs: () -> Long = System::currentTimeMillis, run: () -> String? = { runProcess(listOf("ss", "-lunp"), LIMIT_SECONDS) {} }): String? =
+        synchronized(lock)
+        {
+            if (nowMs() - udpAt >= TTL_MS)
+            {
+                udpTable = parseUdp(run().orEmpty())
+                udpAt = nowMs()
+            }
+            udpTable[port]
+        }
+
+    fun parseUdp(text: String): Map<Int, String>
+    {
+        val out = linkedMapOf<Int, String>()
+        val re = Regex("""^\s*UNCONN\s+\S+\s+\S+\s+(\S+)\s+\S+\s+users:\(\("([^"]+)",pid=(\d+)""")
+        for (line in text.lineSequence())
+        {
+            val m = re.find(line) ?: continue
+            val port = m.groupValues[1].substringAfterLast(':').toIntOrNull() ?: continue
+            out.putIfAbsent(port, "${m.groupValues[2]} (pid ${m.groupValues[3]})")
+        }
+        return out
     }
 
     fun parse(text: String): Map<Int, String>

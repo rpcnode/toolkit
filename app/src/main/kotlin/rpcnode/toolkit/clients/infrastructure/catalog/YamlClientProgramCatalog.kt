@@ -10,6 +10,7 @@ import rpcnode.toolkit.clients.domain.model.ClientProgramRequirements
 import rpcnode.toolkit.clients.domain.model.ClientProgramSpec
 import rpcnode.toolkit.clients.domain.model.ClientVersionSource
 import rpcnode.toolkit.clients.domain.model.PortConfigPolicy
+import rpcnode.toolkit.clients.domain.model.PortProtocol
 import rpcnode.toolkit.clients.domain.model.ProgramPort
 import rpcnode.toolkit.clients.domain.repository.ClientProgramCatalog
 import rpcnode.toolkit.shared.infrastructure.classpath.ClasspathChainResources
@@ -113,6 +114,7 @@ private fun parsePorts(raw: Any?): List<ProgramPort>
             port = port,
             label = (m["label"] as? String)?.trim().orEmpty(),
             configPolicy = PortConfigPolicy.parse(m["config"] as? String),
+            protocol = PortProtocol.parse(m["protocol"] as? String),
         )
     }
 }

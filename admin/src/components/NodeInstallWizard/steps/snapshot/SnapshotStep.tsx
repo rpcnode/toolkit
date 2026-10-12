@@ -10,6 +10,7 @@ import {
   Radio,
   Stack,
   Text,
+  TextInput,
   Title,
 } from '@mantine/core'
 import { IconArrowRight, IconDownload, IconPlayerStop } from '@tabler/icons-react'
@@ -17,6 +18,7 @@ import { blockProps } from '../../../../lib/blockId'
 import { InstallOptionsPicker } from '../../../InstallOptionsPicker'
 import { formatSnapshotBytes, formatSnapshotSpeed } from '../../utils'
 import { useWizard, type WizardApi } from '../../wizardContext'
+import { CUSTOM_SNAPSHOT_SOURCE } from '../../useWizardOrchestration'
 
 
 export function SnapshotStep() {
@@ -35,6 +37,10 @@ function View({
     snapshotSourceId,
     setSnapshotSourceId,
     snapshotSpeedById,
+    snapshotCustomUrl,
+    setSnapshotCustomUrl,
+    snapshotCustomUrlValid,
+    probeCustomSnapshotUrl,
     snapshotProgress,
     snapshotDownloadReady,
     snapshotIdleAfterStop,
@@ -249,6 +255,76 @@ function View({
                       {snapshotPlan.dest_dir || 'Pick disk layout first'}
                     </Code>
                   </Stack>
+                ) : null}
+
+                {!snapshotViaNode && snapshotPlan ? (
+                  <Box
+                    p="sm"
+                    style={{
+                      border: '1px solid var(--mantine-color-dark-4)',
+                      borderRadius: 8,
+                    }}
+                    {...blockProps('node.install.snapshot.custom-url')}
+                  >
+                    <Radio
+                      name="snapshot-source"
+                      value={CUSTOM_SNAPSHOT_SOURCE}
+                      checked={snapshotSourceId === CUSTOM_SNAPSHOT_SOURCE}
+                      onChange={() => setSnapshotSourceId(CUSTOM_SNAPSHOT_SOURCE)}
+                      label={
+                        <Group gap="xs" wrap="wrap">
+                          <Text size="sm" fw={600}>
+                            Custom link
+                          </Text>
+                          {snapshotSpeedById[CUSTOM_SNAPSHOT_SOURCE]?.loading ? (
+                            <Loader size={10} />
+                          ) : snapshotSpeedById[CUSTOM_SNAPSHOT_SOURCE]?.bytes_per_sec ? (
+                            <Badge size="xs" color="blue" variant="light">
+                              {formatSnapshotSpeed(snapshotSpeedById[CUSTOM_SNAPSHOT_SOURCE].bytes_per_sec)} from host
+                            </Badge>
+                          ) : snapshotSpeedById[CUSTOM_SNAPSHOT_SOURCE]?.error ? (
+                            <Text size="xs" c="red">
+                              {snapshotSpeedById[CUSTOM_SNAPSHOT_SOURCE].error}
+                            </Text>
+                          ) : snapshotSpeedById[CUSTOM_SNAPSHOT_SOURCE]?.available === false ? (
+                            <Text size="xs" c="dimmed">
+                              Unreachable from host
+                            </Text>
+                          ) : null}
+                        </Group>
+                      }
+                    />
+                    <Text size="xs" c="dimmed" mt={4} ml={28}>
+                      Direct link to a .tgz / .tar.gz archive. The host downloads it itself.
+                    </Text>
+                    <Group gap="xs" mt={6} ml={28} wrap="nowrap" align="flex-start">
+                      <TextInput
+                        style={{ flex: 1 }}
+                        size="xs"
+                        className="mono"
+                        placeholder="https://example.com/snapshots/node-archive.tgz"
+                        value={snapshotCustomUrl}
+                        onChange={(e) => {
+                          setSnapshotCustomUrl(e.currentTarget.value)
+                          setSnapshotSourceId(CUSTOM_SNAPSHOT_SOURCE)
+                        }}
+                        error={
+                          snapshotCustomUrl.trim() && !snapshotCustomUrlValid
+                            ? 'Must be an http(s) URL'
+                            : undefined
+                        }
+                      />
+                      <Button
+                        size="xs"
+                        variant="light"
+                        disabled={!snapshotCustomUrlValid}
+                        loading={snapshotSpeedById[CUSTOM_SNAPSHOT_SOURCE]?.loading === true}
+                        onClick={() => void probeCustomSnapshotUrl()}
+                      >
+                        Check from host
+                      </Button>
+                    </Group>
+                  </Box>
                 ) : null}
 
                 {(snapshotStarting ||

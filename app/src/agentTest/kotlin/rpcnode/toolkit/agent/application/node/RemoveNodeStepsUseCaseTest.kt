@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import rpcnode.toolkit.agent.domain.model.RunningNode
 import rpcnode.toolkit.nodes.application.start.HostNodeStartResult
+import rpcnode.toolkit.nodes.infrastructure.host.HostNodeLaunchSupport
 
 class RemoveNodeStepsUseCaseTest
 {
@@ -31,6 +32,7 @@ class RemoveNodeStepsUseCaseTest
         var failService: String? = null,
         var runningSnapshots: Int = 0,
         val existing: MutableSet<Path> = mutableSetOf(),
+        var hook: HostNodeLaunchSupport.HookResult = HostNodeLaunchSupport.HookResult.NoHook,
     ) : RemovalOps
     {
         val calls = mutableListOf<String>()
@@ -60,6 +62,14 @@ class RemoveNodeStepsUseCaseTest
         override fun removeSnapshotUnit(nodeId: String)
         {
             calls += "snapshot-unit"
+        }
+
+        override fun hasRemoveHook(dirs: List<Path>) = hook != HostNodeLaunchSupport.HookResult.NoHook
+
+        override fun runRemoveHooks(dirs: List<Path>, wipe: Boolean): HostNodeLaunchSupport.HookResult
+        {
+            calls += "hook:wipe=$wipe"
+            return hook
         }
 
         override fun deleteTree(path: Path, onFile: (deleted: Long) -> Unit): Boolean
@@ -124,6 +134,46 @@ class RemoveNodeStepsUseCaseTest
             ops.calls,
         )
         assertNull(registry.get("n1"), "the node is forgotten by the agent")
+    }
+
+    @Test
+    fun a_chain_clean_up_hook_runs_after_the_stop_and_before_any_file_is_deleted()
+    {
+        val ops = FakeOps(
+            existing = mutableSetOf(Path.of("/data/tron/nile/fullnode")),
+            hook = HostNodeLaunchSupport.HookResult.Done("dropped database rpcnode_ton_mainnet"),
+        )
+        val uc = useCase(ops)
+        assertIs<StartRemovalResult.Started>(uc.start(command()))
+        val state = uc.await()
+
+        assertTrue(state.done && !state.failed)
+        assertEquals(listOf("stop", "database", "files", "service"), state.steps.map { it.id })
+        assertEquals("dropped database rpcnode_ton_mainnet", state.steps.first { it.id == "database" }.detail)
+        val order = ops.calls.filter { it == "stop" || it.startsWith("hook") || it.startsWith("delete:") }
+        assertEquals("stop", order.first())
+        assertEquals("hook:wipe=true", order[1], "the hook is told the data is wiped too")
+    }
+
+    @Test
+    fun a_failing_hook_stops_the_removal_before_the_files_go()
+    {
+        val ops = FakeOps(hook = HostNodeLaunchSupport.HookResult.Failed("cannot drop database"))
+        val uc = useCase(ops)
+        assertIs<StartRemovalResult.Started>(uc.start(command()))
+        val state = uc.await()
+
+        assertTrue(state.failed)
+        assertEquals("failed", state.steps.first { it.id == "database" }.status)
+        assertTrue(ops.calls.none { it.startsWith("delete:") }, "nothing is deleted when the clean-up failed")
+    }
+
+    @Test
+    fun without_a_hook_there_is_no_database_step()
+    {
+        val uc = useCase(FakeOps())
+        assertIs<StartRemovalResult.Started>(uc.start(command()))
+        assertEquals(listOf("stop", "files", "service"), uc.await().steps.map { it.id })
     }
 
     @Test

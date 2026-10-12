@@ -66,6 +66,25 @@ class TcpPortProbeTest
         assertEquals(null, result.holder)
     }
 
+    @Test
+    fun a_bound_udp_socket_is_reported_as_udp_busy_while_tcp_stays_free()
+    {
+        java.net.DatagramSocket(null).use { udp ->
+            udp.reuseAddress = false
+            udp.bind(InetSocketAddress("0.0.0.0", 0))
+            val result = TcpPortProbe().probe(udp.localPort)
+
+            assertTrue(result.free, "nothing listens on TCP")
+            assertEquals(false, result.udpFree, "UDP validator/gossip port is held")
+        }
+    }
+
+    @Test
+    fun an_unbound_port_is_udp_free()
+    {
+        assertEquals(true, TcpPortProbe().probe(findClosedPort()).udpFree)
+    }
+
     /** Grab an ephemeral port then release it immediately — free right after close(). */
     private fun findClosedPort(): Int
     {

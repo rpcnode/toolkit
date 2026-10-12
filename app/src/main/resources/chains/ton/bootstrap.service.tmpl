@@ -9,6 +9,8 @@ Type=oneshot
 RemainAfterExit=yes
 Environment=HOME=/root
 Environment=USER=root
+# optional overrides, e.g. RPCNODE_TON_API_BIND=127.0.0.1 (the TON HTTP API listens on all interfaces by default)
+EnvironmentFile=-/etc/rpcnode/ton.env
 ExecStart={{exec_start}}
 TimeoutStartSec=0
 Restart=on-failure

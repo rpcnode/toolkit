@@ -24,7 +24,7 @@ programs:
       - name: main_net_config.conf
         urlTemplate: "https://raw.githubusercontent.com/tronprotocol/java-tron/{tag}/framework/src/main/resources/config.conf"
     ports:
-      - { role: p2p, port: 18888, label: "P2P", config: required }
+      - { role: p2p, port: 18888, label: "P2P", config: required, protocol: both }
       - { role: http_fullnode, port: 18090, label: "HTTP API (fullnode)", config: required }
       - { role: http_solidity, port: 18190, label: "HTTP API (solidity)", config: required }
       - { role: http_pbft, port: 18191, label: "HTTP API (PBFT)", config: required }
@@ -44,7 +44,7 @@ programs:
       - name: config-nile.conf
         urlTemplate: "https://raw.githubusercontent.com/tron-nile-testnet/nile-testnet/master/framework/src/main/resources/config-nile.conf"
     ports:
-      - { role: p2p, port: 18889, label: "P2P", config: required }
+      - { role: p2p, port: 18889, label: "P2P", config: required, protocol: both }
       - { role: http_fullnode, port: 18091, label: "HTTP API (fullnode)", config: required }
       - { role: http_solidity, port: 18290, label: "HTTP API (solidity)", config: required }
       - { role: http_pbft, port: 18291, label: "HTTP API (PBFT)", config: required }
@@ -65,7 +65,7 @@ programs:
         urlTemplate: "https://raw.githubusercontent.com/tronprotocol/java-tron/{tag}/framework/src/main/resources/config.conf"
         optional: true
     ports:
-      - { role: p2p, port: 18890, label: "P2P", config: required }
+      - { role: p2p, port: 18890, label: "P2P", config: required, protocol: both }
       - { role: http_fullnode, port: 18092, label: "HTTP API (fullnode)", config: required }
       - { role: http_solidity, port: 18390, label: "HTTP API (solidity)", config: required }
       - { role: http_pbft, port: 18391, label: "HTTP API (PBFT)", config: required }

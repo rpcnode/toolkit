@@ -111,4 +111,39 @@ class PushNodeHeightsUseCaseTest
         assertEquals(0, asked)
         assertEquals(alivePid, registry.get("n1")?.pid)
     }
+
+    @Test
+    fun a_probe_that_throws_does_not_stop_the_other_nodes_from_reporting() = runTest {
+        // the real case: Solana's probe read a multi-GB validator.log whole («OutOfMemoryError: Required array size too
+        // large») and the exception ended the push — the TON node on the same host showed no progress for hours.
+        val broken = ChainNodeRuntime(
+            network = "solana",
+            starter = { _, _, _, _, _ -> HostNodeStartResult.Failed("unused") },
+            height = object : HostNodeHeightProbe
+            {
+                override suspend fun height(nodeDir: String, httpPort: Int, configFile: String, env: String): Long? =
+                    throw OutOfMemoryError("Required array size too large")
+            },
+        )
+        val registry = MemoryRegistry(
+            listOf(
+                RunningNode(nodeId = "sol", network = "solana", env = "mainnet", nodeDir = "/tmp/none", httpPort = 8899, pid = alivePid),
+                node(pid = alivePid),
+            ),
+        )
+        val sent = mutableListOf<NodeHeightItem>()
+        PushNodeHeightsUseCase(
+            enrollment = enrollment,
+            registry = registry,
+            runtimes = mapOf("tron" to runtime, "solana" to broken),
+            push = { _, _, _, items -> sent += items; true },
+            token = "t",
+            dirSize = NodeDirSizeProbe(),
+            unitPid = { _, _ -> alivePid },
+            unitInstalled = { _, _ -> false },
+        )()
+
+        assertEquals(listOf("n1"), sent.map { it.nodeId }, "the healthy node still reports")
+        assertEquals(4242L, sent.single().height)
+    }
 }

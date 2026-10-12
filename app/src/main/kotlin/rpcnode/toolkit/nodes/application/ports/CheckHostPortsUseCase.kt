@@ -42,7 +42,7 @@ class CheckHostPortsUseCase(
         val byPort = checked.associateBy { it.port }
         val merged = catalogPorts.map { p ->
             val c = byPort[p.port]
-            p.toNodePort(free = c?.free, holder = c?.holder)
+            p.toNodePort(free = c?.freeFor(p.protocol), holder = c?.holderFor(p.protocol))
         }
         return NodePortsResult.Ok(ports = merged, endpoint = endpoint)
     }

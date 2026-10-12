@@ -4,6 +4,9 @@ data class PortCheck(
     val port: Int,
     val free: Boolean,
     val holder: String? = null,
+    /** UDP bind test (same port number); null when the probe does not test UDP. */
+    val udpFree: Boolean? = null,
+    val udpHolder: String? = null,
 )
 
 /** Whether a TCP port on this host is free to bind, and who holds it when it isn't. */

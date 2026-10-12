@@ -81,7 +81,8 @@ class GetNodeDiagnosticsUseCase(
                 id = d.id,
                 port = d.port?.let { role -> ports.firstOrNull { it.role.equals(role, ignoreCase = true) }?.port } ?: 0,
                 protocol = d.protocol.orEmpty(),
-                params = d.params,
+                // every check may need to know which env it runs for
+                params = d.params + ("env" to node.env.value),
             )
         }
         return when (val host = runOnHost.run(agentUrl, agentKey, node.id.value, checks))

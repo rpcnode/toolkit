@@ -13,10 +13,15 @@ diskRoles:
   - id: archive
     label: Archive / additional
     media: ssd
+  - id: indexer
+    label: Indexer (PostgreSQL, v3 API)
+    media: nvme
 diskNotes:
   - "MyTonCtrl uses host-global /var/ton-work — RpcNode symlinks it to the blockchain disk role."
   - "Only one TON env per host (validator/mytoncore units are shared)."
   - "Dump (~30d) is the product default; archive needs ≥12 TiB NVMe."
+  - "The v3 indexer is installed with the node (no Docker, after the node install): toncenter worker/classifier/API are built from source; the database is a separate role + database + tablespace (on the indexer disk) in the host's PostgreSQL — an existing server is only added to, never reconfigured; if there is none, PostgreSQL is installed and tuned. Removing the node drops them again. It indexes forward from the moment the node is synced and grows with the chain. The first build takes a long time (like the node's). Put the indexer role on its own NVMe."
+  - "One public URL: agent port rpc_public serves /api/v2/* (ton-http-api) and /api/v3/* (indexer)."
 oneEnvPerHost: true
 # Node page warnings, run by the host agent (GET /api/nodes/{id}/diagnostics). port = role from clients.yml.
 diagnostics:
@@ -29,6 +34,11 @@ diagnostics:
   # addrs[] in /var/ton-work/db/config.json must be the public IP and the P2P port, or peers cannot connect back.
   - id: ton_advertised_ip
     port: p2p
+  # The host's validator must follow this env (an old install keeps another network's global config).
+  - id: ton_network
+  # The panel reads the height from the TON HTTP API on the catalog http port; an old unit may keep another --port.
+  - id: ton_http_api
+    port: http
   # Catch-up after the dump (lag from validator STATUS lines); warn when it would take longer than warnHours.
   - id: ton_catchup
     warnHours: 12

@@ -59,6 +59,15 @@ class RemoveNodeHostUseCase(
                     return@withContext RemoveNodeHostResult.Failed(removed.detail)
                 is HostNodeStartResult.Started -> Unit
             }
+            if (nodeDir != null)
+            {
+                // chain clean-up that needs the node folder (TON: drops the indexer database, role and tablespace)
+                when (val hook = HostNodeLaunchSupport.runRemoveHook(Path.of(nodeDir), wipeData))
+                {
+                    is HostNodeLaunchSupport.HookResult.Failed -> return@withContext RemoveNodeHostResult.Failed(hook.detail)
+                    else -> Unit
+                }
+            }
             if (wipeData)
             {
                 if (nodeDir == null)

@@ -117,6 +117,7 @@ class YamlNetworkFactsRepositoryTest
                 "rpc-pubsub-worker-threads",
                 "rpc-pubsub-max-active-subscriptions",
                 "rpc-max-request-body-size",
+                "rpc-tx-history",
                 "LimitNOFILE",
                 "net.core.rmem_default",
                 "net.core.rmem_max",

@@ -99,6 +99,11 @@ object SolanaUnitBodies
             flags += "--expected-genesis-hash ${cluster.genesis}"
         }
         flags += "--full-rpc-api"
+        if (tuning.txHistory)
+        {
+            flags += "--enable-rpc-transaction-history"
+            flags += "--enable-extended-tx-metadata-storage"
+        }
         flags += "--rpc-threads ${tuning.rpcThreads.coerceAtLeast(1)}"
         flags += "--rpc-pubsub-worker-threads ${tuning.rpcPubsubWorkerThreads.coerceAtLeast(1)}"
         flags += "--rpc-pubsub-max-active-subscriptions ${tuning.rpcPubsubMaxActiveSubscriptions.coerceAtLeast(1)}"

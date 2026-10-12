@@ -14,7 +14,7 @@ programs:
     requirements: { logFile: logs/validator.log }
     ports:
       - { role: http, port: 8899, label: "HTTP RPC", config: required }
-      - { role: p2p, port: 8000, label: "P2P", config: required }
+      - { role: p2p, port: 8000, label: "P2P", config: required, protocol: both }
   - env: testnet
     id: agave-validator
     source: { type: github, repo: anza-xyz/agave }
@@ -24,7 +24,7 @@ programs:
     requirements: { logFile: logs/validator.log }
     ports:
       - { role: http, port: 8891, label: "HTTP RPC", config: required }
-      - { role: p2p, port: 8100, label: "P2P", config: required }
+      - { role: p2p, port: 8100, label: "P2P", config: required, protocol: both }
   - env: devnet
     id: agave-validator
     source: { type: github, repo: anza-xyz/agave }
@@ -34,4 +34,4 @@ programs:
     requirements: { logFile: logs/validator.log }
     ports:
       - { role: http, port: 8893, label: "HTTP RPC", config: required }
-      - { role: p2p, port: 8200, label: "P2P", config: required }
+      - { role: p2p, port: 8200, label: "P2P", config: required, protocol: both }

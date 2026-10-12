@@ -10,6 +10,7 @@ import rpcnode.toolkit.catalog.domain.NetworkId
 import rpcnode.toolkit.clients.FakeClientProgramCatalog
 import rpcnode.toolkit.clients.domain.model.ClientProgramSpec
 import rpcnode.toolkit.clients.domain.model.ClientVersionSource
+import rpcnode.toolkit.clients.domain.model.PortProtocol
 import rpcnode.toolkit.clients.domain.model.ProgramPort
 import rpcnode.toolkit.servers.FakeServerRepository
 import rpcnode.toolkit.servers.application.probe.AgentPortCheck
@@ -65,6 +66,51 @@ class CheckHostPortsUseCaseTest
             result.ports,
         )
         assertEquals("http://10.0.0.5:18090", result.endpoint)
+    }
+
+    @Test
+    fun udp_ports_are_judged_by_the_udp_probe_not_the_tcp_one() = runTest {
+        val tonSpec = spec.copy(
+            ports = listOf(
+                ProgramPort(role = "p2p", port = 31311, label = "P2P (UDP)", protocol = PortProtocol.UDP),
+                ProgramPort(role = "gossip", port = 8001, label = "Gossip", protocol = PortProtocol.BOTH),
+                ProgramPort(role = "http", port = 8082, label = "HTTP"),
+            ),
+        )
+        val useCase = CheckHostPortsUseCase(
+            servers = FakeServerRepository(listOf(server)),
+            catalog = FakeClientProgramCatalog(listOf(tonSpec)),
+            checkAgentPorts = CheckAgentPorts { _, _, _ ->
+                listOf(
+                    AgentPortCheck(port = 31311, free = true, udpFree = false, udpHolder = "validator-engin (pid 5)"),
+                    AgentPortCheck(port = 8001, free = false, holder = "agave (pid 9)", udpFree = true),
+                    AgentPortCheck(port = 8082, free = false, holder = "uvicorn (pid 7)", udpFree = true),
+                )
+            },
+        )
+
+        val result = assertIs<NodePortsResult.Ok>(useCase(server.id.value, NetworkId.TRON, EnvId.MAINNET))
+
+        assertEquals(false, result.ports[0].free)
+        assertEquals("validator-engin (pid 5)", result.ports[0].holder)
+        assertEquals(false, result.ports[1].free, "BOTH is busy if either protocol is held")
+        assertEquals("agave (pid 9)", result.ports[1].holder)
+        assertEquals(false, result.ports[2].free)
+        assertEquals("uvicorn (pid 7)", result.ports[2].holder)
+    }
+
+    @Test
+    fun an_old_agent_without_the_udp_probe_falls_back_to_its_tcp_answer() = runTest {
+        val udpSpec = spec.copy(ports = listOf(ProgramPort(role = "p2p", port = 31311, label = "P2P", protocol = PortProtocol.UDP)))
+        val useCase = CheckHostPortsUseCase(
+            servers = FakeServerRepository(listOf(server)),
+            catalog = FakeClientProgramCatalog(listOf(udpSpec)),
+            checkAgentPorts = CheckAgentPorts { _, _, _ -> listOf(AgentPortCheck(port = 31311, free = true)) },
+        )
+
+        val result = assertIs<NodePortsResult.Ok>(useCase(server.id.value, NetworkId.TRON, EnvId.MAINNET))
+
+        assertEquals(true, result.ports.single().free)
     }
 
     @Test

@@ -1,5 +1,6 @@
 package rpcnode.toolkit.chains.solana.infrastructure.http
 
+import rpcnode.toolkit.nodes.infrastructure.host.LogTail
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -76,15 +77,6 @@ class SolanaNodeHeightProbe(
             Path.of(root, "logs", "node.out"),
         )
         val path = candidates.firstOrNull { Files.isRegularFile(it) } ?: return null
-        return try
-        {
-            val bytes = Files.readAllBytes(path)
-            val take = minOf(bytes.size, 512 * 1024)
-            String(bytes, bytes.size - take, take)
-        }
-        catch (_: Exception)
-        {
-            null
-        }
+        return LogTail.read(path, 512 * 1024)
     }
 }

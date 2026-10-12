@@ -88,12 +88,16 @@ data class NodeSnapshotProgressResponse(
 data class NodeSnapshotStartBody(
     val snapshot: String? = null,
     val source: String? = null,
+    /** Direct archive link, used when [source] is `custom`. */
+    val url: String? = null,
 )
 
 @Serializable
 data class NodeSnapshotProbeBody(
     val snapshot: String? = null,
     val sources: List<String>? = null,
+    /** Direct archive link to speed-test as source `custom`. */
+    @SerialName("custom_url") val customUrl: String? = null,
 )
 
 @Serializable
@@ -230,6 +234,15 @@ suspend fun ApplicationCall.respondNodeSnapshotStart(result: StartNodeSnapshotRe
                     ok = false,
                     error = "invalid_type",
                     message = "Unknown snapshot type for this network/env",
+                ),
+            )
+        StartNodeSnapshotResult.InvalidUrl ->
+            respond(
+                HttpStatusCode.BadRequest,
+                NodeSnapshotActionResponse(
+                    ok = false,
+                    error = "invalid_url",
+                    message = "Custom snapshot link must be an http(s) URL to the archive",
                 ),
             )
         StartNodeSnapshotResult.ServerNotFound ->

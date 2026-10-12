@@ -37,6 +37,7 @@ import rpcnode.toolkit.agent.application.node.GetNodeRpcAuthUseCase
 import rpcnode.toolkit.agent.application.node.ListLocalNodesUseCase
 import rpcnode.toolkit.agent.application.node.NodeHeightPusher
 import rpcnode.toolkit.agent.application.node.RpcProxyReconciler
+import rpcnode.toolkit.agent.application.node.TonApiRouterReconciler
 import rpcnode.toolkit.agent.application.node.PushNodeHeightsUseCase
 import rpcnode.toolkit.agent.application.node.RemoveNodeHostUseCase
 import rpcnode.toolkit.agent.application.node.HostRemovalOps
@@ -338,6 +339,23 @@ private fun runAgentServer()
             {
                 runCatching { rpcProxies.reconcile() }
                     .onFailure { log.warn("rpc proxy reconcile: {}", it.message) }
+                delay(5_000)
+            }
+        }
+    }
+    // TON: one public port for the HTTP API v2 and the v3 indexer (/api/v2/*, /api/v3/*), like a hosted provider.
+    // RPCNODE_TON_ROUTER=off disables it; RPCNODE_TON_ROUTER_BIND=127.0.0.1 keeps it local only.
+    if (!System.getenv("RPCNODE_TON_ROUTER").equals("off", ignoreCase = true))
+    {
+        val tonRouters = TonApiRouterReconciler(
+            registry = runningNodes,
+            listenHost = System.getenv("RPCNODE_TON_ROUTER_BIND")?.trim()?.ifEmpty { null } ?: "0.0.0.0",
+        )
+        pushScope.launch {
+            while (isActive)
+            {
+                runCatching { tonRouters.reconcile() }
+                    .onFailure { log.warn("ton router reconcile: {}", it.message) }
                 delay(5_000)
             }
         }

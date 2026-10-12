@@ -8,6 +8,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 import rpcnode.toolkit.chains.ton.infrastructure.TonDiagnostics
+import rpcnode.toolkit.chains.xrpl.infrastructure.XrplDiagnostics
 
 /** One check from `chains/<id>/network.yml` → `diagnostics[]`, with the catalog port already resolved by the panel. */
 data class DiagnosticRequest(
@@ -55,7 +56,10 @@ object HostNodeDiagnostics
                     "nat" -> nat(check, cachedFacts)
                     "path_mtu" -> pathMtu(check, cachedFacts)
                     "ton_advertised_ip" -> TonDiagnostics.advertisedIp(check, cachedFacts)
+                    "ton_network" -> TonDiagnostics.network(check)
+                    "ton_http_api" -> TonDiagnostics.httpApi(check)
                     "ton_catchup" -> TonDiagnostics.catchUp(check)
+                    "xrpl_sync" -> XrplDiagnostics.sync(check)
                     else -> DiagnosticResult(check.id, "unknown", "Unknown check «${check.id}»", "Update the host agent")
                 }
             }.getOrElse { e ->
@@ -166,7 +170,8 @@ object HostNodeDiagnostics
             Regex("""^172\.(1[6-9]|2\d|3[01])\.""").containsMatchIn(ip) || ip.startsWith("100.64.")
 }
 
-private val http: HttpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(4)).build()
+private val http: HttpClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)
+    .connectTimeout(Duration.ofSeconds(4)).build()
 
 fun fetchPublicIp(): String?
 {

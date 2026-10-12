@@ -1,0 +1,398 @@
+#!/bin/bash
+# RpcNode TON indexer — toncenter v3 API, no containers. Built from source and run as plain processes:
+#   ton-index-postgres (reads the node's DB)  +  Redis (own instance, loopback)  +  event classifier (Python)
+#   +  ton-index-go (the v3 API, loopback :{{api_port}}).
+# DATABASE: the host's PostgreSQL is used when there is one (it is not touched, only a separate role, database and
+# tablespace for this node are created); when there is none, `postgresql` is installed from apt and tuned for the load.
+# Removing the node runs bin/rpcnode-on-remove.sh, which drops the role, database and tablespace again.
+# Flow: wait for the TON bootstrap (that is what installs clang) -> apt packages -> build (long, once per release tag) ->
+# database -> wait until the node is within MAX_LAG seconds of the network -> start everything and keep it running.
+# Indexing starts from the block where the node was synced (RPCNODE_TON_INDEXER_FROM=<seqno> in /etc/rpcnode/ton.env
+# goes back further; the node must hold those blocks).
+set -uo pipefail
+ENV_ID={{env}}
+STATE_DIR={{state_dir}}
+IDX={{idx_dir}}
+LOG={{log_file}}
+BOOT_MARKER={{bootstrap_marker}}
+HTTP_PORT={{http_port}}
+API_PORT={{api_port}}
+REDIS_PORT={{redis_port}}
+IS_TESTNET={{is_testnet}}
+MAX_LAG={{max_lag}}
+TAG="${RPCNODE_TON_INDEXER_TAG:-{{release_tag}}}"
+GO_VERSION="${RPCNODE_TON_INDEXER_GO:-{{go_version}}}"
+FROM_MODE="${RPCNODE_TON_INDEXER_FROM:-latest}"
+
+LOGDIR="$(dirname "$LOG")"
+SRC="$IDX/src"; BIN="$IDX/bin"; LIB="$IDX/lib"; TS_DIR="$IDX/pgdata"
+WORK="$IDX/workdir"; VENV="$IDX/venv"; CLS="$IDX/classifier"; GO_ROOT="$IDX/go"
+PWDIR="$STATE_DIR/ton-indexer"
+mkdir -p "$LOGDIR" "$STATE_DIR" "$IDX" "$BIN" "$LIB" "$WORK" "$PWDIR"
+chmod 755 "$IDX"; chmod 700 "$PWDIR"
+exec >>"$LOG" 2>&1
+
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [indexer] $*"; }
+
+declare -A PIDS=()
+
+stop_all() {
+  log "stopping"
+  local n pid
+  for n in api classifier worker redis; do
+    pid="${PIDS[$n]:-}"
+    [[ -n "$pid" ]] || continue
+    kill -TERM "$pid" 2>/dev/null
+    for _ in $(seq 1 120); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+    kill -KILL "$pid" 2>/dev/null || true
+  done
+}
+trap 'stop_all; exit 0' TERM INT
+
+alive() { local pid="${PIDS[$1]:-}"; [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; }
+
+# $1 = name, rest = command. Runs in the background with its own log; a live child is left alone.
+start_child() {
+  local name="$1"; shift
+  alive "$name" && return 0
+  "$@" >>"$LOGDIR/ton-indexer-$name.log" 2>&1 &
+  PIDS[$name]=$!
+  log "started $name (pid ${PIDS[$name]}, log ton-indexer-$name.log)"
+  CHILD_FRESH="$name"
+}
+
+# --- 0. wait for the node install: it is what brings clang and the node DB -------------------------------------------
+wait_for_bootstrap() {
+  local n=0
+  while [[ ! -f "$BOOT_MARKER" ]]; do
+    (( n % 20 == 0 )) && log "waiting for the TON node install to finish (it provides the compiler)"
+    n=$((n + 1)); sleep 30
+  done
+}
+
+# --- 1. packages ------------------------------------------------------------------------------------------------------
+APT_PKGS="build-essential cmake ccache git curl ca-certificates openssl libssl-dev zlib1g-dev gperf libcurl4-openssl-dev \
+libmicrohttpd-dev liblz4-dev pkg-config libsecp256k1-dev libsodium-dev libhiredis-dev python3-dev python3-venv python3-pip \
+libpq-dev automake libjemalloc-dev autoconf libtool redis-server util-linux"
+
+install_packages() {
+  [[ -f "$STATE_DIR/ton-indexer-apt.done" ]] && return 0
+  command -v apt-get >/dev/null 2>&1 || { log "apt-get not found — this installer supports Debian/Ubuntu only"; return 1; }
+  log "installing build dependencies, PostgreSQL and Redis"
+  # shellcheck disable=SC2086
+  DEBIAN_FRONTEND=noninteractive apt-get update -y && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $APT_PKGS || return 1
+  touch "$STATE_DIR/ton-indexer-apt.done"
+}
+
+
+# --- 2. build (once per release tag) ---------------------------------------------------------------------------------
+fetch_source() {
+  [[ -d "$SRC/.git" && -f "$SRC/ton-index-worker/CMakeLists.txt" && -f "$STATE_DIR/ton-indexer-src-$TAG" ]] && return 0
+  log "cloning toncenter/ton-indexer $TAG with submodules (the TON fork is large)"
+  rm -rf "$SRC"
+  git clone --branch "$TAG" --depth 1 --recurse-submodules --shallow-submodules https://github.com/toncenter/ton-indexer.git "$SRC" \
+    || { rm -rf "$SRC"; return 1; }
+  touch "$STATE_DIR/ton-indexer-src-$TAG"
+}
+
+build_worker() {
+  [[ -f "$STATE_DIR/ton-indexer-worker-$TAG" && -x "$BIN/ton-index-postgres" ]] && return 0
+  local cc="" cxx="" v ram_gb jobs
+  for v in 21 20 19 18; do
+    if command -v "clang-$v" >/dev/null 2>&1 && command -v "clang++-$v" >/dev/null 2>&1; then cc="clang-$v"; cxx="clang++-$v"; break; fi
+  done
+  [[ -n "$cc" ]] || { log "no clang found (the node install provides clang-21)"; return 1; }
+  ram_gb=$(awk '/MemTotal/ { printf "%d", $2 / 1048576 }' /proc/meminfo)
+  jobs=$(( ram_gb / 3 )); (( jobs < 1 )) && jobs=1
+  (( jobs > $(nproc) )) && jobs=$(nproc)
+  log "building ton-index-worker with $cc, $jobs jobs (this takes a long time)"
+  mkdir -p "$IDX/build" && cd "$IDX/build" || return 1
+  touch "$SRC/ton-index-worker/suppression_mappings.txt"
+  CC="$cc" CXX="$cxx" cmake -DCMAKE_BUILD_TYPE=Release -DPORTABLE=1 "$SRC/ton-index-worker" || return 1
+  CC="$cc" CXX="$cxx" make -j"$jobs" ton-index-postgres ton-index-postgres-migrate ton-marker || return 1
+  install -m 755 ton-index-postgres/ton-index-postgres ton-index-postgres/ton-index-postgres-migrate "$BIN/" || return 1
+  cp -P ton-marker/libton-marker* "$LIB/" || return 1
+  cd / && rm -rf "$IDX/build"
+  touch "$STATE_DIR/ton-indexer-worker-$TAG"
+}
+
+build_api() {
+  [[ -f "$STATE_DIR/ton-indexer-api-$TAG" && -x "$BIN/ton-index-go" ]] && return 0
+  if [[ ! -x "$GO_ROOT/bin/go" ]]; then
+    local arch
+    case "$(uname -m)" in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; *) log "unsupported CPU $(uname -m)"; return 1 ;; esac
+    log "installing Go $GO_VERSION into $GO_ROOT"
+    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${arch}.tar.gz" | tar -C "$IDX" -xz || return 1
+  fi
+  log "building ton-index-go"
+  (
+    export PATH="$GO_ROOT/bin:$PATH" GOPATH="$IDX/gopath" GOTOOLCHAIN=auto
+    export CGO_CFLAGS="-I$SRC/ton-index-worker/ton-marker/src" CGO_LDFLAGS="-L$LIB"
+    cd "$SRC/ton-index-go" || exit 1
+    go install github.com/swaggo/swag/cmd/swag@latest || exit 1
+    "$GOPATH/bin/swag" init || exit 1
+    go build -o "$BIN/ton-index-go" ./main.go
+  ) || return 1
+  touch "$STATE_DIR/ton-indexer-api-$TAG"
+}
+
+build_classifier() {
+  [[ -f "$STATE_DIR/ton-indexer-classifier-$TAG" && -x "$VENV/bin/python" ]] && return 0
+  log "installing the event classifier (Python venv)"
+  rm -rf "$VENV"
+  python3 -m venv "$VENV" || return 1
+  "$VENV/bin/pip" install --no-cache-dir -r "$SRC/indexer/requirements.txt" || return 1
+  rm -rf "$CLS"; mkdir -p "$CLS"
+  cp -r "$SRC/indexer/." "$CLS/"
+  cp -r "$SRC/indexer/files/." "$CLS/" 2>/dev/null || true
+  touch "$STATE_DIR/ton-indexer-classifier-$TAG"
+}
+
+# --- 3. database -----------------------------------------------------------------------------------------------------
+PG_ROLE="rpcnode_ton_${ENV_ID}"; PG_DB="rpcnode_ton_${ENV_ID}"; PG_TS="rpcnode_ton_${ENV_ID}_ts"
+PG_PORT=""; PG_BY_US=0; PGURL=""
+if [[ -f "$PWDIR/pg.env" ]] && grep -q '^PG_INSTALLED_BY_US=1' "$PWDIR/pg.env"; then PG_BY_US=1; fi
+
+# runs psql as the postgres OS user on the local socket (superuser on a stock install)
+psql_su() { ( cd / && setpriv --reuid=postgres --regid=postgres --init-groups psql -p "$PG_PORT" -X -q -At -v ON_ERROR_STOP=1 "$@" ); }
+
+# port of the PostgreSQL server that is already there (Debian clusters, else the default port); empty = none
+detect_postgres() {
+  PG_PORT=""
+  if command -v pg_lsclusters >/dev/null 2>&1; then
+    PG_PORT="$(pg_lsclusters -h 2>/dev/null | awk '$4 == "online" { print $3; exit }')"
+  fi
+  if [[ -z "$PG_PORT" ]] && command -v pg_isready >/dev/null 2>&1 && pg_isready -q -p 5432; then PG_PORT=5432; fi
+  [[ -n "$PG_PORT" ]]
+}
+
+ensure_server() {
+  if detect_postgres; then
+    log "using the PostgreSQL server that is already on this host (port $PG_PORT)"
+    return 0
+  fi
+  log "no PostgreSQL server on this host — installing it from apt"
+  DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql || return 1
+  systemctl enable --now postgresql >/dev/null 2>&1 || true
+  local i
+  for i in $(seq 1 60); do detect_postgres && break; sleep 2; done
+  [[ -n "$PG_PORT" ]] || { log "PostgreSQL did not start"; return 1; }
+  PG_BY_US=1
+}
+
+# recommended server settings for a heavy read/write load, from the size of this machine
+pg_server_settings() {
+  local ram_mb cores shared cache workers
+  ram_mb="$(awk '/MemTotal/ { printf "%d", $2 / 1024 }' /proc/meminfo)"; cores="$(nproc)"
+  shared=$(( ram_mb / 4 )); (( shared > 65536 )) && shared=65536; (( shared < 512 )) && shared=512
+  cache=$(( ram_mb * 7 / 10 )); workers=$cores; (( workers < 4 )) && workers=4
+  cat <<CONF
+# RpcNode TON indexer — recommended for a large indexing + API load (written by rpcnode-ton-indexer.sh)
+max_connections = 1024
+shared_buffers = ${shared}MB
+effective_cache_size = ${cache}MB
+wal_compression = on
+max_wal_size = 16GB
+min_wal_size = 2GB
+checkpoint_timeout = 15min
+checkpoint_completion_target = 0.9
+max_worker_processes = $workers
+max_parallel_workers = $workers
+autovacuum_max_workers = 6
+autovacuum_vacuum_cost_limit = 2000
+autovacuum_naptime = 15s
+tcp_keepalives_idle = 60
+tcp_keepalives_interval = 60
+tcp_keepalives_count = 60
+CONF
+}
+
+# a server that this script installed is ours to tune; one that was already there is left as it is
+tune_server() {
+  if (( PG_BY_US == 1 )); then
+    [[ -f "$PWDIR/pg-tuned" ]] && return 0
+    local conf_dir
+    conf_dir="$(dirname "$(psql_su -d postgres -c 'show config_file')")/conf.d"
+    if [[ -d "$conf_dir" ]]; then
+      pg_server_settings >"$conf_dir/90-rpcnode-ton-indexer.conf"
+      log "wrote $conf_dir/90-rpcnode-ton-indexer.conf — restarting PostgreSQL once to apply it"
+      systemctl restart postgresql >/dev/null 2>&1 || true
+      local i; for i in $(seq 1 60); do pg_isready -q -p "$PG_PORT" && break; sleep 2; done
+      touch "$PWDIR/pg-tuned"
+    else
+      pg_server_settings >"$PWDIR/postgresql-recommended.conf"
+      log "no conf.d in the PostgreSQL config — tune the server yourself, see $PWDIR/postgresql-recommended.conf"
+    fi
+  else
+    pg_server_settings >"$PWDIR/postgresql-recommended.conf"
+    log "existing PostgreSQL server left untouched; for a heavy load apply $PWDIR/postgresql-recommended.conf (shared_buffers etc.)"
+  fi
+}
+
+ensure_password() {
+  PW_FILE="$PWDIR/postgres_password"
+  [[ -s "$PW_FILE" ]] || od -An -tx1 -N16 /dev/urandom | tr -d ' \n' >"$PW_FILE"
+  chmod 600 "$PW_FILE"
+  PGPASS="$PWDIR/pgpass"
+  export PGPASSFILE="$PGPASS"
+}
+
+# a separate role, tablespace (the data goes to the indexer disk) and database for this node; idempotent
+provision_database() {
+  ensure_server || return 1
+  PGURL="postgresql://$PG_ROLE@127.0.0.1:$PG_PORT/$PG_DB"
+  mkdir -p "$TS_DIR"; chown postgres:postgres "$TS_DIR"; chmod 700 "$TS_DIR"
+  local pw ram_mb workmem maint
+  pw="$(cat "$PW_FILE")"
+  if psql_su -d postgres -c "select 1 from pg_roles where rolname = '$PG_ROLE'" | grep -q 1; then
+    psql_su -d postgres -c "alter role $PG_ROLE login password '$pw'" || return 1
+  else
+    psql_su -d postgres -c "create role $PG_ROLE login password '$pw'" || return 1
+    log "created role $PG_ROLE"
+  fi
+  if ! psql_su -d postgres -c "select 1 from pg_tablespace where spcname = '$PG_TS'" | grep -q 1; then
+    psql_su -d postgres -c "create tablespace $PG_TS owner $PG_ROLE location '$TS_DIR'" || return 1
+    log "created tablespace $PG_TS in $TS_DIR"
+  fi
+  if ! psql_su -d postgres -c "select 1 from pg_database where datname = '$PG_DB'" | grep -q 1; then
+    psql_su -d postgres -c "create database $PG_DB owner $PG_ROLE tablespace $PG_TS" || return 1
+    log "created database $PG_DB"
+    rm -f "$STATE_DIR/ton-indexer-migrated-$TAG"
+  fi
+  # settings that apply to this role only (the rest of the server is not affected)
+  ram_mb="$(awk '/MemTotal/ { printf "%d", $2 / 1024 }' /proc/meminfo)"
+  workmem=$(( ram_mb / 512 )); (( workmem < 16 )) && workmem=16; (( workmem > 128 )) && workmem=128
+  maint=$(( ram_mb / 16 )); (( maint > 4096 )) && maint=4096; (( maint < 128 )) && maint=128
+  psql_su -d postgres -c "alter role $PG_ROLE set work_mem = '${workmem}MB'" \
+    -c "alter role $PG_ROLE set maintenance_work_mem = '${maint}MB'" \
+    -c "alter role $PG_ROLE set random_page_cost = '1.1'" \
+    -c "alter role $PG_ROLE set effective_io_concurrency = '200'" \
+    -c "alter role $PG_ROLE set max_parallel_workers_per_gather = '4'" || return 1
+  # what the removal hook needs to undo all of it
+  cat >"$PWDIR/pg.env" <<ENVFILE
+PG_PORT=$PG_PORT
+PG_ROLE=$PG_ROLE
+PG_DB=$PG_DB
+PG_TS=$PG_TS
+PG_TS_DIR=$TS_DIR
+PG_INSTALLED_BY_US=$PG_BY_US
+ENVFILE
+  # libpq (worker, API, classifier) reads the password from here
+  printf '127.0.0.1:%s:%s:%s:%s\n' "$PG_PORT" "$PG_DB" "$PG_ROLE" "$pw" >"$PGPASS"
+  chmod 600 "$PGPASS"
+  tune_server
+  if ! psql "$PGURL" -Atc 'select 1' >/dev/null 2>&1; then
+    log "cannot log in as $PG_ROLE over 127.0.0.1:$PG_PORT — check listen_addresses and a scram-sha-256/md5 rule for 127.0.0.1 in pg_hba.conf"
+    return 1
+  fi
+}
+
+# --- 4. node state ---------------------------------------------------------------------------------------------------
+# prints "<masterchain seqno> <seconds since that block>"; "0 999999" while the HTTP API is down
+node_state() {
+  python3 - "$HTTP_PORT" <<'PY'
+import json, sys, time, urllib.request
+port = sys.argv[1]
+def get(path):
+    with urllib.request.urlopen("http://127.0.0.1:%s%s" % (port, path), timeout=10) as r:
+        return json.load(r)
+try:
+    seq = int(get("/getMasterchainInfo")["result"]["last"]["seqno"])
+    head = get("/getBlockHeader?workchain=-1&shard=-9223372036854775808&seqno=%d" % seq)["result"]
+    print(seq, int(time.time()) - int(head["gen_utime"]))
+except Exception:
+    print(0, 999999)
+PY
+}
+
+wait_for_synced_node() {
+  local seq lag n=0
+  while true; do
+    read -r seq lag < <(node_state)
+    if (( seq > 0 && lag <= MAX_LAG )); then NODE_SEQNO=$seq; return 0; fi
+    if (( n % 10 == 0 )); then
+      if (( seq == 0 )); then log "waiting for the TON node (HTTP API on :$HTTP_PORT is not answering yet)"
+      else log "waiting for the node to catch up before indexing: seqno $seq, $lag s behind"; fi
+    fi
+    n=$((n + 1)); sleep 30
+  done
+}
+
+# --- 5. run ----------------------------------------------------------------------------------------------------------
+# runs inside the background job started by start_child: exec makes the job's pid the process itself
+with_limits() { ulimit -n 1000000; exec "$@"; }
+
+run_classifier() {
+  cd "$CLS" || exit 1
+  export TON_INDEXER_PG_DSN="postgresql+asyncpg://$PG_ROLE@127.0.0.1:$PG_PORT/$PG_DB"
+  export TON_INDEXER_REDIS_DSN="redis://127.0.0.1:$REDIS_PORT" TON_INDEXER_IS_TESTNET="$IS_TESTNET"
+  export TQDM_NCOLS=0 TQDM_POSITION=-1
+  exec "$VENV/bin/python" event_classifier.py --pool-size 4 --prefetch-size 10000 --batch-size 1000
+}
+
+start_all() {
+  # the schema (once per release tag and database; the migration is idempotent)
+  if [[ ! -f "$STATE_DIR/ton-indexer-migrated-$TAG" ]]; then
+    log "running schema migrations"
+    ( LD_LIBRARY_PATH="$LIB" with_limits "$BIN/ton-index-postgres-migrate" --pg "$PGURL" ) >>"$LOGDIR/ton-indexer-migrate.log" 2>&1 \
+      || { log "migrations failed (see ton-indexer-migrate.log)"; return 1; }
+    touch "$STATE_DIR/ton-indexer-migrated-$TAG"
+  fi
+
+  start_child redis redis-server --port "$REDIS_PORT" --bind 127.0.0.1 --save "" --appendonly no --maxclients 40000 --dir "$WORK"
+
+  local from
+  from="$(cat "$STATE_DIR/ton-indexer-from" 2>/dev/null || true)"
+  if [[ -z "$from" ]]; then
+    if [[ "$FROM_MODE" =~ ^[0-9]+$ ]]; then from="$FROM_MODE"; else from=$(( NODE_SEQNO > 10 ? NODE_SEQNO - 10 : 1 )); fi
+    echo "$from" >"$STATE_DIR/ton-indexer-from"
+    log "indexing from masterchain seqno $from (RPCNODE_TON_INDEXER_FROM=$FROM_MODE)"
+  fi
+  local net_arg=() api_net=()
+  if [[ "$IS_TESTNET" == 1 ]]; then net_arg=(--testnet); api_net=(-testnet); fi
+
+  LD_LIBRARY_PATH="$LIB" start_child worker with_limits "$BIN/ton-index-postgres" "${net_arg[@]}" --pg "$PGURL" \
+    --db "$(readlink -f /var/ton-work/db)" --working-dir "$WORK" --from "$from"
+
+  start_child classifier run_classifier
+
+  # the API forks one process per CPU thread in -prefork mode: cap it, a big host does not need dozens of them
+  local threads=$(( $(nproc) / 4 )); (( threads < 1 )) && threads=1; (( threads > 8 )) && threads=8
+  local procs=$(( $(nproc) )); (( procs > 16 )) && procs=16
+  GOMAXPROCS="$procs" LD_LIBRARY_PATH="$LIB" start_child api "$BIN/ton-index-go" -pg "$PGURL" -bind "127.0.0.1:$API_PORT" "${api_net[@]}" \
+    -v2 "http://127.0.0.1:$HTTP_PORT/" -prefork -threads "$threads"
+}
+
+report_progress() {
+  local done_seq seq lag
+  done_seq="$(psql "$PGURL" -Atc 'select max(seqno) from blocks where workchain = -1' 2>/dev/null || true)"
+  read -r seq lag < <(node_state)
+  if [[ "$done_seq" =~ ^[0-9]+$ && "$seq" -gt 0 ]]; then
+    log "indexed masterchain seqno $done_seq of $seq ($(( seq - done_seq )) behind)"
+  else
+    log "indexer running, nothing indexed yet (node seqno $seq)"
+  fi
+}
+
+log "TON indexer for $ENV_ID starting (release $TAG, data in $IDX)"
+wait_for_bootstrap
+until install_packages && fetch_source && build_worker && build_api && build_classifier; do
+  log "install/build step failed — retrying in 10 min (details above and in this log)"
+  sleep 600
+done
+ensure_password
+until provision_database; do log "database setup failed — retrying in 60 s"; sleep 60; done
+wait_for_synced_node
+
+n=0
+while true; do
+  if ! start_all; then
+    log "start incomplete — retrying in 30 s"
+  elif (( n % 10 == 0 )); then
+    report_progress
+  fi
+  n=$((n + 1))
+  sleep 30 &
+  wait $!
+done

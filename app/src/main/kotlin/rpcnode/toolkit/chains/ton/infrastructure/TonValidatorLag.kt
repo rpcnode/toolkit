@@ -6,7 +6,7 @@ package rpcnode.toolkit.chains.ton.infrastructure
  */
 object TonValidatorLag
 {
-    private val re = Regex("""last_masterchain_block_ago=([0-9]+(?:\.[0-9]+)?)([smhd])""")
+    private val re = Regex("""last_masterchain_block_ago=([0-9]+(?:\.[0-9]+)?)(ms|[smhd])""")
 
     /** Lag of the newest STATUS line in seconds, null when the text has none. */
     fun lastLagSeconds(logText: String): Double?
@@ -15,6 +15,8 @@ object TonValidatorLag
         val n = m.groupValues[1].toDoubleOrNull() ?: return null
         return n * when (m.groupValues[2])
         {
+            // «1396.5ms» is 1.4 s — read as minutes it made a synced node look 23 h behind
+            "ms" -> 0.001
             "s" -> 1.0
             "m" -> 60.0
             "h" -> 3600.0

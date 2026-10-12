@@ -16,6 +16,8 @@ NOFILE={{nofile}}
 NR_OPEN={{nr_open}}
 INSTALL_URL={{install_url}}
 INSTALL_EXTRA={{install_extra}}
+GLOBAL_CONFIG_URL={{global_config_url}}
+ZERO_STATE={{zero_state_hash}}
 
 wait_apt_lock() {
   local deadline=$((SECONDS + 900))
@@ -159,6 +161,48 @@ prepare_clang_for_unknown_distro() {
 }
 prepare_clang_for_unknown_distro || echo "clang-21 pre-install failed — install.sh will report the details"
 
+# install.sh fetches the network's global config only when it builds the node. A host that already has TON binaries
+# (an older mainnet install, units, /usr/bin/ton) keeps its old global.config.json, and `-n testnet` then runs the
+# validator — and downloads the dump — of the OTHER network. Compare the zero state and fix the config first.
+ensure_global_config() {
+  local cfg=/usr/bin/ton/global.config.json have got
+  [[ -f "$cfg" ]] || return 0
+  have="$(python3 - "$cfg" <<'PY' 2>/dev/null
+import base64, json, sys
+try:
+    print(base64.b64decode(json.load(open(sys.argv[1]))["validator"]["zero_state"]["root_hash"]).hex().upper())
+except Exception:
+    pass
+PY
+)"
+  [[ "$have" == "$ZERO_STATE" ]] && return 0
+  echo "global.config.json is for another network (zero state ${have:-unreadable}, wanted $ZERO_STATE)"
+  if [[ -d "$DATA/db" && -n "$(ls -A "$DATA/db" 2>/dev/null)" ]]; then
+    echo "ERROR: $DATA/db already holds data of another network — wipe it (remove the node with its data) before installing $CHAIN" >&2
+    return 2   # exit 2 = the unit does not restart (RestartPreventExitStatus=2): retrying cannot fix this
+  fi
+  curl -fsSL --connect-timeout 30 --max-time 120 --retry 5 --retry-all-errors "$GLOBAL_CONFIG_URL" -o "$TMP/global.config.json" \
+    || { echo "ERROR: download of $GLOBAL_CONFIG_URL failed" >&2; return 1; }
+  got="$(python3 - "$TMP/global.config.json" <<'PY' 2>/dev/null
+import base64, json, sys
+try:
+    print(base64.b64decode(json.load(open(sys.argv[1]))["validator"]["zero_state"]["root_hash"]).hex().upper())
+except Exception:
+    pass
+PY
+)"
+  if [[ "$got" != "$ZERO_STATE" ]]; then
+    echo "ERROR: $GLOBAL_CONFIG_URL has zero state ${got:-unreadable}, expected $ZERO_STATE" >&2
+    return 2
+  fi
+  cp -a "$cfg" "$cfg.bak-$(date +%s)"
+  install -m 644 "$TMP/global.config.json" "$cfg"
+  echo "global.config.json replaced with the $CHAIN config (old one kept as $cfg.bak-*)"
+}
+cfg_rc=0
+ensure_global_config || cfg_rc=$?
+(( cfg_rc == 0 )) || exit "$cfg_rc"
+
 export ARCHIVE_TTL STATE_TTL
 export VALIDATOR_PORT="$P2P"
 rc=1
@@ -218,7 +262,14 @@ LimitNOFILE=1048576
 EOF
 done
 if [[ -f /etc/systemd/system/ton_http_api.service ]]; then
-  sed -i "s/--port 8801/--port $THA_PORT/g; s/--port 8080/--port $THA_PORT/g" /etc/systemd/system/ton_http_api.service || true
+  # An existing unit keeps the port of whatever install made it (8801 default, 8081 mainnet, ...): take any --port,
+  # otherwise the API listens elsewhere than the catalog port and the panel never sees the height.
+  sed -i -E "s/--port [0-9]+/--port $THA_PORT/g" /etc/systemd/system/ton_http_api.service || true
+  # MyTonCtrl binds the API to 127.0.0.1 (only the host itself can call it). The node page lists it as the node's
+  # endpoint, so listen on all interfaces; firewall the port (ufw: allow it only from your IPs). To keep it local set
+  # RPCNODE_TON_API_BIND=127.0.0.1 in /etc/rpcnode/ton.env (read by the bootstrap unit), or change `--host` in
+  # /etc/systemd/system/ton_http_api.service by hand (then `systemctl daemon-reload && systemctl restart ton_http_api`).
+  sed -i -E "s/--host [0-9a-fA-F.:]+/--host ${RPCNODE_TON_API_BIND:-0.0.0.0}/g" /etc/systemd/system/ton_http_api.service || true
   ln -sfn /etc/systemd/system/ton_http_api.service /etc/systemd/system/ton-http-api.service || true
 fi
 systemctl daemon-reload || true

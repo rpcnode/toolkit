@@ -24,6 +24,7 @@ sealed interface StartNodeSnapshotResult
     data object MissingUrl : StartNodeSnapshotResult
     data object MissingDest : StartNodeSnapshotResult
     data object InvalidType : StartNodeSnapshotResult
+    data object InvalidUrl : StartNodeSnapshotResult
     data object ServerNotFound : StartNodeSnapshotResult
     data object AgentUnreachable : StartNodeSnapshotResult
     data class SourceUnavailable(val source: String, val detail: String) : StartNodeSnapshotResult
@@ -50,8 +51,18 @@ class StartNodeSnapshotUseCase(
         idRaw: String,
         snapshotType: String? = null,
         source: String? = null,
+        customUrl: String? = null,
     ): StartNodeSnapshotResult
     {
+        // Validate before anything is persisted or re-synced.
+        val custom = if (CustomSnapshotUrl.isCustom(source))
+        {
+            CustomSnapshotUrl.parse(customUrl) ?: return StartNodeSnapshotResult.InvalidUrl
+        }
+        else
+        {
+            null
+        }
         val id = NodeId.parse(idRaw.trim()) ?: return StartNodeSnapshotResult.NotFound
         var node = nodes.findById(id) ?: return StartNodeSnapshotResult.NotFound
         if (!nodeNeedsSnapshot(node, facts))
@@ -103,24 +114,46 @@ class StartNodeSnapshotUseCase(
             ensureClients.ensure(id.value, node.installOptionsJson.ifBlank { null })
         }
 
-        val resolved = when (
-            val snap = preferSnapshot(
+        val resolved = if (custom != null)
+        {
+            // A direct link has no catalog entry: unpack the same way the network's official archive does.
+            val official = preferSnapshot(
                 node.network.value,
                 node.env.value,
-                source = source,
+                source = PreferCdnSnapshotUseCase.SOURCE_OFFICIAL,
+                typeId = typeId,
+            ) as? PreferCdnSnapshotResult.Resolved
+            PreferCdnSnapshotResult.Resolved(
+                url = custom,
+                officialUrl = official?.officialUrl,
+                version = null,
+                source = CustomSnapshotUrl.SOURCE_ID,
+                streamUnpack = official?.streamUnpack,
+                sizeBytes = null,
                 typeId = typeId,
             )
-        )
+        }
+        else
         {
-            PreferCdnSnapshotResult.UnknownEnv,
-            PreferCdnSnapshotResult.UnknownNetwork,
-            -> return StartNodeSnapshotResult.MissingUrl
-            is PreferCdnSnapshotResult.SourceUnavailable ->
-                return StartNodeSnapshotResult.SourceUnavailable(
-                    source = snap.source,
-                    detail = snap.detail,
+            when (
+                val snap = preferSnapshot(
+                    node.network.value,
+                    node.env.value,
+                    source = source,
+                    typeId = typeId,
                 )
-            is PreferCdnSnapshotResult.Resolved -> snap
+            )
+            {
+                PreferCdnSnapshotResult.UnknownEnv,
+                PreferCdnSnapshotResult.UnknownNetwork,
+                -> return StartNodeSnapshotResult.MissingUrl
+                is PreferCdnSnapshotResult.SourceUnavailable ->
+                    return StartNodeSnapshotResult.SourceUnavailable(
+                        source = snap.source,
+                        detail = snap.detail,
+                    )
+                is PreferCdnSnapshotResult.Resolved -> snap
+            }
         }
         var url = resolved.url?.trim().orEmpty()
         if (url.isBlank())

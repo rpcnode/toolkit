@@ -15,7 +15,7 @@ programs:
     # After start-up geth logs only to <datadir>/bsc.log (a symlink to the current hourly file); stdout stays at the banner.
     requirements: { logFile: bsc.log }
     ports:
-      - { role: p2p, port: 30311, label: "P2P", config: required }
+      - { role: p2p, port: 30311, label: "P2P", config: required, protocol: both }
       - { role: http, port: 8575, label: "HTTP RPC", config: required }
   - env: testnet
     id: geth
@@ -30,5 +30,5 @@ programs:
         urlTemplate: "https://github.com/bnb-chain/bsc/releases/download/{tag}/testnet.zip"
     requirements: { logFile: bsc.log }
     ports:
-      - { role: p2p, port: 30312, label: "P2P", config: required }
+      - { role: p2p, port: 30312, label: "P2P", config: required, protocol: both }
       - { role: http, port: 8576, label: "HTTP RPC", config: required }

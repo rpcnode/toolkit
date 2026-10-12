@@ -1,5 +1,6 @@
 package rpcnode.toolkit.chains.ton.infrastructure.http
 
+import rpcnode.toolkit.nodes.infrastructure.host.LogTail
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -56,7 +57,7 @@ class TonNodeHeightProbe(
             return catchUpReading(root)
         }
         val log = root.resolve("logs").resolve("bootstrap.log")
-        val pct = runCatching { TonBootstrapProgress.parse(readTail(log)) }.getOrNull() ?: return null
+        val pct = runCatching { TonBootstrapProgress.parse(readTail(log)) { unpackedDbBytes() } }.getOrNull() ?: return null
         return HostNodeHeightReading(height = -1, syncPct = pct, syncing = true)
     }
 
@@ -75,6 +76,39 @@ class TonNodeHeightProbe(
         return HostNodeHeightReading(height = -1, syncPct = TonValidatorLag.catchUpPct(start, now), syncing = true)
     }
 
+    /**
+     * Bytes the dump extraction has written so far: the apparent size of everything under `/var/ton-work/db` (tens of
+     * thousands of files, a fraction of a second). Called only while the log says the extraction is running.
+     */
+    private fun unpackedDbBytes(): Long?
+    {
+        val db = Path.of("/var/ton-work/db")
+        if (!Files.isDirectory(db))
+        {
+            return null
+        }
+        val deadline = System.nanoTime() + 5_000_000_000L
+        var total = 0L
+        return runCatching {
+            Files.walk(db).use { stream ->
+                val it = stream.iterator()
+                while (it.hasNext())
+                {
+                    if (System.nanoTime() > deadline)
+                    {
+                        break
+                    }
+                    val p = it.next()
+                    if (Files.isRegularFile(p))
+                    {
+                        total += Files.size(p)
+                    }
+                }
+            }
+            total
+        }.getOrNull()
+    }
+
     /** Newest `log*.log` under /var/ton-work (validator-engine writes per-thread logs there). */
     private fun validatorLogTail(): String
     {
@@ -91,19 +125,5 @@ class TonNodeHeightProbe(
         return readTail(newest, 256 * 1024)
     }
 
-    private fun readTail(file: Path, bytes: Int = 512 * 1024): String
-    {
-        if (!Files.isRegularFile(file))
-        {
-            return ""
-        }
-        java.io.RandomAccessFile(file.toFile(), "r").use { raf ->
-            val size = raf.length()
-            val from = (size - bytes).coerceAtLeast(0)
-            raf.seek(from)
-            val buf = ByteArray((size - from).toInt())
-            raf.readFully(buf)
-            return String(buf, Charsets.UTF_8)
-        }
-    }
+    private fun readTail(file: Path, bytes: Int = 512 * 1024): String = LogTail.read(file, bytes).orEmpty()
 }

@@ -28,6 +28,12 @@ data class SolanaRpcTuning(
     val rpcPubsubMaxActiveSubscriptions: Int = SolanaUnitBodies.RPC_PUBSUB_MAX_ACTIVE_SUBSCRIPTIONS,
     val rpcMaxRequestBodySize: Int = SolanaUnitBodies.RPC_MAX_REQUEST_BODY_SIZE,
     val limitNofile: Int = SolanaUnitBodies.NODE_NOFILE,
+    /**
+     * `--enable-rpc-transaction-history` + `--enable-extended-tx-metadata-storage`. Without them the node answers
+     * getTransaction / getSignaturesForAddress with «-32011 Transaction history is not available from this node».
+     * Costs disk and IOPS in the ledger — the reason it is an option, on by default for an RPC node.
+     */
+    val txHistory: Boolean = true,
 )
 
 fun solanaRpcTuning(installOptionsJson: String?): SolanaRpcTuning
@@ -53,6 +59,7 @@ fun solanaRpcTuning(installOptionsJson: String?): SolanaRpcTuning
         ),
         rpcMaxRequestBodySize = intOpt("rpc_max_request_body_size", SolanaUnitBodies.RPC_MAX_REQUEST_BODY_SIZE),
         limitNofile = intOpt("LimitNOFILE", SolanaUnitBodies.NODE_NOFILE),
+        txHistory = root["rpc_tx_history"]?.jsonPrimitive?.contentOrNull?.trim()?.lowercase() !in setOf("false", "0", "off", "no"),
     )
 }
 

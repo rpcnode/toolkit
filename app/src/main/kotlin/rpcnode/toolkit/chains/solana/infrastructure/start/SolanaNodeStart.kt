@@ -40,6 +40,7 @@ class SolanaNodeStart : ChainNodeStart
             "--toolkit-rpc-pubsub-max-active-subscriptions=${tuning.rpcPubsubMaxActiveSubscriptions}",
             "--toolkit-rpc-max-request-body-size=${tuning.rpcMaxRequestBodySize}",
             "--toolkit-limit-nofile=${tuning.limitNofile}",
+            "--toolkit-rpc-tx-history=${if (tuning.txHistory) "1" else "0"}",
             "--toolkit-sysctl-rmem-default=${sysctl.rmemDefault}",
             "--toolkit-sysctl-rmem-max=${sysctl.rmemMax}",
             "--toolkit-sysctl-wmem-default=${sysctl.wmemDefault}",

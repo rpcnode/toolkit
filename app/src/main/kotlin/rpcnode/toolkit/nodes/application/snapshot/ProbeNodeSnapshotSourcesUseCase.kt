@@ -43,6 +43,7 @@ class ProbeNodeSnapshotSourcesUseCase(
         idRaw: String,
         snapshotType: String? = null,
         sourceIds: List<String>? = null,
+        customUrl: String? = null,
     ): ProbeNodeSnapshotSourcesResult
     {
         val id = NodeId.parse(idRaw.trim()) ?: return ProbeNodeSnapshotSourcesResult.NotFound
@@ -64,12 +65,17 @@ class ProbeNodeSnapshotSourcesUseCase(
             is SnapshotSourcesResult.Resolved -> result
         }
         val wanted = sourceIds?.map { it.trim().lowercase() }?.filter { it.isNotEmpty() }?.toSet()
+        val custom = CustomSnapshotUrl.parse(customUrl)
         val samples = listed.sources
             .filter { source ->
                 source.url?.isNotBlank() == true &&
                     (wanted == null || wanted.contains(source.id.lowercase()))
             }
-            .map { SnapshotHostSpeedSample(id = it.id, url = it.url!!) }
+            .map { SnapshotHostSpeedSample(id = it.id, url = it.url!!) } +
+            listOfNotNull(
+                custom?.takeIf { wanted == null || wanted.contains(CustomSnapshotUrl.SOURCE_ID) }
+                    ?.let { SnapshotHostSpeedSample(id = CustomSnapshotUrl.SOURCE_ID, url = it) },
+            )
         if (samples.isEmpty())
         {
             return ProbeNodeSnapshotSourcesResult.Ok(
@@ -92,8 +98,9 @@ class ProbeNodeSnapshotSourcesUseCase(
         val probed = probeOnHost.probe(agentUrl, agentKey, samples)
             ?: return ProbeNodeSnapshotSourcesResult.AgentUnreachable
         val probedById = probed.associateBy { it.id.lowercase() }
-        val merged = listed.sources.map { source ->
-            val hit = probedById[source.id.lowercase()]
+        val ids = listed.sources.map { it.id } + listOfNotNull(CustomSnapshotUrl.SOURCE_ID.takeIf { custom != null })
+        val merged = ids.map { sourceId ->
+            val hit = probedById[sourceId.lowercase()]
             if (hit != null)
             {
                 SnapshotSourceSpeedResult(
@@ -108,9 +115,9 @@ class ProbeNodeSnapshotSourcesUseCase(
             else
             {
                 SnapshotSourceSpeedResult(
-                    id = source.id,
+                    id = sourceId,
                     available = false,
-                    detail = source.detail ?: "Not probed",
+                    detail = listed.sources.firstOrNull { it.id == sourceId }?.detail ?: "Not probed",
                 )
             }
         }

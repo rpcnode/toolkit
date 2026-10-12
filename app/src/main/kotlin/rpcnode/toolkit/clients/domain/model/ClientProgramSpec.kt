@@ -50,7 +50,29 @@ data class ProgramPort(
     val port: Int,
     val label: String = "",
     val configPolicy: PortConfigPolicy = PortConfigPolicy.REQUIRED,
+    /** What the client binds on this port: decides which host bind test says «in use». */
+    val protocol: PortProtocol = PortProtocol.TCP,
 )
+
+/** `protocol` in chains/<id>/clients.yml → ports[]; default `tcp`. TON's validator is UDP-only. */
+enum class PortProtocol(val id: String)
+{
+    TCP("tcp"),
+    UDP("udp"),
+    BOTH("both"),
+    ;
+
+    companion object
+    {
+        fun parse(raw: String?): PortProtocol =
+            when (raw?.trim()?.lowercase())
+            {
+                "udp" -> UDP
+                "both", "tcp+udp", "tcp_udp" -> BOTH
+                else -> TCP
+            }
+    }
+}
 
 /** Host runtime needs declared in `clients/<network>.yml` → `programs[].requirements`. */
 data class ClientProgramRequirements(

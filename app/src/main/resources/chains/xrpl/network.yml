@@ -78,3 +78,6 @@ clientConfig:
 # Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
 diagnostics:
   - id: path_mtu
+  # No ledgers after a long uptime = peers deliver nothing (MTU / NAT): the bar cannot move, say why.
+  - id: xrpl_sync
+    port: http

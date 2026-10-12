@@ -49,8 +49,12 @@ fun interface UnenrollHostAgent
 
 data class AgentPortCheck(
     val port: Int,
+    /** TCP bind test. */
     val free: Boolean,
     val holder: String? = null,
+    /** UDP bind test; null from an agent that predates it (then only [free] is known). */
+    val udpFree: Boolean? = null,
+    val udpHolder: String? = null,
 )
 
 fun interface CheckAgentPorts

@@ -307,6 +307,53 @@ curl -s --data-binary '{"jsonrpc":"1.0","id":1,"method":"getblockcount","params"
   (keep it at or below `rpcthreads`).
 - Ports come from `chains/<network>/clients.yml` (role `rpc_public`) and show up in «Check ports».
 
+### TON: one URL for the HTTP API v2 and the v3 indexer
+
+A TON node is installed together with the toncenter **v3 indexer**, without Docker. The script
+`bin/rpcnode-ton-indexer.sh` runs as the companion unit `rpcnode-ton-<env>-indexer.service` and, once the node install
+has finished: installs the build packages and Redis with apt (Debian/Ubuntu), clones `toncenter/ton-indexer` (tag
+`v1.2.8`, with submodules), builds the C++ worker (`ton-index-postgres`, compiled with the node's clang-21), the Go API
+(`ton-index-go`, Go is unpacked under the indexer dir) and a Python venv for the event classifier. The first build takes
+a long time (like the node's own) and is skipped on later starts.
+
+**Database.** If the host already runs PostgreSQL (a Debian cluster, or anything on port 5432) it is **used as it is**:
+the script only adds a separate role `rpcnode_ton_<env>`, a database `rpcnode_ton_<env>` and a tablespace for it on the
+`indexer` disk role (default `<node dir>/indexer/pgdata`), with per-role settings (`work_mem` …). The server's own
+configuration is never changed — a suggestion for a heavy load (`shared_buffers`, WAL, autovacuum …) is written to
+`<node dir>/.toolkit/ton-indexer/postgresql-recommended.conf` and logged. If there is no PostgreSQL, the script installs
+`postgresql` from apt, writes `conf.d/90-rpcnode-ton-indexer.conf` (sized from RAM and cores), restarts it once and
+creates the same role/database/tablespace. The password is generated (`.toolkit/ton-indexer/`, root only). **Removing the
+node drops the database, tablespace and role again** (a hook `bin/rpcnode-on-remove.sh` that the agent runs after the node
+is stopped and before its files go; a «database» step in the removal progress). The PostgreSQL server itself — existing
+or installed by the script — stays. Its own Redis runs on a loopback port (`indexer_redis`).
+
+**Stopping / removing a TON node.** MyTonCtrl's own services (`validator`, `mytoncore`, `ton_http_api`) are separate units
+that the node unit starts; stopping the node unit now stops them too (`ExecStop`). Removing the node (the same hook,
+after the stop) also deletes those services and their drop-ins, `/usr/bin/ton`, `/usr/src/ton`, `/usr/src/mytonctrl`,
+`/usr/local/bin/mytoncore`, `/usr/local/bin/mytonctrl`, the `/var/ton-work` link and the `rpcnode-ton-<env>-bootstrap` /
+`-indexer` units. The chain data is never deleted by the hook — it goes only with «wipe»; MyTonCtrl's own data
+(`~/.local/share/mytoncore`, its wallet db) goes only with «wipe» as well. A re-install after a removal rebuilds the node.
+
+The worker waits until the node is within two minutes of the network and indexes **forward from that block** — history
+before it is not indexed; set `RPCNODE_TON_INDEXER_FROM=<masterchain seqno>` in `/etc/rpcnode/ton.env` before the first
+start to go back (the node must hold those blocks). The v3 API listens on loopback only (`indexer` port). Logs:
+`logs/ton-indexer.log` (steps, progress) and `logs/ton-indexer-<part>.log`. The worker is built from the release tag,
+not from the node's version: if a node update changes the DB format, move the tag (`RPCNODE_TON_INDEXER_TAG`) and the
+build is redone.
+
+The agent exposes both APIs on one public port (`rpc_public` of the TON entry), like a hosted provider:
+
+| URL on the public port | goes to |
+|---|---|
+| `/api/v3/...` | indexer (path unchanged) |
+| `/api/v2/<method>` | `ton-http-api` `/<method>` |
+| `POST /` (JSON-RPC) | `ton-http-api` `/jsonRPC` |
+| anything else (`/getMasterchainInfo`, `/jsonRPC`, …) | `ton-http-api` as it is |
+
+Nothing is cached or rewritten. `502` = a backend is not up yet, `503` on `/api/v3` = no indexer on this host.
+`RPCNODE_TON_ROUTER=off` disables the router, `RPCNODE_TON_ROUTER_BIND=127.0.0.1` keeps it on the host only. There is no
+token in the path — put a firewall (or your own gateway) in front of the port.
+
 ### Admin UI without Docker (pm2)
 
 The admin UI is a static React build. `admin/server.mjs` serves it and proxies

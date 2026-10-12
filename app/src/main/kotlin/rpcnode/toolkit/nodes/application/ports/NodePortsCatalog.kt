@@ -1,5 +1,7 @@
 package rpcnode.toolkit.nodes.application.ports
 
+import rpcnode.toolkit.servers.application.probe.AgentPortCheck
+import rpcnode.toolkit.clients.domain.model.PortProtocol
 import java.net.URI
 import rpcnode.toolkit.clients.domain.model.PortConfigPolicy
 import rpcnode.toolkit.clients.domain.model.ProgramPort
@@ -100,3 +102,23 @@ internal fun ProgramPort.toNodePort(free: Boolean? = null, holder: String? = nul
     NodePort(role = role, port = port, label = label, configPolicy = configPolicy, free = free, holder = holder)
 
 internal fun List<ProgramPort>.toCatalogNodePorts() = map { it.toNodePort() }
+
+/**
+ * Free/busy of a catalog port for the protocol the client binds: a UDP-only port (TON validator) is «busy» when UDP is
+ * held even though TCP is free. An agent without the UDP test (udpFree == null) is answered by its TCP result.
+ */
+internal fun AgentPortCheck.freeFor(protocol: PortProtocol): Boolean =
+    when (protocol)
+    {
+        PortProtocol.TCP -> free
+        PortProtocol.UDP -> udpFree ?: free
+        PortProtocol.BOTH -> free && (udpFree ?: true)
+    }
+
+internal fun AgentPortCheck.holderFor(protocol: PortProtocol): String? =
+    when (protocol)
+    {
+        PortProtocol.TCP -> holder
+        PortProtocol.UDP -> udpHolder ?: holder
+        PortProtocol.BOTH -> holder ?: udpHolder
+    }

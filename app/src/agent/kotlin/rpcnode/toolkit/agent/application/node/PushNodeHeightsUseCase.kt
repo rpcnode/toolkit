@@ -89,13 +89,27 @@ class PushNodeHeightsUseCase(
             alive.map { node ->
                 async(Dispatchers.IO) {
                     val probe = runtimes[node.network.lowercase()]?.height
-                    val reading = probe?.reading(
-                        nodeDir = node.nodeDir,
-                        httpPort = node.httpPort,
-                        configFile = node.configFile,
-                        env = node.env,
-                    )
-                    val size = dirSize.sizeBytes(node.nodeDir)
+                    // One broken probe (a log too big to read, a hung RPC…) must not end the whole push: it used to
+                    // throw out of awaitAll, so no node of the host reported anything.
+                    val reading = try
+                    {
+                        probe?.reading(
+                            nodeDir = node.nodeDir,
+                            httpPort = node.httpPort,
+                            configFile = node.configFile,
+                            env = node.env,
+                        )
+                    }
+                    catch (e: kotlinx.coroutines.CancellationException)
+                    {
+                        throw e
+                    }
+                    catch (e: Throwable)
+                    {
+                        log.warn("height probe {}/{} failed: {}", node.network, node.env, e.toString())
+                        null
+                    }
+                    val size = runCatching { dirSize.sizeBytes(node.nodeDir) }.getOrDefault(-1L)
                     if (reading == null && size < 0)
                     {
                         return@async null

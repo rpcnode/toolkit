@@ -22,7 +22,8 @@ class TonNodeStartTest
                 diskLayoutJson = """
                   {"roles":[
                       {"id":"blockchain","dir":"/data/rpcnode/ton/mainnet/db"},
-                      {"id":"archive","dir":"/data/rpcnode/ton/mainnet/archive"}
+                      {"id":"archive","dir":"/data/rpcnode/ton/mainnet/archive"},
+                      {"id":"indexer","dir":"/data/rpcnode/ton/mainnet/indexer"}
                   ]}
                 """.trimIndent(),
             ),
@@ -37,6 +38,7 @@ class TonNodeStartTest
         assertTrue(plan.launch.args.contains("--toolkit-history=archive"))
         assertTrue(plan.launch.args.contains("--toolkit-blockchain=/data/rpcnode/ton/mainnet/db"))
         assertTrue(plan.launch.args.contains("--toolkit-archive=/data/rpcnode/ton/mainnet/archive"))
+        assertTrue(plan.launch.args.contains("--toolkit-indexer=/data/rpcnode/ton/mainnet/indexer"))
     }
 
     @Test

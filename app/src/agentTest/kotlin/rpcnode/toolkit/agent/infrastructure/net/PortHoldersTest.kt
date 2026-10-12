@@ -47,6 +47,22 @@ class PortHoldersTest
     }
 
     @Test
+    fun udp_sockets_are_read_from_the_unconn_rows()
+    {
+        val parsed = PortHolders.parseUdp(
+            """
+            State  Recv-Q Send-Q Local Address:Port Peer Address:Port Process
+            UNCONN 0      0            0.0.0.0:31311      0.0.0.0:*    users:(("validator-engin",pid=555,fd=7))
+            UNCONN 0      0               [::]:8001          [::]:*    users:(("solana-validato",pid=9,fd=3))
+            UNCONN 0      0          127.0.0.54:53         0.0.0.0:*
+            """.trimIndent(),
+        )
+        assertEquals("validator-engin (pid 555)", parsed[31311])
+        assertEquals("solana-validato (pid 9)", parsed[8001])
+        assertNull(parsed[53])
+    }
+
+    @Test
     fun a_slow_or_failing_ss_gives_no_name_but_never_an_error()
     {
         assertNull(PortHolders.holder(48990, nowMs = { 5L }, run = { null }))

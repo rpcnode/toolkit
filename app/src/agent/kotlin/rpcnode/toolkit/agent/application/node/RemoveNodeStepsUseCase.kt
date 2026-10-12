@@ -61,6 +61,12 @@ interface RemovalOps
     fun removeUnits(units: List<String>, network: String, env: String): HostNodeStartResult
     fun removeSnapshotUnit(nodeId: String)
 
+    /** True when a node folder carries a chain clean-up script (TON: drops the indexer's database, removes MyTonCtrl). */
+    fun hasRemoveHook(dirs: List<Path>): Boolean = false
+
+    /** Runs those scripts (the node is stopped, its files are still there). */
+    fun runRemoveHooks(dirs: List<Path>, wipe: Boolean): HostNodeLaunchSupport.HookResult = HostNodeLaunchSupport.HookResult.NoHook
+
     /** Stops running snapshot downloads that write under [dirs]; returns how many were stopped. */
     fun stopSnapshots(dirs: List<Path>): Int
 
@@ -91,6 +97,25 @@ class HostRemovalOps(private val stopSnapshotJobs: (List<Path>) -> Int = { 0 }) 
 
     override fun removeUnits(units: List<String>, network: String, env: String): HostNodeStartResult =
         HostNodeLaunchSupport.removeUnits(units, network, env)
+
+    override fun hasRemoveHook(dirs: List<Path>): Boolean =
+        dirs.any { Files.isRegularFile(it.resolve(HostNodeLaunchSupport.REMOVE_HOOK)) }
+
+    override fun runRemoveHooks(dirs: List<Path>, wipe: Boolean): HostNodeLaunchSupport.HookResult
+    {
+        val outputs = mutableListOf<String>()
+        for (dir in dirs)
+        {
+            when (val result = HostNodeLaunchSupport.runRemoveHook(dir, wipe))
+            {
+                HostNodeLaunchSupport.HookResult.NoHook -> Unit
+                is HostNodeLaunchSupport.HookResult.Done -> outputs += result.output
+                is HostNodeLaunchSupport.HookResult.Failed -> return result
+            }
+        }
+        return if (outputs.isEmpty()) HostNodeLaunchSupport.HookResult.NoHook
+        else HostNodeLaunchSupport.HookResult.Done(outputs.joinToString("; "))
+    }
 
     override fun removeSnapshotUnit(nodeId: String)
     {
@@ -137,7 +162,7 @@ class HostRemovalOps(private val stopSnapshotJobs: (List<Path>) -> Int = { 0 }) 
 
 /**
  * Node removal on the host as a background job with visible steps:
- * 1. stop the node if it runs, 2. delete its files (node folders on the chosen disk and `/opt/<network>/<env>`),
+ * 1. stop the node if it runs (1b. run the chain's clean-up script, e.g. drop the TON indexer database), 2. delete its files (node folders on the chosen disk and `/opt/<network>/<env>`),
  * 3. delete the systemd service. Clearing terabytes takes minutes, so this never runs inside one HTTP call.
  */
 class RemoveNodeStepsUseCase(
@@ -179,8 +204,9 @@ class RemoveNodeStepsUseCase(
         }
         val initial = RemovalState(
             nodeId = nodeId,
-            steps = listOf(
+            steps = listOfNotNull(
                 RemovalStep("stop", "Stop the node"),
+                RemovalStep("database", "Clean up chain services and database").takeIf { ops.hasRemoveHook(dirs) },
                 RemovalStep("files", "Delete files"),
                 RemovalStep("service", "Delete the service"),
             ),
@@ -223,6 +249,18 @@ class RemoveNodeStepsUseCase(
         {
             if (snapshotsStopped > 0) setStep(nodeId, "stop", "done", "$snapshotsStopped snapshot download(s) stopped")
             else setStep(nodeId, "stop", "skipped", "not running")
+        }
+
+        // 1b. chain clean-up that needs the node folder (TON: drop the indexer's database, role and tablespace)
+        if (ops.hasRemoveHook(dirs))
+        {
+            setStep(nodeId, "database", "running", "")
+            when (val hook = ops.runRemoveHooks(dirs, command.wipeData))
+            {
+                is HostNodeLaunchSupport.HookResult.Failed -> return fail(nodeId, "database", hook.detail)
+                is HostNodeLaunchSupport.HookResult.Done -> setStep(nodeId, "database", "done", hook.output)
+                HostNodeLaunchSupport.HookResult.NoHook -> setStep(nodeId, "database", "skipped", "nothing to drop")
+            }
         }
 
         // The service names (incl. companions such as lighthouse) are recorded inside the node folder:

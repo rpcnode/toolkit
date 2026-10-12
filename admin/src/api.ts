@@ -1785,7 +1785,7 @@ export const api = {
       error?: string
       message?: string
     }>(`/api/nodes/${encodeURIComponent(id)}/snapshot`),
-  nodeSnapshotStart: (id: string, body?: { snapshot?: string; source?: string }) =>
+  nodeSnapshotStart: (id: string, body?: { snapshot?: string; source?: string; url?: string }) =>
     postJSON<{
       ok?: boolean
       type_id?: string
@@ -1794,7 +1794,10 @@ export const api = {
       error?: string
       message?: string
     }>(`/api/nodes/${encodeURIComponent(id)}/snapshot/start`, body ?? {}),
-  nodeSnapshotProbe: (id: string, body?: { snapshot?: string; sources?: string[] }) =>
+  nodeSnapshotProbe: (
+    id: string,
+    body?: { snapshot?: string; sources?: string[]; custom_url?: string },
+  ) =>
     postJSON<{
       ok?: boolean
       results?: Array<{

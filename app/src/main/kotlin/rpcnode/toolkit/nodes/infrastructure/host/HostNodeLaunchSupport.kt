@@ -60,6 +60,51 @@ object HostNodeLaunchSupport
         return installAndRestart(record, nodeDir)
     }
 
+    /** A chain may leave this script in its node dir; the agent runs it when the node is removed (see [runRemoveHook]). */
+    const val REMOVE_HOOK = "bin/rpcnode-on-remove.sh"
+
+    sealed interface HookResult
+    {
+        data object NoHook : HookResult
+        data class Done(val output: String) : HookResult
+        data class Failed(val detail: String) : HookResult
+    }
+
+    /**
+     * Runs `{nodeDir}/bin/rpcnode-on-remove.sh` if the chain installed one (e.g. TON: drop the indexer database, remove MyTonCtrl;
+     * `RPCNODE_REMOVE_WIPE=1` when the chain data is wiped too):
+     * after the node is stopped and before its files are deleted. Output is returned as the step detail.
+     */
+    fun runRemoveHook(nodeDir: Path, wipe: Boolean = false, timeoutMinutes: Long = 15): HookResult
+    {
+        val script = nodeDir.resolve(REMOVE_HOOK)
+        if (!Files.isRegularFile(script))
+        {
+            return HookResult.NoHook
+        }
+        return try
+        {
+            val builder = ProcessBuilder("bash", script.toAbsolutePath().toString()).redirectErrorStream(true)
+            builder.environment()["RPCNODE_REMOVE_WIPE"] = if (wipe) "1" else "0"
+            val process = builder.start()
+            val out = StringBuilder()
+            val reader = Thread { runCatching { process.inputStream.bufferedReader().forEachLine { out.appendLine(it) } } }
+            reader.start()
+            if (!process.waitFor(timeoutMinutes, java.util.concurrent.TimeUnit.MINUTES))
+            {
+                process.destroyForcibly()
+                return HookResult.Failed("remove hook timed out after $timeoutMinutes min")
+            }
+            reader.join(2_000)
+            val text = out.toString().trim().takeLast(600)
+            if (process.exitValue() == 0) HookResult.Done(text) else HookResult.Failed(text.ifEmpty { "remove hook exited ${process.exitValue()}" })
+        }
+        catch (e: Exception)
+        {
+            HookResult.Failed(e.message ?: "remove hook failed")
+        }
+    }
+
     /** `rpcnode-<network>-<env>.service` — one unit per network/env on the host. */
     fun unitName(network: String, env: String): String
     {
@@ -100,7 +145,7 @@ object HostNodeLaunchSupport
     /** Stop an already-installed node unit (Sync step Stop). Companion units first. */
     fun stopUnit(network: String, env: String, nodeDir: Path? = null): HostNodeStartResult
     {
-        for (companion in readCompanions(nodeDir).asReversed())
+        for (companion in ownedUnits(network, env, nodeDir).asReversed())
         {
             val stopped = stopOneUnit(companion, network, env)
             if (stopped is HostNodeStartResult.Failed)
@@ -148,7 +193,7 @@ object HostNodeLaunchSupport
     fun removeUnit(network: String, env: String, nodeDir: Path? = null): HostNodeStartResult
     {
         val unit = resolveUnit(network, env, nodeDir)
-        val companions = readCompanions(nodeDir)
+        val companions = ownedUnits(network, env, nodeDir)
         val stopped = stopUnit(network, env, nodeDir)
         if (stopped is HostNodeStartResult.Failed)
         {
@@ -178,7 +223,27 @@ object HostNodeLaunchSupport
      * The companion names live in the node directory, so collect them BEFORE that directory is wiped.
      */
     fun nodeUnits(network: String, env: String, nodeDir: Path?): List<String> =
-        (readCompanions(nodeDir) + resolveUnit(network, env, nodeDir)).distinct()
+        (ownedUnits(network, env, nodeDir) + resolveUnit(network, env, nodeDir)).distinct()
+
+    /**
+     * Units that belong to the node besides its main one: the companions recorded in the node dir, plus the helper
+     * units a chain installs by name — `rpcnode-<network>-<env>-bootstrap.service` (TON's MyTonCtrl install, written
+     * outside the companion list on purpose: it must not be restarted with the node) and `…-indexer.service` — found on
+     * disk, so nodes installed before they were recorded are cleaned up too.
+     */
+    fun ownedUnits(
+        network: String,
+        env: String,
+        nodeDir: Path?,
+        systemDir: Path = Path.of("/etc/systemd/system"),
+    ): List<String>
+    {
+        val prefix = "rpcnode-${sanitizeUnitPart(network).ifEmpty { "unknown" }}-${sanitizeUnitPart(env).ifEmpty { "unknown" }}"
+        val byName = listOf("bootstrap", "indexer")
+            .map { "$prefix-$it.service" }
+            .filter { Files.isRegularFile(systemDir.resolve(it)) }
+        return (readCompanions(nodeDir) + byName).distinct()
+    }
 
     /** Stop everything in [units] (companions first), then `disable`, delete the files and reload systemd. */
     fun removeUnits(units: List<String>, network: String, env: String): HostNodeStartResult

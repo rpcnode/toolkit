@@ -39,6 +39,8 @@ class TonNodeProcessStarter : HostNodeProcessStarter
             ?: root.toAbsolutePath().normalize()
         val archive = argPath(launch.args, "--toolkit-archive=")
             ?: root.resolve("archive").toAbsolutePath().normalize()
+        val indexerDir = argPath(launch.args, "--toolkit-indexer=")
+            ?: root.resolve("indexer").toAbsolutePath().normalize()
 
         val toolkit = root.resolve(".toolkit")
         val bin = root.resolve("bin")
@@ -47,6 +49,7 @@ class TonNodeProcessStarter : HostNodeProcessStarter
         {
             Files.createDirectories(blockchain)
             Files.createDirectories(archive)
+            Files.createDirectories(indexerDir)
             Files.createDirectories(toolkit)
             Files.createDirectories(bin)
             Files.createDirectories(logs)
@@ -89,6 +92,28 @@ class TonNodeProcessStarter : HostNodeProcessStarter
                     logFile = logAbs,
                 ),
             )
+            val indexerScript = root.resolve(TonUnitBodies.INDEXER_SCRIPT)
+            Files.writeString(
+                indexerScript,
+                TonUnitBodies.indexerScript(
+                    env = envId,
+                    stateDir = toolkit.toAbsolutePath().normalize().toString(),
+                    indexerDir = indexerDir.toString(),
+                    logFile = root.resolve(TonUnitBodies.INDEXER_LOG).toAbsolutePath().normalize().toString(),
+                    bootstrapMarker = markerPath,
+                    ports = ports,
+                ),
+            )
+            makeExecutable(indexerScript)
+            val removeHook = root.resolve(TonUnitBodies.REMOVE_HOOK_SCRIPT)
+            Files.writeString(
+                removeHook,
+                TonUnitBodies.removeHook(
+                    stateDir = toolkit.toAbsolutePath().normalize().toString(),
+                    indexerDir = indexerDir.toString(),
+                ),
+            )
+            makeExecutable(removeHook)
             makeExecutable(bootScript)
             makeExecutable(startScript)
             Files.writeString(
@@ -144,7 +169,13 @@ class TonNodeProcessStarter : HostNodeProcessStarter
             env = envId,
             nodeDir = root,
             primaryBody = nodeBody,
-            companions = emptyList(),
+            // The v3 indexer (built from source, no Docker) waits for the node install and sync on its own, so it starts with the node.
+            companions = listOf(
+                TonUnitBodies.indexerUnitName(envId) to TonUnitBodies.indexerUnit(
+                    env = envId,
+                    execStart = root.resolve(TonUnitBodies.INDEXER_SCRIPT).toAbsolutePath().normalize().toString(),
+                ),
+            ),
             launch = launch.copy(
                 entry = TonUnitBodies.NODE_START_SCRIPT,
                 logFile = TonUnitBodies.RELATIVE_LOG,

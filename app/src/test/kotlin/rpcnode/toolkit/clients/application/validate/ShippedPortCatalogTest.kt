@@ -3,6 +3,7 @@ package rpcnode.toolkit.clients.application.validate
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.test.fail
+import rpcnode.toolkit.clients.domain.model.PortProtocol
 import rpcnode.toolkit.clients.infrastructure.catalog.YamlClientProgramCatalog
 import rpcnode.toolkit.networks.infrastructure.facts.YamlNetworkFactsRepository
 
@@ -29,5 +30,16 @@ class ShippedPortCatalogTest
                     },
             )
         }
+    }
+
+    @Test
+    fun ton_p2p_is_declared_udp()
+    {
+        val ports = YamlClientProgramCatalog().all()
+            .filter { it.network.value == "ton" }
+            .flatMap { it.ports }
+            .filter { it.role == "p2p" }
+        assertTrue(ports.isNotEmpty(), "ton p2p ports missing")
+        assertTrue(ports.all { it.protocol == PortProtocol.UDP }, "ton p2p must be protocol: udp")
     }
 }

@@ -170,15 +170,15 @@ export function NodePortsPanel({ nodeId, serverId, network, env, liveWhenRunning
                 unknown
               </Badge>
             ) : it.free ? (
-              <Tooltip label="Port is free — nothing listening">
+              <Tooltip label="Nothing is listening on this port">
                 <Badge size="xs" color="red" variant="light">
-                  free
+                  not listening
                 </Badge>
               </Tooltip>
             ) : (
-              <Tooltip label={it.holder ? `Listening · ${it.holder}` : 'Port in use (listening)'}>
+              <Tooltip label={it.holder ? `Listening · ${it.holder}` : 'Port is in use (listening)'}>
                 <Badge size="xs" color="teal" variant="light">
-                  busy
+                  listening
                 </Badge>
               </Tooltip>
             )}

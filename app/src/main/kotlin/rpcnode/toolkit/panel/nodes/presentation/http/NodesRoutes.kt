@@ -1636,14 +1636,14 @@ fun Application.nodesApiRoutes(toolkit: Toolkit)
         post("/api/nodes/{id}/snapshot/start") {
             val id = call.parameters["id"].orEmpty()
             val body = runCatching { call.receive<NodeSnapshotStartBody>() }.getOrElse { NodeSnapshotStartBody() }
-            call.respondNodeSnapshotStart(toolkit.startNodeSnapshot(id, body.snapshot, body.source))
+            call.respondNodeSnapshotStart(toolkit.startNodeSnapshot(id, body.snapshot, body.source, body.url))
         }
 
         post("/api/nodes/{id}/snapshot/probe") {
             val id = call.parameters["id"].orEmpty()
             val body = runCatching { call.receive<NodeSnapshotProbeBody>() }.getOrElse { NodeSnapshotProbeBody() }
             call.respondNodeSnapshotProbe(
-                toolkit.probeNodeSnapshotSources(id, body.snapshot, body.sources),
+                toolkit.probeNodeSnapshotSources(id, body.snapshot, body.sources, body.customUrl),
             )
         }
 

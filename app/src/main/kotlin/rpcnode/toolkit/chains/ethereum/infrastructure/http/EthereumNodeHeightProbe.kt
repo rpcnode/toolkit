@@ -1,5 +1,6 @@
 package rpcnode.toolkit.chains.ethereum.infrastructure.http
 
+import rpcnode.toolkit.nodes.infrastructure.host.LogTail
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -66,15 +67,6 @@ class EthereumNodeHeightProbe(
         {
             return null
         }
-        return try
-        {
-            val bytes = Files.readAllBytes(path)
-            val take = minOf(bytes.size, 256 * 1024)
-            String(bytes, bytes.size - take, take)
-        }
-        catch (_: Exception)
-        {
-            null
-        }
+        return LogTail.read(path, 256 * 1024)
     }
 }

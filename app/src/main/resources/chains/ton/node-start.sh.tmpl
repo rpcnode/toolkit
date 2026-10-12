@@ -30,13 +30,34 @@ mirror_bootstrap_log() {
 if [[ ! -f "$MARKER" ]]; then
   echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] bootstrap marker missing — starting $BOOT_UNIT (details: $BOOT_LOG)"
   BOOT_OFF="$(stat -c%s "$BOOT_LOG" 2>/dev/null || echo 0)"
-  systemctl start --no-block "$BOOT_UNIT" || true
+  # The bootstrap unit is Type=oneshot + RemainAfterExit: after an earlier run it stays "active (exited)" and a plain
+  # `systemctl start` does nothing — a node re-added on a host that already bootstrapped waited for a marker that
+  # never came (no bootstrap.log, no progress). Only a unit that is running right now is left alone.
+  start_bootstrap() {
+    if [[ "$(systemctl is-active "$BOOT_UNIT" 2>/dev/null || true)" == activating ]]; then
+      return 0
+    fi
+    systemctl restart --no-block "$BOOT_UNIT" || true
+  }
+  start_bootstrap
+  idle=0
   while [[ ! -f "$MARKER" ]]; do
     mirror_bootstrap_log
     if systemctl is-failed "$BOOT_UNIT" >/dev/null 2>&1; then
       mirror_bootstrap_log
       echo "bootstrap unit failed" >&2
       exit 1
+    fi
+    # finished (or never started) without a marker: start it again, at most once a minute
+    if [[ "$(systemctl is-active "$BOOT_UNIT" 2>/dev/null || true)" != activating ]]; then
+      idle=$((idle + 5))
+      if (( idle >= 60 )); then
+        echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] bootstrap is not running and left no marker — starting it again"
+        start_bootstrap
+        idle=0
+      fi
+    else
+      idle=0
     fi
     sleep 5
   done

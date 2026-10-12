@@ -9,6 +9,8 @@ Environment=HOME=/root
 Environment=USER=root
 WorkingDirectory={{node_dir}}
 ExecStart={{exec_start}}
+# MyTonCtrl's own services are separate units that node-start.sh starts: stopping the node stops them too
+ExecStop=-/bin/systemctl stop ton_http_api.service ton-http-api.service mytoncore.service validator.service
 Restart=on-failure
 RestartSec=10
 TimeoutStopSec=30

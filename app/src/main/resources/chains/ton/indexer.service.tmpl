@@ -1,0 +1,23 @@
+[Unit]
+Description={{description}}
+After=network-online.target postgresql.service
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Environment=HOME=/root
+Environment=USER=root
+# optional overrides, e.g. RPCNODE_TON_INDEXER_FROM=latest|<masterchain seqno>, RPCNODE_TON_INDEXER_TAG=v1.2.8
+EnvironmentFile=-/etc/rpcnode/ton.env
+ExecStart={{exec_start}}
+Restart=on-failure
+RestartSec=30
+Nice=10
+# the script stops its processes itself on SIGTERM (PostgreSQL is a system service and keeps running)
+TimeoutStopSec=600
+KillMode=mixed
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

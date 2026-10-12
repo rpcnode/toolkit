@@ -198,6 +198,8 @@ data class AgentPortCheckItemResponse(
     val port: Int,
     val free: Boolean,
     val holder: String? = null,
+    @SerialName("udp_free") val udpFree: Boolean? = null,
+    @SerialName("udp_holder") val udpHolder: String? = null,
 )
 
 @Serializable
@@ -973,7 +975,13 @@ fun Application.agentApiRoutes(
             call.respond(
                 AgentPortsCheckResponse(
                     items = checked.map {
-                        AgentPortCheckItemResponse(port = it.port, free = it.free, holder = it.holder)
+                        AgentPortCheckItemResponse(
+                            port = it.port,
+                            free = it.free,
+                            holder = it.holder,
+                            udpFree = it.udpFree,
+                            udpHolder = it.udpHolder,
+                        )
                     },
                 ),
             )

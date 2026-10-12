@@ -158,6 +158,8 @@ class SolanaNodeProcessStarter : HostNodeProcessStarter
                 SolanaUnitBodies.RPC_MAX_REQUEST_BODY_SIZE,
             ),
             limitNofile = intArg("--toolkit-limit-nofile=", SolanaUnitBodies.NODE_NOFILE),
+            // older panels send no such arg: keep history on, a node without it cannot serve getTransaction
+            txHistory = argValue(args, "--toolkit-rpc-tx-history=") != "0",
         )
     }
 

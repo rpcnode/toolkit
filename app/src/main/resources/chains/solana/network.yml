@@ -133,6 +133,11 @@ clientConfig:
       option: rpc_max_request_body_size
       default: "104857600"
       description: Max JSON-RPC request body (100 MiB)
+    - key: rpc-tx-history
+      source: install_option
+      option: rpc_tx_history
+      default: "true"
+      description: --enable-rpc-transaction-history (getTransaction, getSignaturesForAddress; more ledger disk/IOPS)
     - key: LimitNOFILE
       source: install_option
       option: LimitNOFILE

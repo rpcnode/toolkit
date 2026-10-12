@@ -87,6 +87,20 @@ import {
 
 import type { WizardApi } from './wizardContext'
 
+/** Download source id for the operator's own archive link (matches the panel's `custom` source). */
+export const CUSTOM_SNAPSHOT_SOURCE = 'custom'
+
+function isHttpUrl(raw: string): boolean {
+  const v = raw.trim()
+  if (!v || /\s/.test(v)) return false
+  try {
+    const u = new URL(v)
+    return (u.protocol === 'http:' || u.protocol === 'https:') && !!u.hostname
+  } catch {
+    return false
+  }
+}
+
 export function useWizardOrchestration({
   env,
   workload,
@@ -176,6 +190,8 @@ export function useWizardOrchestration({
   const nodeLogScroller = useRef<HTMLDivElement | null>(null)
   const [snapshotPlan, setSnapshotPlan] = useState<Awaited<ReturnType<typeof api.nodeSnapshotPlan>> | null>(null)
   const [snapshotSourceId, setSnapshotSourceId] = useState('')
+  /** Operator's own archive link, used when the `custom` download source is picked. */
+  const [snapshotCustomUrl, setSnapshotCustomUrl] = useState('')
   const [snapshotSpeedById, setSnapshotSpeedById] = useState<Record<string, SnapshotSpeedReading>>({})
   const [snapshotPlanLoading, setSnapshotPlanLoading] = useState(false)
   const [snapshotPlanError, setSnapshotPlanError] = useState<string | null>(null)
@@ -434,9 +450,11 @@ export function useWizardOrchestration({
       snapshotStartsViaNode(status, networkId),
     [snapshotPlan?.via_node, status, networkId],
   )
+  const snapshotCustomUrlValid = useMemo(() => isHttpUrl(snapshotCustomUrl), [snapshotCustomUrl])
   const snapshotDownloadReady = useMemo(() => {
     if (!snapshotPlan?.dest_dir) return false
     if (snapshotViaNode) return true
+    if (snapshotSourceId === CUSTOM_SNAPSHOT_SOURCE) return snapshotCustomUrlValid
     if (selectedSnapshotSource) {
       return selectedSnapshotSource.available === true && !!selectedSnapshotSource.url
     }
@@ -446,6 +464,8 @@ export function useWizardOrchestration({
     snapshotPlan?.url,
     selectedSnapshotSource,
     snapshotViaNode,
+    snapshotSourceId,
+    snapshotCustomUrlValid,
   ])
   const optionalPortBindings = useMemo(
     () => optionalCatalogPorts(clientConfigPorts),
@@ -1913,7 +1933,8 @@ export function useWizardOrchestration({
         res.source ||
         res.sources?.find((s) => s.available)?.id ||
         'official'
-      setSnapshotSourceId(defaultSource)
+      // A direct link the operator picked stays selected when the plan reloads (type change, after Start).
+      setSnapshotSourceId((prev) => (prev === CUSTOM_SNAPSHOT_SOURCE ? prev : defaultSource))
       const types = res.snapshot_types || []
       if (types.length > 0) {
         const group = {
@@ -2039,6 +2060,40 @@ export function useWizardOrchestration({
     }
   }
 
+  /** Speed-test the operator's own link from the host (same sample download as the catalog sources). */
+  async function probeCustomSnapshotUrl() {
+    if (!workload?.id || !snapshotCustomUrlValid) return
+    setSnapshotSpeedById((prev) => ({
+      ...prev,
+      [CUSTOM_SNAPSHOT_SOURCE]: { loading: true },
+    }))
+    try {
+      const res = await api.nodeSnapshotProbe(workload.id, {
+        snapshot: (installOptions.snapshot || '').trim() || undefined,
+        sources: [CUSTOM_SNAPSHOT_SOURCE],
+        custom_url: snapshotCustomUrl.trim(),
+      })
+      if (res.ok === false) {
+        throw new Error(res.message || res.error || 'Could not probe the link')
+      }
+      const row = (res.results || []).find((r) => r.id === CUSTOM_SNAPSHOT_SOURCE)
+      setSnapshotSpeedById((prev) => ({
+        ...prev,
+        [CUSTOM_SNAPSHOT_SOURCE]: {
+          loading: false,
+          available: row?.available ?? false,
+          bytes_per_sec: row?.bytes_per_sec,
+          detail: row?.detail,
+        },
+      }))
+    } catch (e) {
+      setSnapshotSpeedById((prev) => ({
+        ...prev,
+        [CUSTOM_SNAPSHOT_SOURCE]: { loading: false, error: String((e as Error).message || e) },
+      }))
+    }
+  }
+
   async function persistSnapshotType(typeId: string): Promise<boolean> {
     const id = (typeId || '').trim()
     if (!workload?.id || !id) return false
@@ -2075,9 +2130,14 @@ export function useWizardOrchestration({
       if (!snapshotSourceId) {
         throw new Error('Pick a snapshot download source')
       }
+      const custom = snapshotSourceId === CUSTOM_SNAPSHOT_SOURCE
+      if (custom && !snapshotCustomUrlValid) {
+        throw new Error('Enter a direct http(s) link to the snapshot archive')
+      }
       const res = await api.nodeSnapshotStart(workload.id, {
         snapshot: typeId,
         source: snapshotSourceId,
+        ...(custom ? { url: snapshotCustomUrl.trim() } : {}),
       })
       if (res.ok === false) {
         throw new Error(res.message || res.error || 'Could not start snapshot download')
@@ -3335,6 +3395,7 @@ export function useWizardOrchestration({
     setSnapshotPlanLoading,
     setSnapshotProgress,
     setSnapshotSourceId,
+    setSnapshotCustomUrl,
     setSnapshotSpeedById,
     setSnapshotStarting,
     setStartApplyError,
@@ -3360,6 +3421,9 @@ export function useWizardOrchestration({
     snapshotProgress,
     snapshotSourceId,
     snapshotSpeedById,
+    snapshotCustomUrl,
+    snapshotCustomUrlValid,
+    probeCustomSnapshotUrl,
     snapshotStarting,
     snapshotViaNode,
     startApplyError,

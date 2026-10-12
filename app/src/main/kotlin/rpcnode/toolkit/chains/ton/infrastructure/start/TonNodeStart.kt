@@ -26,6 +26,7 @@ class TonNodeStart : ChainNodeStart
         val blockchain = layout?.roles?.firstOrNull { it.id == "blockchain" }?.dir?.trim().orEmpty()
             .ifEmpty { ctx.nodeDir?.trim().orEmpty() }
         val archive = layout?.roles?.firstOrNull { it.id == "archive" }?.dir?.trim().orEmpty()
+        val indexer = layout?.roles?.firstOrNull { it.id == "indexer" }?.dir?.trim().orEmpty()
         val history = TonInstallOptions.fromJson(ctx.installOptionsJson)
         val args = mutableListOf(
             "--toolkit-env=$env",
@@ -38,6 +39,10 @@ class TonNodeStart : ChainNodeStart
         if (archive.isNotEmpty())
         {
             args += "--toolkit-archive=$archive"
+        }
+        if (indexer.isNotEmpty())
+        {
+            args += "--toolkit-indexer=$indexer"
         }
         return ChainNodeStartPlan(
             launch = NodeLaunchSpec(
