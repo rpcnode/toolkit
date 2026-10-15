@@ -266,9 +266,33 @@ tasks.register<ShadowJar>("agentFatJar") {
         // Client update compares host/panel client versions (UpdateClientOnHostUseCase.accept).
         include("rpcnode/toolkit/clients/application/ClientProgramsVersion*")
         include("rpcnode/toolkit/clients/domain/model/ClientVersionPin*")
+        // Client builds (POST /api/v1/client/build): the Docker runner, its result types and the build spec it reads.
+        include("rpcnode/toolkit/clients/application/ClientBuild*")
+        include("rpcnode/toolkit/clients/domain/model/ClientProgramSpec*")
+        include("rpcnode/toolkit/clients/domain/model/ClientBuildSpec*")
+        include("rpcnode/toolkit/clients/domain/model/ClientArtifact*")
+        include("rpcnode/toolkit/clients/domain/model/ClientVersionSource*")
+        include("rpcnode/toolkit/clients/domain/model/Program*")
+        include("rpcnode/toolkit/clients/domain/model/Port*")
+        include("rpcnode/toolkit/clients/domain/model/ClientProgramRequirements*")
+        include("rpcnode/toolkit/clients/infrastructure/docker/**")
+        // Chain profiles (evmfamily/cometbft/opstack/nonevm) are initialised in the agent and name these panel-side
+        // release/tip/artifact-resolver contracts in their signatures — the JVM resolves them when the class loads.
+        include("rpcnode/toolkit/clients/application/GitHubRelease*")
+        include("rpcnode/toolkit/clients/application/ReleaseFilter*")
+        include("rpcnode/toolkit/clients/application/ArtifactDownloader*")
+        include("rpcnode/toolkit/clients/application/version/**")
+        include("rpcnode/toolkit/clients/domain/model/ClientRelease*")
+        include("rpcnode/toolkit/networks/application/tip/**")
+        include("rpcnode/toolkit/nodes/domain/model/NodeDiskLayout*")
+        include("rpcnode/toolkit/nodes/domain/model/DiskRolePlacement*")
+        include("rpcnode/toolkit/nodes/application/disks/NodeDiskLayoutCodec*")
         // Bsc/Base SnapshotResolver companions are referenced from the agent download path.
         include("rpcnode/toolkit/networks/application/snapshot/SnapshotResolver*")
         include("rpcnode/toolkit/networks/domain/model/SnapshotArchive*")
+        // Proxy check endpoint (POST /api/v1/proxy/check): checker, its model and the HttpClient proxy helper.
+        include("rpcnode/toolkit/proxies/domain/model/**")
+        include("rpcnode/toolkit/proxies/infrastructure/http/HttpProxyChecker*")
         // Outbound ktor-client helper used by chain height probes.
         include("rpcnode/toolkit/shared/infrastructure/http/**")
         include("rpcnode/toolkit/shared/infrastructure/log/**")

@@ -23,7 +23,7 @@ ExecStart={{bin}} node \
   --authrpc.jwtsecret={{jwt_path}} \
   --chain={{reth_chain}} \
   --rollup.sequencer-http={{sequencer_http}} \
-  --rollup.disable-tx-pool-gossip \
+  --disable-tx-gossip \
   --max-outbound-peers=100 \
   --discovery.port={{p2p_port}} \
   --discovery.v5.port={{discovery_v5}} \

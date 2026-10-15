@@ -465,12 +465,12 @@ object HostNodeLaunchSupport
                 ),
             )
         }
-        val unitBody = withOptionalRpcAuthEnvironmentFile(rendered, absNodeDir)
+        val unitBody = NodeProxyEnv.withEnvironmentFile(withOptionalRpcAuthEnvironmentFile(rendered, absNodeDir), absNodeDir)
         return try
         {
             Files.writeString(unitPath, unitBody)
             Files.writeString(nodeDir.resolve(".toolkit/systemd.unit"), "$unit\n")
-            Files.writeString(nodeDir.resolve(".toolkit/launch.json"), json.encodeToString(record) + "\n")
+            writeLaunchRecord(nodeDir, record)
             for (companion in readCompanions(nodeDir))
             {
                 val bodyFile = companionBodyPath(nodeDir, companion)
@@ -478,7 +478,10 @@ object HostNodeLaunchSupport
                 {
                     continue
                 }
-                Files.writeString(Path.of("/etc/systemd/system", companion), Files.readString(bodyFile))
+                Files.writeString(
+                    Path.of("/etc/systemd/system", companion),
+                    NodeProxyEnv.withEnvironmentFile(Files.readString(bodyFile), absNodeDir),
+                )
             }
             val reload = runSystemctl("daemon-reload")
             if (reload.exit != 0)
@@ -516,7 +519,7 @@ object HostNodeLaunchSupport
                     enableAndRestart(companion)?.let { return it }
                 }
             }
-            val started = waitActive(unit, network, env)
+            val started = waitActive(unit, network, env, record.logFile?.let { nodeDir.resolve(it) } ?: logFile)
             if (started is HostNodeStartResult.Started)
             {
                 log.info(
@@ -581,10 +584,16 @@ object HostNodeLaunchSupport
             javaMajor = launch.javaMajor,
             logFile = launch.logFile,
         )
+        // Operator flag overrides (install_options.extra_flags) ride in the launch args and are applied here, so every
+        // unit-based chain gets them without its own template change.
+        val body = UnitFlagOverrides.applyFromArgs(primaryBody, launch.args)
+        // Script-based chains (run.sh) cannot see the unit's flags, so the validated overrides are also written to a
+        // file their scripts read: <node_dir>/.toolkit/extra_flags (removed when there are none).
+        UnitFlagOverrides.writeFile(nodeDir, UnitFlagOverrides.fromArgs(launch.args))
         return try
         {
-            Files.writeString(nodeDir.resolve(".toolkit/systemd.unit.body"), primaryBody)
-            Files.writeString(Path.of("/etc/systemd/system", unit), primaryBody)
+            Files.writeString(nodeDir.resolve(".toolkit/systemd.unit.body"), body)
+            Files.writeString(Path.of("/etc/systemd/system", unit), NodeProxyEnv.withEnvironmentFile(body, nodeDir))
             Files.writeString(nodeDir.resolve(".toolkit/systemd.unit"), "$unit\n")
             val companionNames = companions.map { it.first.trim() }.filter { it.isNotEmpty() }
             Files.writeString(
@@ -600,9 +609,9 @@ object HostNodeLaunchSupport
                 val n = name.trim()
                 if (n.isEmpty()) continue
                 Files.writeString(companionBodyPath(nodeDir, n), body)
-                Files.writeString(Path.of("/etc/systemd/system", n), body)
+                Files.writeString(Path.of("/etc/systemd/system", n), NodeProxyEnv.withEnvironmentFile(body, nodeDir))
             }
-            Files.writeString(nodeDir.resolve(".toolkit/launch.json"), json.encodeToString(record) + "\n")
+            writeLaunchRecord(nodeDir, record)
             val reload = runSystemctl("daemon-reload")
             if (reload.exit != 0)
             {
@@ -638,7 +647,7 @@ object HostNodeLaunchSupport
                     enableAndRestart(name)?.let { return it }
                 }
             }
-            waitActive(unit, net, envId)
+            waitActive(unit, net, envId, launch.logFile?.let { nodeDir.resolve(it) })
         }
         catch (e: Exception)
         {
@@ -683,7 +692,7 @@ object HostNodeLaunchSupport
         return nodeDir.resolve(".toolkit/systemd.companion.$safe.body")
     }
 
-    private fun waitActive(unit: String, network: String, env: String): HostNodeStartResult
+    private fun waitActive(unit: String, network: String, env: String, logFile: Path? = null): HostNodeStartResult
     {
         // Agave (and similar) often binds then panics within a few seconds — do not
         // promote to panel `sync` on a fleeting `active` + MainPID.
@@ -753,11 +762,24 @@ object HostNodeLaunchSupport
         val status = runSystemctl("status", "--no-pager", "-l", unit)
         val hint = lastHint.ifBlank { status.out.take(700) }
         val state = runSystemctl("is-active", unit).out.trim().ifBlank { "unknown" }
+        val tail = logFile?.let { logTail(it) }?.takeIf { it.isNotEmpty() }
+            ?.joinToString("\n", prefix = "\nlast lines of $logFile:\n").orEmpty()
         return HostNodeStartResult.Failed(
             "unit $unit did not stay running (state=$state). " +
-                "Process must remain alive before panel status becomes sync. $hint",
+                "Process must remain alive before panel status becomes sync. $hint$tail",
         )
     }
+
+    /** Last non-empty lines of the node's own log — why the process keeps exiting. */
+    private fun logTail(file: Path, max: Int = 12): List<String> =
+        runCatching {
+            if (!Files.isRegularFile(file)) return@runCatching emptyList()
+            val size = Files.size(file)
+            Files.newInputStream(file).use { input ->
+                if (size > 16_384) input.skip(size - 16_384)
+                String(input.readAllBytes(), Charsets.UTF_8)
+            }.split('\n').map { it.substringAfterLast('\r').trimEnd() }.filter { it.isNotBlank() }.takeLast(max)
+        }.getOrDefault(emptyList())
 
     private fun nRestarts(unit: String): Long
     {
@@ -778,6 +800,19 @@ object HostNodeLaunchSupport
         {
             false
         }
+
+    /** The record keeps the launch args, which may carry secrets (an L1 RPC API key, a signed snapshot URL): owner-only. */
+    private fun writeLaunchRecord(nodeDir: Path, record: HostNodeLaunchRecord)
+    {
+        val file = nodeDir.resolve(".toolkit/launch.json")
+        Files.writeString(file, json.encodeToString(record) + "\n")
+        runCatching {
+            Files.setPosixFilePermissions(
+                file,
+                setOf(java.nio.file.attribute.PosixFilePermission.OWNER_READ, java.nio.file.attribute.PosixFilePermission.OWNER_WRITE),
+            )
+        }
+    }
 
     private fun readLaunchRecord(nodeDir: Path): HostNodeLaunchRecord?
     {

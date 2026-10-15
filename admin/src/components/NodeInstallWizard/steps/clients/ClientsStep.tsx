@@ -23,6 +23,8 @@ function View({
     clientsSyncing,
     clientsSynced,
     clientsError,
+    clientsBuilding,
+    clientsBuildStatus,
     clientsFiles,
     clientsPath,
     syncClientsToHost,
@@ -42,7 +44,15 @@ function View({
                     color={clientsSynced ? 'teal' : clientsError ? 'red' : 'cyan'}
                     variant="light"
                   >
-                    {clientsSynced ? 'ready' : clientsSyncing ? 'syncing' : clientsError ? 'error' : 'pending'}
+                    {clientsSynced
+                      ? 'ready'
+                      : clientsBuilding
+                        ? 'compiling'
+                        : clientsSyncing
+                          ? 'syncing'
+                          : clientsError
+                            ? 'error'
+                            : 'pending'}
                   </Badge>
                 </Group>
                 <Text c="dimmed" size="sm">
@@ -54,6 +64,24 @@ function View({
                 {clientsSyncing && (
                   <Alert color="cyan" title="Syncing to host" icon={<Loader size={16} />}>
                     <Text size="sm">Downloading client files via the host agent…</Text>
+                  </Alert>
+                )}
+
+                {clientsBuilding && !clientsSynced && (
+                  <Alert color="cyan" title="Compiling the client for this host" icon={<Loader size={16} />}>
+                    <Stack gap={4}>
+                      <Text size="sm">{clientsBuilding}</Text>
+                      {clientsBuildStatus && (
+                        <Text size="sm" className="mono">
+                          {clientsBuildStatus}
+                        </Text>
+                      )}
+                      <Text size="sm" c="dimmed">
+                        No binary exists for this server&apos;s CPU architecture yet, so a host agent of the same
+                        architecture is building it (Docker). This can take hours the first time; the step continues
+                        by itself when the client is ready. You can leave this page — the build keeps running.
+                      </Text>
+                    </Stack>
                   </Alert>
                 )}
 

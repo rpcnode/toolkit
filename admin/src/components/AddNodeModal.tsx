@@ -41,6 +41,18 @@ function sameNetEnv(w: Workload, network: string, env: string) {
   )
 }
 
+/** Why a network allows one env per host (shown on the Env step and in errors). */
+function oneEnvReason(network: string): string {
+  switch (network.toLowerCase()) {
+    case 'hyperliquid':
+      return 'Hyperliquid allows only one env (mainnet or testnet) per server — the hl-node client panics if another hl-node process is already running.'
+    case 'ton':
+      return 'TON allows only one env (mainnet or testnet) per server — MyTonCtrl keeps one validator/mytoncore unit set and /var/ton-work per host.'
+    default:
+      return `${network.toUpperCase()} allows only one env per server — its client shares host-wide state between envs.`
+  }
+}
+
 export function AddNodeModal({ opened, onClose, onAdded }: Props) {
   const networks = useNetworksCatalog()
   const [step, setStep] = useState(0)
@@ -64,7 +76,10 @@ export function AddNodeModal({ opened, onClose, onAdded }: Props) {
     a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }),
   )
   const noClients = !clientsLoading && availableNetworks.length === 0
-  const envOptions = network ? envsForNetwork(network, availableNetworks) : []
+  const envOptions = useMemo(
+    () => (network ? envsForNetwork(network, availableNetworks) : []),
+    [network, availableNetworks],
+  )
 
   useEffect(() => {
     if (!opened) return
@@ -154,54 +169,57 @@ export function AddNodeModal({ opened, onClose, onAdded }: Props) {
 
   const duplicateBlocked = !!occupiedSameEnv
 
+  // Evaluated for the server picked on the previous step — never across all servers.
   const envSelectData = useMemo(() => {
     return envOptions.map((e) => {
-      const blocked =
+      const otherEnvOnServer =
         !!network &&
         !!occupiedSameNetwork &&
         occupiedSameNetwork.env !== e.value &&
         networkOneEnvPerHost(network)
+      const alreadyOnServer =
+        !!network &&
+        !!serverId &&
+        workloads.some((w) => w.server_id === serverId && sameNetEnv(w, network, e.value))
       return {
         value: e.value,
-        label: blocked
-          ? `${e.label} (blocked — ${network}/${occupiedSameNetwork!.env} on server)`
-          : e.label,
-        disabled: blocked,
+        label: otherEnvOnServer
+          ? `${e.label} (blocked — ${network}/${occupiedSameNetwork!.env} on this server)`
+          : alreadyOnServer
+            ? `${e.label} (already on this server)`
+            : e.label,
+        disabled: otherEnvOnServer || alreadyOnServer,
       }
     })
-  }, [envOptions, occupiedSameNetwork, network])
+  }, [envOptions, occupiedSameNetwork, network, serverId, workloads])
+
+  // A server change can make the chosen env unavailable: move to the first allowed one.
+  useEffect(() => {
+    const cur = envSelectData.find((e) => e.value === env)
+    if (cur && !cur.disabled) return
+    const next = envSelectData.find((e) => !e.disabled)
+    if (next && next.value !== env) setEnv(next.value)
+  }, [envSelectData, env])
 
   const serverOptions = useMemo(() => {
     const rows = servers.map((s) => {
       const label = s.name || s.id
-      if (!network || !env) {
-        return {
-          value: s.id,
-          label,
-          disabled: false,
-        }
-      }
-      const dup = workloads.find((w) => w.server_id === s.id && sameNetEnv(w, network, env))
-      const other =
-        !dup && networkOneEnvPerHost(network)
-          ? workloads.find(
-              (w) =>
-                w.server_id === s.id &&
-                String(w.network || '').toLowerCase() === network.toLowerCase() &&
-                w.env !== env &&
-                w.status !== 'removing',
-            )
-          : null
-      return {
-        value: s.id,
-        label,
-        disabled: !!other,
-      }
+      const here = network
+        ? workloads.filter(
+            (w) =>
+              w.server_id === s.id &&
+              String(w.network || '').toLowerCase() === network.toLowerCase() &&
+              w.status !== 'removing',
+          )
+        : []
+      // Informational only: another env of this network does not forbid the server for the other env.
+      const suffix = here.length ? ` — ${network}/${here.map((w) => w.env).join(', ')} here` : ''
+      return { value: s.id, label: `${label}${suffix}`, disabled: false, sortKey: label }
     })
-    return rows.sort((a, b) =>
-      a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }),
-    )
-  }, [servers, workloads, network, env])
+    return rows
+      .sort((a, b) => a.sortKey.localeCompare(b.sortKey, undefined, { sensitivity: 'base' }))
+      .map(({ sortKey: _sortKey, ...rest }) => rest)
+  }, [servers, workloads, network])
 
   function openNode(id: string) {
     onClose()
@@ -262,7 +280,7 @@ export function AddNodeModal({ opened, onClose, onAdded }: Props) {
     }
     if (occupiedNet && occupiedNet.env !== env) {
       setError(
-        `${network}/${occupiedNet.env} already on this server — only one Hyperliquid env per host`,
+        `${network}/${occupiedNet.env} already on this server — ${oneEnvReason(network)}`,
       )
       return
     }
@@ -329,12 +347,12 @@ export function AddNodeModal({ opened, onClose, onAdded }: Props) {
       if (!isModEnter(e)) return
       e.preventDefault()
       if (step === 0 && network) setStep(1)
-      else if (step === 1 && env && !envBlocked) setStep(2)
+      else if (step === 1 && serverId) setStep(2)
       else if (step === 2 && canSubmit) void registerNode()
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [opened, busy, step, network, env, envBlocked, canSubmit, registerNode, noClients])
+  }, [opened, busy, step, network, serverId, canSubmit, registerNode, noClients])
 
   return (
     <Modal
@@ -406,56 +424,6 @@ export function AddNodeModal({ opened, onClose, onAdded }: Props) {
             </Stack>
           </Stepper.Step>
 
-          <Stepper.Step label="Env" description="mainnet / test">
-            <Stack gap="sm" mt="md" {...blockProps('modal.add-node.step.env')}>
-              <SearchableKeyboardList
-                key={`env-${network || 'none'}`}
-                label="Environment"
-                items={envSelectData}
-                value={env}
-                onChange={setEnv}
-                onEnterOnSelected={(v) => {
-                  const row = envSelectData.find((e) => e.value === v)
-                  if (row && !row.disabled) setStep(2)
-                }}
-                searchPlaceholder="Search environments…"
-                nothingFoundMessage="No environment"
-                listAriaLabel="Environments"
-                autoFocus={step === 1 && opened}
-                autoSelectFirst
-                disabled={!network}
-              />
-              {network && networkOneEnvPerHost(network) && (
-                <Alert color="yellow" title="One environment per host">
-                  Hyperliquid allows only one env (mainnet or testnet) per server — the hl-node
-                  client panics if another hl-node process is already running.
-                </Alert>
-              )}
-              <TextInput
-                label="Display name (optional)"
-                placeholder={network && env ? `${network}-${env}` : 'optional'}
-                value={name}
-                onChange={(e) => setName(e.currentTarget.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && env && !envBlocked) {
-                    e.preventDefault()
-                    setStep(2)
-                  }
-                }}
-              />
-              <Group justify="space-between">
-                <Button variant="default" onClick={() => setStep(0)}>
-                  Back
-                </Button>
-                <Button onClick={() => setStep(2)} disabled={!env || envBlocked}>
-                  Next <Text span size="xs" c="dimmed" ml={6}>
-                    ↵
-                  </Text>
-                </Button>
-              </Group>
-            </Stack>
-          </Stepper.Step>
-
           <Stepper.Step label="Server" description="host agent">
             <Stack gap="sm" mt="md" {...blockProps('modal.add-node.step.server')}>
               {servers.length === 0 ? (
@@ -468,14 +436,52 @@ export function AddNodeModal({ opened, onClose, onAdded }: Props) {
                   value={serverId}
                   onChange={setServerId}
                   onEnterOnSelected={(v) => {
-                    void registerNode({ serverId: v })
+                    setServerId(v)
+                    setStep(2)
                   }}
                   searchPlaceholder="Search servers…"
                   nothingFoundMessage="No server"
                   listAriaLabel="Servers"
-                  autoFocus={step === 2 && opened}
+                  autoFocus={step === 1 && opened}
                   autoSelectFirst
                 />
+              )}
+              <Group justify="space-between">
+                <Button variant="default" onClick={() => setStep(0)}>
+                  Back
+                </Button>
+                <Button onClick={() => setStep(2)} disabled={!serverId}>
+                  Next <Text span size="xs" c="dimmed" ml={6}>
+                    ↵
+                  </Text>
+                </Button>
+              </Group>
+            </Stack>
+          </Stepper.Step>
+
+          <Stepper.Step label="Env" description="mainnet / test">
+            <Stack gap="sm" mt="md" {...blockProps('modal.add-node.step.env')}>
+              <SearchableKeyboardList
+                key={`env-${network || 'none'}-${serverId || 'none'}`}
+                label="Environment"
+                items={envSelectData}
+                value={env}
+                onChange={setEnv}
+                onEnterOnSelected={(v) => {
+                  const row = envSelectData.find((e) => e.value === v)
+                  if (row && !row.disabled) void registerNode()
+                }}
+                searchPlaceholder="Search environments…"
+                nothingFoundMessage="No environment"
+                listAriaLabel="Environments"
+                autoFocus={step === 2 && opened}
+                autoSelectFirst
+                disabled={!network}
+              />
+              {network && networkOneEnvPerHost(network) && (
+                <Alert color="yellow" title="One environment per host">
+                  {oneEnvReason(network)}
+                </Alert>
               )}
               {duplicateBlocked && occupiedSameEnv && network && env && (
                 <Alert color="orange" title="Already exists">
@@ -485,9 +491,21 @@ export function AddNodeModal({ opened, onClose, onAdded }: Props) {
               {envBlocked && occupiedSameNetwork && !duplicateBlocked && network && (
                 <Alert color="red" title="Environment blocked">
                   {network}/{occupiedSameNetwork.env} is already on this server. Remove it first, or
-                  pick another server.
+                  go Back and pick another server.
                 </Alert>
               )}
+              <TextInput
+                label="Display name (optional)"
+                placeholder={network && env ? `${network}-${env}` : 'optional'}
+                value={name}
+                onChange={(e) => setName(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && canSubmit) {
+                    e.preventDefault()
+                    void registerNode()
+                  }
+                }}
+              />
               {error && step === 2 && (
                 <Alert color="red" title="Error">
                   {error}

@@ -15,7 +15,7 @@ programs:
         urlTemplate: "https://github.com/MystenLabs/sui-genesis/raw/main/mainnet/genesis.blob"
     requirements: { logFile: logs/sui.log }
     ports:
-      - { role: http, port: 9400, label: "JSON-RPC", config: required }
+      - { role: http, port: 9400, label: "gRPC (+ /health)", config: required }
       - { role: metrics, port: 9184, label: "Metrics", config: required }
       - { role: p2p, port: 8084, label: "P2P", config: required }
   - env: testnet
@@ -31,6 +31,6 @@ programs:
         urlTemplate: "https://github.com/MystenLabs/sui-genesis/raw/main/testnet/genesis.blob"
     requirements: { logFile: logs/sui.log }
     ports:
-      - { role: http, port: 9410, label: "JSON-RPC", config: required }
+      - { role: http, port: 9410, label: "gRPC (+ /health)", config: required }
       - { role: metrics, port: 9185, label: "Metrics", config: required }
-      - { role: p2p, port: 8085, label: "P2P", config: required }
+      - { role: p2p, port: 8185, label: "P2P", config: required }

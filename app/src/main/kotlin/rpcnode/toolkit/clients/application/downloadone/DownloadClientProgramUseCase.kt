@@ -7,10 +7,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import rpcnode.toolkit.catalog.domain.NetworkId
 import rpcnode.toolkit.clients.application.companions.ClientCompanionScripts
 import rpcnode.toolkit.clients.application.companions.ClasspathClientCompanionScripts
 import rpcnode.toolkit.clients.application.ArtifactDownloader
+import rpcnode.toolkit.clients.application.ClientBuildRequest
+import rpcnode.toolkit.clients.application.ClientBuildResult
+import rpcnode.toolkit.clients.application.ClientBuilder
+import rpcnode.toolkit.clients.application.build.BuildHostDirectory
+import rpcnode.toolkit.clients.application.builtArtifactName
 import rpcnode.toolkit.clients.application.ClientDownloadPhase
 import rpcnode.toolkit.clients.application.ClientDownloadProgress
 import rpcnode.toolkit.clients.application.ClientDownloadTracker
@@ -26,11 +33,13 @@ import rpcnode.toolkit.clients.application.inferArchFromFileName
 import rpcnode.toolkit.clients.application.inferLaunch
 import rpcnode.toolkit.clients.application.mergeInstallPlanFiles
 import rpcnode.toolkit.clients.application.preferredInstallPlanProgram
+import rpcnode.toolkit.clients.application.installedVersionFor
 import rpcnode.toolkit.clients.application.resolveClientRelease
 import rpcnode.toolkit.clients.application.version.ClientArtifactUrlResolver
 import rpcnode.toolkit.clients.application.version.ClientReleaseResolver
 import rpcnode.toolkit.clients.domain.model.ClientArtifactRole
 import rpcnode.toolkit.clients.domain.model.ClientArtifactSpec
+import rpcnode.toolkit.clients.domain.model.ClientBuildSpec
 import rpcnode.toolkit.clients.domain.model.ClientProgramSpec
 import rpcnode.toolkit.clients.domain.model.ClientVersionPin
 import rpcnode.toolkit.clients.domain.model.sameVersion
@@ -47,6 +56,10 @@ sealed interface DownloadClientProgramResult
  * Resolves the latest version, downloads every artifact/config **in parallel**, writes
  * `manifest.json`/`VERSION`, then persists the pin — only on success: a network/program only
  * shows up in the DB after its first successful download.
+ *
+ * A program with a `build` block is also compiled here (Docker, via [builder]) and the binary is published beside the
+ * source, so hosts download a ready client instead of each compiling it. The pin only moves once the build succeeded;
+ * without a Docker daemon the source alone is published and hosts compile as before.
  */
 class DownloadClientProgramUseCase(
     private val versionRepository: ClientVersionRepository,
@@ -59,14 +72,30 @@ class DownloadClientProgramUseCase(
     private val clientReleaseResolvers: Map<NetworkId, ClientReleaseResolver> = emptyMap(),
     private val artifactUrlResolvers: Map<NetworkId, ClientArtifactUrlResolver> = emptyMap(),
     private val companionScripts: ClientCompanionScripts = ClasspathClientCompanionScripts(),
+    private val builder: ClientBuilder? = null,
+    /** The fleet decides which CPU architectures are compiled; without it every platform of the `build` block is. */
+    private val buildFleet: BuildHostDirectory? = null,
 )
 {
-    suspend operator fun invoke(spec: ClientProgramSpec, force: Boolean = false): DownloadClientProgramResult
+    /** One compile at a time: a Rust/C++ build already uses every core of the build machine. */
+    private val buildLock = Mutex()
+    private val log = org.slf4j.LoggerFactory.getLogger(DownloadClientProgramUseCase::class.java)
+
+    /**
+     * [requiredArch] (`x86_64`/`aarch64`) is the architecture of a host that is about to install this client: it is
+     * built even when no other host runs it, so a node on a new architecture gets a ready binary.
+     */
+    suspend operator fun invoke(
+        spec: ClientProgramSpec,
+        force: Boolean = false,
+        requiredArch: String? = null,
+    ): DownloadClientProgramResult
     {
         val key = ClientProgramKey(spec.network, spec.env, spec.programId)
         tracker.set(key, ClientDownloadProgress(ClientDownloadPhase.QUEUED))
 
-        val installed = versionRepository.find(spec.network, spec.env, spec.programId)?.currentVersion.orEmpty()
+        val installedPin = versionRepository.find(spec.network, spec.env, spec.programId)
+        val installed = installedVersionFor(spec, installedPin?.currentVersion.orEmpty(), installedPin?.currentTag.orEmpty())
         val resolved = resolveClientRelease(spec, githubReleaseClient, clientReleaseResolvers, installed)
         if (resolved.error != null)
         {
@@ -85,8 +114,11 @@ class DownloadClientProgramUseCase(
         }
         val dir = destDir.resolve(networkSeg).resolve(envSeg)
 
-        if (!force && existing != null && existing.probeError.isBlank() && existing.currentVersion.isNotBlank() &&
+        val sameAsPinned = existing != null && existing.currentVersion.isNotBlank() &&
             sameVersion(existing.currentVersion, resolved.version)
+        val buildPlatforms = spec.build?.let { platformsToBuild(it, requiredArch) }.orEmpty()
+        if (!force && existing != null && existing.probeError.isBlank() && sameAsPinned &&
+            (spec.build == null || builtFilesPresent(dir, spec.build, buildPlatforms))
         ) {
             // Keep companion scripts (e.g. Solana run-validator.sh.tmpl) fresh even when
             // the tarball pin is unchanged — agent sync needs them under clients/<env>/.
@@ -96,8 +128,29 @@ class DownloadClientProgramUseCase(
             return DownloadClientProgramResult.Ok(existing)
         }
 
+        var builtStage: Path? = null
         return try
         {
+            // Build first, into a scratch dir: the served dir keeps the previous release (source + binary) until the
+            // new binary exists, so a host syncing mid-build never gets a new source with an old binary.
+            val built = spec.build?.let { build ->
+                when (val result = runBuild(spec, build, buildPlatforms, resolved.version, resolved.tag, dir, key))
+                {
+                    is BuildStep.Failed ->
+                    {
+                        tracker.set(key, ClientDownloadProgress(ClientDownloadPhase.FAIL, error = result.error))
+                        return DownloadClientProgramResult.Failed(result.error)
+                    }
+                    is BuildStep.Done -> result.also { builtStage = it.stage }
+                }
+            }
+            // A new release drops every old binary (hosts prefer a prebuilt file, a stale one would run the old
+            // version); the same release keeps the other architectures' binaries and only adds the new one.
+            if (!sameAsPinned)
+            {
+                spec.build?.let { removeBuiltFiles(dir, it) }
+            }
+
             tracker.set(key, ClientDownloadProgress(ClientDownloadPhase.DOWNLOAD, name = spec.programId))
             val downloadedFiles = coroutineScope {
                 (spec.artifacts + spec.configs).map { artifact ->
@@ -119,7 +172,7 @@ class DownloadClientProgramUseCase(
                         )
                     }
                 }.awaitAll()
-            }
+            } + publishBuilt(built, dir, resolved.tag)
 
             companionScripts.ship(spec.network, dir)
 
@@ -188,6 +241,121 @@ class DownloadClientProgramUseCase(
             val error = e.message ?: "download failed"
             tracker.set(key, ClientDownloadProgress(ClientDownloadPhase.FAIL, error = error))
             DownloadClientProgramResult.Failed(error)
+        }
+        finally
+        {
+            builtStage?.toFile()?.deleteRecursively()
+        }
+    }
+
+    /** True when the pinned release is the one being built, so a forced re-download keeps the binaries it already has. */
+    private suspend fun existingIsSame(spec: ClientProgramSpec, version: String): Boolean =
+        versionRepository.find(spec.network, spec.env, spec.programId)
+            ?.let { it.currentVersion.isNotBlank() && sameVersion(it.currentVersion, version) } == true
+
+    private fun builtFilesPresent(dir: Path, build: ClientBuildSpec, platforms: List<String>): Boolean =
+        platforms.all { platform ->
+            build.outputs.all { output ->
+                java.nio.file.Files.isRegularFile(dir.resolve(builtArtifactName(output, ClientBuildSpec.archOf(platform))))
+            }
+        }
+
+    private sealed interface BuildStep
+    {
+        /** [stage] holds the freshly built files; null when there was nothing to build (no Docker). */
+        data class Done(val stage: Path?, val names: List<String>) : BuildStep
+        data class Failed(val error: String) : BuildStep
+    }
+
+    /** Platforms of [build] that the fleet runs (plus [requiredArch]); all of them when no fleet is wired. */
+    private suspend fun platformsToBuild(build: ClientBuildSpec, requiredArch: String?): List<String>
+    {
+        val fleet = buildFleet ?: return build.platforms
+        val wanted = fleet.hosts().map { it.arch }.toMutableSet()
+        ClientBuildSpec.normalizeArch(requiredArch)?.let { wanted += it }
+        return build.platforms.filter { ClientBuildSpec.archOf(it) in wanted }
+    }
+
+    private suspend fun runBuild(
+        spec: ClientProgramSpec,
+        build: ClientBuildSpec,
+        platforms: List<String>,
+        version: String,
+        tag: String,
+        dir: Path,
+        key: ClientProgramKey,
+    ): BuildStep
+    {
+        val active = builder
+        if (platforms.isEmpty() || (existingIsSame(spec, version) && builtFilesPresent(dir, build, platforms)))
+        {
+            return BuildStep.Done(stage = null, names = emptyList())
+        }
+        if (active == null)
+        {
+            log.warn("{}/{} has a build block but no builder is wired — publishing the source only", spec.network.value, spec.programId)
+            return BuildStep.Done(stage = null, names = emptyList())
+        }
+        val label = "building ${build.outputs.joinToString(", ")} in Docker"
+        tracker.set(key, ClientDownloadProgress(ClientDownloadPhase.BUILD, name = "queued: $label"))
+        return buildLock.withLock {
+            tracker.set(key, ClientDownloadProgress(ClientDownloadPhase.BUILD, name = label))
+            val stage = java.nio.file.Files.createTempDirectory("rpcnode-client-build-")
+            var lastShown = 0L
+            val result = active.build(ClientBuildRequest(spec, version, tag, stage, platforms)) { line ->
+                val now = System.currentTimeMillis()
+                if (line.isNotBlank() && now - lastShown > 2_000)
+                {
+                    lastShown = now
+                    tracker.set(key, ClientDownloadProgress(ClientDownloadPhase.BUILD, name = "$label · ${line.trim().take(90)}"))
+                }
+            }
+            when (result)
+            {
+                is ClientBuildResult.Built -> BuildStep.Done(stage, result.names)
+                is ClientBuildResult.Unavailable ->
+                {
+                    stage.toFile().deleteRecursively()
+                    log.warn("{}/{}: cannot build here ({}) — publishing the source only, hosts compile it", spec.network.value, spec.programId, result.reason)
+                    BuildStep.Done(stage = null, names = emptyList())
+                }
+                is ClientBuildResult.Failed ->
+                {
+                    stage.toFile().deleteRecursively()
+                    BuildStep.Failed("build of ${spec.programId} $tag failed: ${result.error}")
+                }
+            }
+        }
+    }
+
+    /** Previous release's binaries must go: hosts prefer a prebuilt file, so a stale one would run the old version. */
+    private fun removeBuiltFiles(dir: Path, build: ClientBuildSpec)
+    {
+        for (platform in build.platforms.plus(ClientBuildSpec.SUPPORTED_PLATFORMS).distinct())
+        {
+            for (output in build.outputs)
+            {
+                runCatching {
+                    java.nio.file.Files.deleteIfExists(dir.resolve(builtArtifactName(output, ClientBuildSpec.archOf(platform))))
+                }
+            }
+        }
+    }
+
+    private fun publishBuilt(built: BuildStep.Done?, dir: Path, tag: String): List<ClientManifestFileEntry>
+    {
+        val stage = built?.stage ?: return emptyList()
+        try
+        {
+            java.nio.file.Files.createDirectories(dir)
+            return built.names.map { name ->
+                java.nio.file.Files.move(stage.resolve(name), dir.resolve(name), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                ClientManifestFileEntry(name = name, role = "artifact", url = "docker-build:$tag")
+            }
+        }
+        finally
+        {
+            stage.toFile().deleteRecursively()
         }
     }
 

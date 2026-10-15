@@ -1,7 +1,7 @@
 #!/bin/bash
 # RpcNode TON indexer — toncenter v3 API, no containers. Built from source and run as plain processes:
 #   ton-index-postgres (reads the node's DB)  +  Redis (own instance, loopback)  +  event classifier (Python)
-#   +  ton-index-go (the v3 API, loopback :{{api_port}}).
+#   +  ton-index-go (the v3 API, :{{api_port}}).
 # DATABASE: the host's PostgreSQL is used when there is one (it is not touched, only a separate role, database and
 # tablespace for this node are created); when there is none, `postgresql` is installed from apt and tuned for the load.
 # Removing the node runs bin/rpcnode-on-remove.sh, which drops the role, database and tablespace again.
@@ -360,7 +360,7 @@ start_all() {
   # the API forks one process per CPU thread in -prefork mode: cap it, a big host does not need dozens of them
   local threads=$(( $(nproc) / 4 )); (( threads < 1 )) && threads=1; (( threads > 8 )) && threads=8
   local procs=$(( $(nproc) )); (( procs > 16 )) && procs=16
-  GOMAXPROCS="$procs" LD_LIBRARY_PATH="$LIB" start_child api "$BIN/ton-index-go" -pg "$PGURL" -bind "127.0.0.1:$API_PORT" "${api_net[@]}" \
+  GOMAXPROCS="$procs" LD_LIBRARY_PATH="$LIB" start_child api "$BIN/ton-index-go" -pg "$PGURL" -bind "0.0.0.0:$API_PORT" "${api_net[@]}" \
     -v2 "http://127.0.0.1:$HTTP_PORT/" -prefork -threads "$threads"
 }
 

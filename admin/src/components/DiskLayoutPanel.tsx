@@ -9,6 +9,7 @@ import type {
   SnapshotSizeHint,
 } from '../api'
 import { pathOnDataMount } from '../lib/networkPaths'
+import { isOpstackNetwork } from '../lib/opstack'
 
 type Props = {
   network: string
@@ -91,10 +92,17 @@ export function expectedDiskRolesHint(network: string): string {
   if (n === 'solana') return 'ledger / accounts'
   if (n === 'tron') return 'FullNode / Solidity'
   if (n === 'polygon' || n === 'matic') return 'Bor / Heimdall'
-  if (n === 'ethereum' || n === 'base' || n === 'optimism' || n === 'arb') {
+  if (n === 'ethereum' || n === 'base' || n === 'optimism' || n === 'arb' || n === 'arc' || isOpstackNetwork(n)) {
     return 'execution / consensus'
   }
   if (n === 'bsc') return 'geth / beacon'
+  if (n === 'gnosis' || n === 'vana') return 'execution / consensus'
+  if (n === 'sonic') return 'state'
+  if (n === 'kaia') return 'chaindata'
+  if (n === 'monad') return 'state'
+  if (n === 'flare') return 'blockchain'
+  if (n === 'joc') return 'execution'
+  if (n === 'tempo' || n === 'berachain' || n === 'fluent' || n === 'gravity') return 'data'
   if (n === 'sui') return 'state / rocksdb'
   return "this network's roles"
 }

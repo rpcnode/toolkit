@@ -10,7 +10,9 @@ ExecStart={{bin}} \
   --http --http.addr 0.0.0.0 --http.port {{http_port}} \
   --http.api eth,net,web3,txpool,parlia \
   --http.vhosts * \
-  --rpc.allow-unprotected-txs \
+  --ws --ws.addr 0.0.0.0 --ws.port {{ws_port}} \
+  --ws.api eth,net,web3,txpool,parlia \
+  --ws.origins * \
   --syncmode full \
   --gcmode full \
   --tries-verify-mode none \

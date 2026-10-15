@@ -22,6 +22,8 @@ interface NodeRepository
 
     suspend fun saveInstallOptions(id: NodeId, installOptionsJson: String, updatedAt: String): Boolean
 
+    suspend fun saveProxy(id: NodeId, proxyId: String, updatedAt: String): Boolean
+
     suspend fun updateStatus(id: NodeId, status: NodeStatus, updatedAt: String): Boolean
 
     suspend fun updateHeight(

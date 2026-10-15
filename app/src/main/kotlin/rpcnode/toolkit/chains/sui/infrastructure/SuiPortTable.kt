@@ -13,7 +13,7 @@ object SuiPortTable
     {
         return when (SuiClusters.normalizeEnv(env))
         {
-            "testnet" -> SuiPorts(http = 9410, metrics = 9185, p2p = 8085)
+            "testnet" -> SuiPorts(http = 9410, metrics = 9185, p2p = 8185)
             else -> SuiPorts(http = 9400, metrics = 9184, p2p = 8084)
         }
     }

@@ -42,6 +42,9 @@ object SolanaAgaveBins
      */
     fun ensureValidator(nodeDir: Path): EnsureResult
     {
+        // Compiled by the panel's build hosts for this CPU (`agave-validator-<arch>`, synced with the client) and
+        // matching the pinned release: preferred over a copy left in bin/ by an older release or a host build.
+        prebuiltValidator(nodeDir)?.let { return installIntoBin(it, validatorPath(nodeDir)) }
         firstExisting(nodeDirCandidates(nodeDir, VALIDATOR))?.let { found ->
             return installIntoBin(found, validatorPath(nodeDir))
         }
@@ -61,6 +64,13 @@ object SolanaAgaveBins
             )
         }
     }
+
+    /** `agave-validator-<arch>` for this host's CPU, if the client sync brought one. */
+    fun prebuiltValidator(nodeDir: Path): Path? =
+        nodeDir.resolve("$VALIDATOR-${hostArch()}").takeIf { Files.isRegularFile(it) && Files.size(it) > 0 }
+
+    private fun hostArch(): String =
+        if (System.getProperty("os.arch").orEmpty().lowercase().let { it.contains("aarch64") || it.contains("arm64") }) "aarch64" else "x86_64"
 
     fun ensureKeygen(nodeDir: Path): Path?
     {

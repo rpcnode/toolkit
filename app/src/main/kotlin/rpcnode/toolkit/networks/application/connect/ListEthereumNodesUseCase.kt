@@ -2,6 +2,7 @@ package rpcnode.toolkit.networks.application.connect
 
 import java.net.URI
 import rpcnode.toolkit.catalog.domain.NetworkId
+import rpcnode.toolkit.chains.arb.infrastructure.ArbPortTable
 import rpcnode.toolkit.chains.ethereum.infrastructure.EthereumPortTable
 import rpcnode.toolkit.networks.domain.repository.NetworkFactsRepository
 import rpcnode.toolkit.nodes.domain.model.Node
@@ -12,6 +13,9 @@ import rpcnode.toolkit.servers.domain.repository.ServerRepository
 /**
  * Active (or filtered) Ethereum nodes for L2 Start pickers, plus the env's
  * `publicTip` RPC/beacon from `chains/ethereum/network.yml`.
+ *
+ * [parent] = [NetworkId.ARB] lists Arbitrum One nodes instead (parent chain of an Orbit L3 such as Xai): no beacon exists
+ * there, so every beacon field is empty.
  */
 class ListEthereumNodesUseCase(
     private val facts: NetworkFactsRepository,
@@ -54,16 +58,41 @@ class ListEthereumNodesUseCase(
         envRaw: String,
         statusRaw: String = "active",
         serverId: String? = null,
+        parent: NetworkId = NetworkId.ETHEREUM,
     ): Result
     {
-        val ethFacts = facts.factsFor(NetworkId.ETHEREUM) ?: return Result.UnknownEnv
+        if (parent != NetworkId.ETHEREUM && parent != NetworkId.ARB)
+        {
+            return Result.UnknownEnv
+        }
+        val ethFacts = facts.factsFor(parent) ?: return Result.UnknownEnv
         val env = envRaw.trim().lowercase()
         val envFacts = ethFacts.envs.firstOrNull { it.id == env } ?: return Result.UnknownEnv
         val wantedStatus = parseStatusFilter(statusRaw)
-        val ports = EthereumPortTable.forEnv(env)
+        val httpPort: Int
+        val beaconPort: Int?
+        if (parent == NetworkId.ARB)
+        {
+            httpPort = ArbPortTable.forEnv(env).http
+            beaconPort = null
+        }
+        else
+        {
+            val ports = EthereumPortTable.forEnv(env)
+            httpPort = ports.http
+            beaconPort = ports.beacon
+        }
         val publicRpc = envFacts.publicTipUrls.firstOrNull()?.trim().orEmpty()
-        val publicBeacon = envFacts.publicTipBeaconUrls.firstOrNull()?.trim().orEmpty()
-            .ifEmpty { envFacts.l1BeaconUrl?.trim().orEmpty() }
+        // an Arbitrum One parent has no beacon (the `l1Parent.beacon` of `arb` is ITS Ethereum parent's)
+        val publicBeacon = if (parent == NetworkId.ARB)
+        {
+            ""
+        }
+        else
+        {
+            envFacts.publicTipBeaconUrls.firstOrNull()?.trim().orEmpty()
+                .ifEmpty { envFacts.l1BeaconUrl?.trim().orEmpty() }
+        }
         val public = if (publicRpc.isNotEmpty())
         {
             PublicEndpoint(
@@ -79,7 +108,7 @@ class ListEthereumNodesUseCase(
 
         val serverById = servers.list().associateBy { it.id.value }
         val items = nodes.list()
-            .filter { it.network.value == NetworkId.ETHEREUM.value }
+            .filter { it.network.value == parent.value }
             .filter { it.env.value == env }
             .filter { wantedStatus.isEmpty() || it.status.value in wantedStatus }
             .sortedWith(
@@ -100,13 +129,13 @@ class ListEthereumNodesUseCase(
                 }
                 Item(
                     id = node.id.value,
-                    name = node.name.ifBlank { "ethereum ${node.env.value}" },
+                    name = node.name.ifBlank { "${parent.value} ${node.env.value}" },
                     env = node.env.value,
                     status = node.status.value,
                     serverId = node.serverId.value,
                     sameHost = sameHost,
-                    rpc = "http://$host:${ports.http}",
-                    beacon = "http://$host:${ports.beacon}",
+                    rpc = "http://$host:$httpPort",
+                    beacon = if (beaconPort != null) "http://$host:$beaconPort" else "",
                     publicEndpoint = publicRpc.ifEmpty { null },
                 )
             }
@@ -128,6 +157,10 @@ class ListEthereumNodesUseCase(
             return parts.map { NodeStatus.parse(it).value }.toSet()
         }
 
+        /** Network whose nodes a child's parent picker lists: Arbitrum One for Xai, Ethereum for everything else. */
+        fun parentNetworkFor(childNetwork: String): NetworkId =
+            if (childNetwork.trim().lowercase() == "xai") NetworkId.ARB else NetworkId.ETHEREUM
+
         fun hostFromAgentUrl(agentUrl: String): String?
         {
             val raw = agentUrl.trim()
@@ -140,12 +173,13 @@ class ListEthereumNodesUseCase(
             }.getOrNull()
         }
 
-        /** Base/Arb env → ethereum L1 env. */
+        /** Base/Arb env → ethereum L1 env; Xai (an L3) → the `mainnet` Arbitrum One node env (see [parentNetworkFor]). */
         fun l1EnvForChild(childNetwork: String, childEnv: String): String?
         {
             return when (childNetwork.trim().lowercase())
             {
-                "base", "arb" ->
+                "xai" -> "mainnet"
+                "base", "arb", "fuel" ->
                 {
                     val e = childEnv.trim().lowercase()
                     if (e == "sepolia" || e == "testnet") "sepolia" else "mainnet"

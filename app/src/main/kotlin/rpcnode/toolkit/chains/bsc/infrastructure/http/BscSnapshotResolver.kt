@@ -30,6 +30,7 @@ class BscSnapshotResolver : SnapshotResolver
     companion object
     {
         const val SCHEME = "bsc-official"
+        const val MODE_STREAM = "stream"
 
         fun isOfficialUrl(url: String): Boolean =
             url.trim().lowercase().startsWith("$SCHEME://")
@@ -49,22 +50,42 @@ class BscSnapshotResolver : SnapshotResolver
             }
             val cluster = BscClusters.lookup(parts[0])
             val flavor = BscClusters.normalizeSnapshotFlavor(parts[1])
-            val snapRaw = raw.substringAfter("?snap=", "").substringBefore('&').trim()
-                .takeIf { it.isNotBlank() }
-            val snap = snapRaw?.let { decodeSnapDir(it) }?.takeIf { it.isNotBlank() }
-            return OfficialRef(env = cluster.env, flavor = flavor, snapDir = snap)
+            val query = queryParams(raw)
+            val snap = query["snap"]?.let { decodeSnapDir(it) }?.takeIf { it.isNotBlank() }
+            val stream = query["mode"]?.trim()?.lowercase() == MODE_STREAM
+            return OfficialRef(env = cluster.env, flavor = flavor, snapDir = snap, stream = stream)
         }
 
-        fun withSnapDir(url: String, snapDir: String?): String
+        fun withSnapDir(url: String, snapDir: String?): String =
+            withOptions(url, snapDir, stream = parse(url)?.stream == true)
+
+        /**
+         * [stream] = true: the agent pipes each CSV part `HTTP → tar -I lz4` straight into the datadir
+         * instead of fetch-snapshot.sh (no archive staged on the snapshots disk).
+         */
+        fun withOptions(url: String, snapDir: String?, stream: Boolean): String
         {
             val base = url.trim().substringBefore('?')
-            val snap = snapDir?.trim().orEmpty()
-            if (snap.isEmpty())
-            {
-                return base
+            val params = buildList {
+                snapDir?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                    add("snap=${java.net.URLEncoder.encode(it, Charsets.UTF_8)}")
+                }
+                if (stream)
+                {
+                    add("mode=$MODE_STREAM")
+                }
             }
-            return "$base?snap=${java.net.URLEncoder.encode(snap, Charsets.UTF_8)}"
+            return if (params.isEmpty()) base else "$base?${params.joinToString("&")}"
         }
+
+        private fun queryParams(raw: String): Map<String, String> =
+            raw.substringAfter('?', "")
+                .split('&')
+                .mapNotNull { pair ->
+                    val key = pair.substringBefore('=').trim()
+                    if (key.isEmpty()) null else key to pair.substringAfter('=', "").trim()
+                }
+                .toMap()
 
         /** Undoes [withSnapDir] encoding so absolute paths stay absolute (`/` ≠ `%2F`). */
         private fun decodeSnapDir(raw: String): String =
@@ -75,5 +96,6 @@ class BscSnapshotResolver : SnapshotResolver
         val env: String,
         val flavor: String,
         val snapDir: String?,
+        val stream: Boolean = false,
     )
 }

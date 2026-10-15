@@ -20,3 +20,14 @@ fun ethereumNodeMode(installOptionsJson: String?): String
     val node = root["node"]?.jsonPrimitive?.contentOrNull
     return EthereumClusters.normalizeMode(node)
 }
+
+/**
+ * install_options.geth_flags: one `key=value` per line — geth flag overrides edited in Node config.
+ * Parsed and checked by [EthereumGethFlags]; empty when the operator changed nothing.
+ */
+fun ethereumGethFlagsText(installOptionsJson: String?): String
+{
+    val raw = installOptionsJson?.trim().orEmpty()
+    val root = if (raw.isEmpty()) null else runCatching { optionsJson.parseToJsonElement(raw).jsonObject }.getOrNull()
+    return root?.get("geth_flags")?.jsonPrimitive?.contentOrNull.orEmpty()
+}

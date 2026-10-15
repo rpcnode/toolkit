@@ -49,6 +49,25 @@ class SimpleHttp(
             }
         }
 
+    /** GET [url] and return response header [name] (2xx only) — for nodes that publish their height in headers. */
+    suspend fun getHeader(url: String, name: String): String?
+    {
+        val started = System.nanoTime()
+        return try
+        {
+            val resp = http.get(url)
+            val elapsedMs = (System.nanoTime() - started) / 1_000_000
+            HttpIoLog.outbound("GET", url, resp.status.value, elapsedMs)
+            if (!resp.status.isSuccess()) null else resp.headers[name]
+        }
+        catch (e: Exception)
+        {
+            val elapsedMs = (System.nanoTime() - started) / 1_000_000
+            HttpIoLog.outbound("GET", url, HttpStatusCode.BadGateway.value, elapsedMs, e.message)
+            null
+        }
+    }
+
     /** POST with a raw JSON body (default empty object). */
     suspend fun postJson(url: String, body: String = "{}"): String? =
         request("POST", url) {

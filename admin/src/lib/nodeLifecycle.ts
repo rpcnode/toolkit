@@ -417,6 +417,17 @@ export function nodeReadyForOps(status: StatusPayload | null | undefined): boole
   return false
 }
 
+/**
+ * The agent itself reports a snapshot job in flight (not failed, not done). That is fresher than the panel's stored
+ * `snapshot_error` status, which only a later success rewrites — so a leftover error must not hide a live download.
+ */
+export function agentSnapshotRunning(status: StatusPayload | null | undefined): boolean {
+  const snap = status?.snapshot
+  if (!snap || snap.failed || snap.aborted || snap.ready === true) return false
+  const phase = (snap.phase || '').toLowerCase()
+  return !!(snap.busy || snap.wget_running || ['download', 'extract', 'extracting'].includes(phase))
+}
+
 /** Official snapshot ExtraStep still fetching (aria2 / wget) — not done. */
 export function snapshotDownloadLive(status: StatusPayload | null | undefined): boolean {
   const snap = status?.snapshot
@@ -429,7 +440,7 @@ export function snapshotDownloadLive(status: StatusPayload | null | undefined): 
     phase === 'aborted' ||
     snap?.aborted ||
     ns === 'start_error' ||
-    ns.includes('snapshot_error') ||
+    (ns.includes('snapshot_error') && !agentSnapshotRunning(status)) ||
     (Boolean(status?.start_error) && !snap?.busy)
   ) {
     return false
@@ -611,11 +622,12 @@ export function snapshotBlockMessage(
   if (isSolanaDiskProjection(msg) || isSolanaDiskProjection(blob)) return ''
   const failed =
     !!snap?.failed ||
-    ns === 'snapshot_error' ||
+    (ns === 'snapshot_error' && !agentSnapshotRunning(status)) ||
     snapPhase === 'error' ||
-    (phase === 'error' && /snapshot|insufficient disk/i.test(blob))
+    (phase === 'error' && /snapshot|insufficient disk/i.test(blob) && !agentSnapshotRunning(status))
   if (!failed) return ''
-  return msg || 'Snapshot failed'
+  // Agent flagged failure but gave no reason (job state lost, agent restarted, stale snapshot_error): say where to look.
+  return msg || 'Snapshot failed — the agent reported no reason. Check logs/*snapshot*.log in the node directory on the host, then retry'
 }
 
 /** Foreign chain disk/snapshot copy — paths from internal/networks/<id>. */
@@ -710,7 +722,7 @@ export function deriveLifecycleSteps(
       ['download', 'extract', 'extracting'].includes((snap?.phase || '').toLowerCase()))
   const failed =
     allowSnap &&
-    (!!snap?.failed || (workloadStatus || '').toLowerCase() === 'snapshot_error')
+    (!!snap?.failed || ((workloadStatus || '').toLowerCase() === 'snapshot_error' && !agentSnapshotRunning(status)))
   const online = !!(status?.rpc?.reachable || status?.rpc?.http_ok)
   const processUp = !!(
     status?.rpc?.process_up ||
@@ -1046,7 +1058,7 @@ export function deriveNodeLifecycle(
     }
   }
 
-  if (allowSnap && (snap?.failed || wl === 'snapshot_error')) {
+  if (allowSnap && (snap?.failed || (wl === 'snapshot_error' && !agentSnapshotRunning(status)))) {
     return {
       phase: 'error',
       label: 'snapshot error',

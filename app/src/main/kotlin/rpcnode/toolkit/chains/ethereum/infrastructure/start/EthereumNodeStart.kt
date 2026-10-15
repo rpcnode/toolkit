@@ -3,6 +3,8 @@ package rpcnode.toolkit.chains.ethereum.infrastructure.start
 import rpcnode.toolkit.catalog.domain.NetworkId
 import rpcnode.toolkit.chains.ethereum.infrastructure.EthereumClusters
 import rpcnode.toolkit.chains.ethereum.infrastructure.ethereumNodeMode
+import rpcnode.toolkit.chains.ethereum.infrastructure.EthereumGethFlags
+import rpcnode.toolkit.chains.ethereum.infrastructure.ethereumGethFlagsText
 import rpcnode.toolkit.nodes.application.disks.decodeNodeDiskLayout
 import rpcnode.toolkit.nodes.application.start.ChainNodeStart
 import rpcnode.toolkit.nodes.application.start.ChainNodeStartContext
@@ -43,6 +45,11 @@ class EthereumNodeStart : ChainNodeStart
             "--toolkit-archive=${if (archive) "1" else "0"}",
             "--toolkit-chain-id=${cluster.chainId}",
         )
+        val flags = ethereumGethFlagsText(ctx.installOptionsJson).trim()
+        if (flags.isNotEmpty())
+        {
+            args += "--toolkit-geth-flags=${EthereumGethFlags.encode(flags)}"
+        }
         if (executionDatadir.isNotEmpty())
         {
             args += "--toolkit-execution=$executionDatadir"

@@ -54,6 +54,7 @@ import {
   needsInstallWizard,
 } from '../components/NodeInstallWizard'
 import { NodeDiagnosticsPanel } from '../components/NodeDiagnosticsPanel'
+import { NodeReportingNotice } from '../components/NodeReportingNotice'
 import { LifecycleStepper } from '../components/LifecycleStepper'
 import { RemoveNodeModal } from '../components/RemoveNodeModal'
 import { ClientUpdateModal } from '../components/ClientUpdateModal'
@@ -275,8 +276,8 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
     if (!workloadId) return
     setRestartBusy(true)
     try {
-      // Panel process/start re-applies the unit and restarts (no tip /api/v1/node/*).
-      const res = await api.workloadsNodeProcessStart(workloadId)
+      // Panel process/restart stops the unit, then re-applies it from the saved settings and starts it.
+      const res = await api.workloadsNodeProcessRestart(workloadId)
       if (res.ok === false) throw new Error(res.message || res.error || 'restart failed')
       notifications.show({
         color: 'teal',
@@ -746,6 +747,7 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
                 setClientStartError('')
                 setClientOpen(true)
               }}
+              onChanged={() => void reloadWorkload({ soft: true })}
             />
           </AsideSection>
           {workloadId && isNodeUUID(workloadId) ? (
@@ -1030,6 +1032,8 @@ export function EnvDetailPage({ env: envProp, nodeId }: Props) {
             />
           </div>
         ) : null}
+
+        {workload ? <NodeReportingNotice status={workload.status} heightAt={workload.height_at} /> : null}
 
         {workloadId ? <NodeDiagnosticsPanel nodeId={workloadId} /> : null}
 

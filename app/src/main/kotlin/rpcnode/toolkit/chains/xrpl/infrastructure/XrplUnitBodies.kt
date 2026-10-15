@@ -18,10 +18,15 @@ object XrplUnitBodies
     const val HISTORY_JSON = "history.json"
     const val RELATIVE_LOG = "logs/xrpld.log"
     const val BIN_NAME = "xrpld"
+    const val RUN_SCRIPT = "bin/rpcnode-xrpl-run.sh"
+
+    /** The C++ standard xrpld requires (C++23) needs the newest compiler the CI tests. */
+    const val CLANG_MAJOR = 22
 
     fun unit(
         env: String,
         nodeDir: String,
+        execStart: String,
         bin: String,
         conf: String,
         logFile: String,
@@ -33,6 +38,7 @@ object XrplUnitBodies
             mapOf(
                 "description" to "XRP Ledger stock xrpld ($env) — RpcNode",
                 "node_dir" to nodeDir,
+                "exec_start" to execStart,
                 "bin" to bin,
                 "conf" to conf,
                 "log_file" to logFile,
@@ -40,6 +46,26 @@ object XrplUnitBodies
             ),
         )
     }
+
+    /** Runs the [prebuilt] xrpld when it works here, else builds it from [srcTar] (once per release); the unit's main process. */
+    fun runScript(nodeDir: String, srcTar: String, bin: String, conf: String, logFile: String, prebuilt: String = ""): String
+    {
+        return HostSystemdUnitTemplate.render(
+            HostSystemdUnitTemplate.load("xrpl", "run.sh.tmpl"),
+            mapOf(
+                "root" to q(nodeDir),
+                "src_tar" to q(srcTar),
+                "prebuilt" to q(prebuilt),
+                "bin" to q(bin),
+                "conf" to q(conf),
+                "log_file" to q(logFile),
+                "clang_major" to CLANG_MAJOR.toString(),
+                "clang_functions" to HostSystemdUnitTemplate.load("default", "clang-functions.sh").trimEnd(),
+            ),
+        )
+    }
+
+    private fun q(raw: String): String = "'" + raw.replace("'", "'\\''") + "'"
 
     fun cfg(
         cluster: XrplCluster,
@@ -64,15 +90,18 @@ object XrplUnitBodies
             appendLine("# https://xrpl.org/docs/infrastructure/configuration/server-modes/run-xrpld-as-a-stock-server")
             appendLine()
             appendLine("[server]")
-            appendLine("port_rpc_admin_local")
+            appendLine("port_rpc")
             appendLine("port_peer")
             appendLine("port_ws_admin_local")
             appendLine("port_ws_public")
             appendLine("port_grpc")
             appendLine()
-            appendLine("[port_rpc_admin_local]")
+            // Listens on every interface so ingest / the admin / another host can reach the node. `admin` is a list of SOURCE
+            // addresses: only a client connecting from this host (the agent, `server_info`/`feature` checks) gets admin
+            // rights, everybody else gets the public command set (the stock-server defaults of the XRPL docs).
+            appendLine("[port_rpc]")
             appendLine("port = ${ports.http}")
-            appendLine("ip = 127.0.0.1")
+            appendLine("ip = 0.0.0.0")
             appendLine("admin = 127.0.0.1")
             appendLine("protocol = http")
             appendLine()
@@ -90,12 +119,12 @@ object XrplUnitBodies
             appendLine()
             appendLine("[port_ws_public]")
             appendLine("port = ${ports.ws}")
-            appendLine("ip = 127.0.0.1")
+            appendLine("ip = 0.0.0.0")
             appendLine("protocol = ws")
             appendLine()
             appendLine("[port_grpc]")
             appendLine("port = ${ports.grpc}")
-            appendLine("ip = 127.0.0.1")
+            appendLine("ip = 0.0.0.0")
             appendLine("secure_gateway = 127.0.0.1")
             appendLine()
             // Empty NuDB: medium even on large hosts — huge cache init stalls the job queue.
@@ -174,5 +203,42 @@ object XrplUnitBodies
                 }
             }
         }
+    }
+
+    /** Single-line cfg sections the operator may override through Node config → Flag overrides, with their value check. */
+    private val CFG_OVERRIDES: Map<String, (String) -> Boolean> = mapOf(
+        "node_size" to { v -> v in setOf("tiny", "small", "medium", "large", "huge") },
+        "peers_max" to { v -> v.toIntOrNull()?.let { it in 1..1000 } == true },
+        "crawl" to { v -> v == "0" || v == "1" },
+    )
+
+    /**
+     * Applies `key=value` overrides to the generated cfg: the single value line under `[key]` is replaced, a missing
+     * section is appended. rippled ignores a second `[node_size]`-style section (it needs exactly one line), so the
+     * existing line must be rewritten, never duplicated. Unknown keys and bad values are dropped.
+     */
+    fun applyCfgOverrides(cfg: String, text: String?): String
+    {
+        val overrides = rpcnode.toolkit.nodes.infrastructure.host.UnitFlagOverrides.parse(text).overrides
+        var out = cfg
+        for ((key, value) in overrides)
+        {
+            val valid = CFG_OVERRIDES[key] ?: continue
+            if (!valid(value))
+            {
+                continue
+            }
+            val section = Regex("(?m)^\\[" + Regex.escape(key) + "\\][ \\t]*\\n[^\\n\\[]*")
+            val hit = section.find(out)
+            out = if (hit != null)
+            {
+                out.replaceRange(hit.range, "[$key]\n$value")
+            }
+            else
+            {
+                out.trimEnd('\n') + "\n\n[$key]\n$value\n"
+            }
+        }
+        return out
     }
 }

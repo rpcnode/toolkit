@@ -33,6 +33,11 @@ data class ClientConfigBindingFacts(
     /** When non-empty the binding applies only to these envs (e.g. a mainnet-only config switch). */
     val onlyEnv: List<String> = emptyList(),
     val whenInstallOptionValue: String? = null,
+    /**
+     * The value is a FILE path (a socket, a generated config): shown on the Start step but never created as a directory
+     * on the host when the client is synced.
+     */
+    val file: Boolean = false,
     /** Optional Start-step live probe (e.g. L1 eth_rpc / beacon_genesis). */
     val testConnect: ClientConfigTestConnectFacts? = null,
 )
@@ -117,7 +122,15 @@ data class NetworkEnvFacts(
     val l1BeaconUrl: String? = null,
     /** Operator hint for L1 parent picker on Start (`l1Parent.pickHelp`). */
     val l1PickHelp: String? = null,
+    /**
+     * Blocks behind the public tip that still count as "caught up" (sync → active). Null = the global default (3).
+     * Chains with sub-second blocks need more: 3 blocks is 1–2 s, below public-RPC latency.
+     */
+    val tipLagBlocks: Long? = null,
 )
+
+/** Default for [NetworkEnvFacts.tipLagBlocks]. */
+const val DEFAULT_TIP_LAG_BLOCKS: Long = 3
 
 /**
  * Static reference facts for one network — display name, envs, disk layout, per-env sizing.

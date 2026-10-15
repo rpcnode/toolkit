@@ -1,5 +1,6 @@
 package rpcnode.toolkit.nodes.application.start
 
+import rpcnode.toolkit.proxies.application.ResolveNodeProxyUrl
 import java.time.Instant
 import rpcnode.toolkit.catalog.domain.NetworkId
 import rpcnode.toolkit.clients.domain.repository.ClientProgramCatalog
@@ -57,6 +58,7 @@ class StartNodeUseCase(
     private val startOnHost: StartNodeOnHost,
     private val chainStarts: Map<NetworkId, ChainNodeStart>,
     private val ensureClients: EnsureNodeClients? = null,
+    private val resolveProxy: ResolveNodeProxyUrl? = null,
     private val clock: () -> String = { Instant.now().toString() },
 )
 {
@@ -130,8 +132,9 @@ class StartNodeUseCase(
             clientVersion = clients.find(node.network, node.env, clientConfig.program)
                 ?.currentVersion
                 .orEmpty(),
-            launch = plan.launch,
+            launch = withExtraFlags(plan.launch, node.installOptionsJson),
             height = plan.height,
+            proxy = resolveProxy?.invoke(node).orEmpty(),
         )
         var started = startOnHost.start(server.agentUrl, server.agentKey, command)
             ?: return StartNodeResult.AgentUnreachable()
@@ -200,3 +203,24 @@ class StartNodeUseCase(
 
 /** Agent message when the launch entry (e.g. FullNode.jar) is not in node_dir. */
 private const val LAUNCH_ENTRY_MISSING = "launch entry missing"
+
+/** Carries `install_options.extra_flags` (operator flag overrides) to the host as one launch arg. */
+internal fun withExtraFlags(launch: NodeLaunchSpec, installOptionsJson: String): NodeLaunchSpec
+{
+    val text = runCatching {
+        kotlinx.serialization.json.Json.parseToJsonElement(installOptionsJson.ifBlank { "{}" })
+            .let { it as? kotlinx.serialization.json.JsonObject }
+            ?.get("extra_flags")
+            ?.let { it as? kotlinx.serialization.json.JsonPrimitive }
+            ?.content
+    }.getOrNull()?.trim().orEmpty()
+    if (text.isEmpty())
+    {
+        return launch
+    }
+    return launch.copy(
+        args = launch.args.filterNot { it.startsWith(rpcnode.toolkit.nodes.infrastructure.host.UnitFlagOverrides.ARG_PREFIX) } +
+            (rpcnode.toolkit.nodes.infrastructure.host.UnitFlagOverrides.ARG_PREFIX +
+                rpcnode.toolkit.nodes.infrastructure.host.UnitFlagOverrides.encode(text)),
+    )
+}

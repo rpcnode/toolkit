@@ -22,7 +22,8 @@ sealed interface ControlNodeProcessResult
  * Sync UI process control.
  * Stop → host `systemctl stop`, status [NodeStatus.STOPPED].
  * Start → full [StartNodeUseCase] (chain recipe + network systemd template + restart),
- * so missing units / missing `.toolkit/launch.json` are repaired automatically.
+ * so missing units / missing `.toolkit/launch.json` are repaired automatically — but only when the unit is not
+ * running: a start on a live unit is a no-op on the host. Use [restart] to apply changed settings.
  */
 class ControlNodeProcessUseCase(
     private val nodes: NodeRepository,
@@ -35,6 +36,20 @@ class ControlNodeProcessUseCase(
     suspend fun stop(idRaw: String): ControlNodeProcessResult = stopOnly(idRaw)
 
     suspend fun start(idRaw: String): ControlNodeProcessResult = fullStart(idRaw)
+
+    /**
+     * Stop, then full start. The host treats a start on a live unit as "already running" and changes nothing, so a
+     * restart that has to re-render the unit (new L1 endpoints, proxy…) must stop it first.
+     */
+    suspend fun restart(idRaw: String): ControlNodeProcessResult
+    {
+        val stopped = stopOnly(idRaw)
+        if (stopped !is ControlNodeProcessResult.Ok)
+        {
+            return stopped
+        }
+        return fullStart(idRaw)
+    }
 
     private suspend fun stopOnly(idRaw: String): ControlNodeProcessResult
     {

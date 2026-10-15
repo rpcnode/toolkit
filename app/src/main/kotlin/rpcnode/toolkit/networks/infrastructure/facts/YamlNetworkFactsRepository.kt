@@ -120,6 +120,7 @@ private fun parseEnvFacts(raw: Any?): NetworkEnvFacts?
         l1RpcUrl = parseL1ParentField(m["l1Parent"], "rpc"),
         l1BeaconUrl = parseL1ParentField(m["l1Parent"], "beacon"),
         l1PickHelp = parseL1ParentField(m["l1Parent"], "pickHelp"),
+        tipLagBlocks = asDouble(m["tipLagBlocks"])?.toLong()?.takeIf { it >= 0 },
     )
 }
 
@@ -240,6 +241,7 @@ private fun parseClientConfigBinding(raw: Any?): ClientConfigBindingFacts?
         whenInstallOption = (m["whenInstallOption"] as? String)?.trim()?.ifEmpty { null },
         onlyEnv = (m["onlyEnv"] as? List<*>)?.mapNotNull { (it as? String)?.trim()?.lowercase()?.ifEmpty { null } }.orEmpty(),
         whenInstallOptionValue = (m["whenInstallOptionValue"] as? String)?.trim()?.ifEmpty { null },
+        file = m["file"] as? Boolean ?: false,
         testConnect = parseTestConnect(m["testConnect"]),
     )
 }

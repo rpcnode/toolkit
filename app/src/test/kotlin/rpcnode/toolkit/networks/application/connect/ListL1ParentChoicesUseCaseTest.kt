@@ -100,4 +100,35 @@ class ListL1ParentChoicesUseCaseTest
         assertEquals("http://95.81.240.173:5052", nodeChoice.beacon)
         assertEquals(false, nodeChoice.sameHost)
     }
+
+    @Test
+    fun xai_choices_are_arbitrum_one_nodes() = runTest {
+        val server = Server(
+            id = ServerId.parse("srv-1")!!,
+            name = "host-a",
+            agentUrl = "http://10.0.0.5:9090",
+            createdAt = "t",
+            updatedAt = "t",
+        )
+        val arb = Node(
+            id = NodeId.parse("arb-1")!!,
+            serverId = server.id,
+            name = "Arbitrum One",
+            network = NetworkId.ARB,
+            env = EnvId.parse("mainnet")!!,
+            status = NodeStatus.ACTIVE,
+            createdAt = "t",
+            updatedAt = "t",
+        )
+        val uc = ListL1ParentChoicesUseCase(
+            facts = YamlNetworkFactsRepository(),
+            nodes = FakeNodeRepository(listOf(arb)),
+            servers = FakeServerRepository(listOf(server)),
+        )
+        val got = uc("xai", "mainnet", server.id.value)
+        assertIs<ListL1ParentChoicesUseCase.Result.Ready>(got)
+        assertEquals("mainnet", got.value.l1Env)
+        assertTrue(got.value.pickHelp!!.contains("Arbitrum One"))
+        assertTrue(got.value.choices.any { it.kind == "node" && it.sameHost && it.rpc == "http://127.0.0.1:8647" && it.beacon.isEmpty() })
+    }
 }

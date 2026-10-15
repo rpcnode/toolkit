@@ -5,6 +5,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import rpcnode.toolkit.chains.ethereum.infrastructure.EthereumClusters
+import rpcnode.toolkit.chains.ethereum.infrastructure.EthereumGethFlags
 import rpcnode.toolkit.chains.ethereum.infrastructure.EthereumPortTable
 import rpcnode.toolkit.chains.ethereum.infrastructure.EthereumUnitBodies
 import rpcnode.toolkit.nodes.application.start.HostNodeProcessStarter
@@ -33,6 +34,9 @@ class EthereumNodeProcessStarter : HostNodeProcessStarter
         }
         val envId = env.trim().lowercase().ifEmpty { "mainnet" }
         val archive = launch.args.any { it == "--toolkit-archive=1" }
+        val gethFlags = EthereumGethFlags.decode(
+            launch.args.firstOrNull { it.startsWith("--toolkit-geth-flags=") }?.removePrefix("--toolkit-geth-flags=").orEmpty(),
+        )
         val ports = EthereumPortTable.forEnv(envId)
         val cluster = EthereumClusters.lookup(envId)
 
@@ -71,11 +75,13 @@ class EthereumNodeProcessStarter : HostNodeProcessStarter
             datadir = gethData.toString(),
             jwtPath = jwtPath.toString(),
             rpcPort = ports.http,
+            wsPort = ports.ws,
             p2pPort = ports.p2p,
             enginePort = ports.engine,
             cluster = cluster,
             archive = archive,
             logFile = logFile,
+            gethFlags = gethFlags,
         )
         val lhBody = EthereumUnitBodies.lighthouse(
             env = envId,

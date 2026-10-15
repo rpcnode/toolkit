@@ -7,6 +7,8 @@ import rpcnode.toolkit.catalog.domain.NetworkId
 import rpcnode.toolkit.clients.application.InstallPlan
 import rpcnode.toolkit.clients.application.InstallPlanFile
 import rpcnode.toolkit.clients.application.InstallPlanWriter
+import rpcnode.toolkit.clients.application.build.ClientBuildCoordinator
+import rpcnode.toolkit.clients.application.build.ClientReadiness
 import rpcnode.toolkit.clients.application.downloadone.DownloadClientProgramResult
 import rpcnode.toolkit.clients.application.downloadone.DownloadClientProgramUseCase
 import rpcnode.toolkit.clients.application.formatPinsVersion
@@ -76,6 +78,7 @@ class UpdateNodeClientUseCase(
     private val installPlanWriter: InstallPlanWriter,
     private val clientsDestDir: Path,
     private val downloadClient: DownloadClientProgramUseCase,
+    private val clientBuilds: ClientBuildCoordinator,
     private val chainStarts: Map<NetworkId, ChainNodeStart>,
     private val progress: ClientUpdateProgressStore,
 )
@@ -164,6 +167,19 @@ class UpdateNodeClientUseCase(
         }
         for (spec in programs)
         {
+            if (spec.build != null)
+            {
+                // Compiled client: a new release is built per CPU architecture in the background — never inline here.
+                when (val ready = clientBuilds.ensure(spec, server.arch))
+                {
+                    ClientReadiness.Ready -> Unit
+                    is ClientReadiness.Building ->
+                        return Prepare.Err(UpdateNodeClientResult.Failed(error = "client_building", message = ready.detail))
+                    is ClientReadiness.Failed ->
+                        return Prepare.Err(UpdateNodeClientResult.Failed(error = "client_download", message = ready.error))
+                }
+                continue
+            }
             when (val downloaded = downloadClient(spec, force = true))
             {
                 is DownloadClientProgramResult.Ok -> Unit
@@ -202,9 +218,10 @@ class UpdateNodeClientUseCase(
             snapshotTypes = snapshotTypes,
             env = node.env.value,
         )
+        val filePaths = clientConfig.bindings.filter { it.file }.map { it.path }.toSet()
         val patchAssignments = if (flagsOnly)
         {
-            assignments.filter { (_, value) -> value.trim().startsWith("/") }
+            assignments.filter { (path, value) -> value.trim().startsWith("/") && path !in filePaths }
         }
         else
         {

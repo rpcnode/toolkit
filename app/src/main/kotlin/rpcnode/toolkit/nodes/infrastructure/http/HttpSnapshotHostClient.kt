@@ -55,6 +55,7 @@ class HttpSnapshotHostClient(
                     destDir = command.destDir,
                     streamUnpack = command.streamUnpack,
                     sizeBytes = command.sizeBytes,
+                    proxy = command.proxy,
                 ),
             )
             val resp = post(agentUrl, "/api/v1/snapshot/start", token, body, startTimeout)
@@ -219,6 +220,7 @@ private data class SnapshotStartPayload(
     @SerialName("dest_dir") val destDir: String,
     @SerialName("stream_unpack") val streamUnpack: Boolean = false,
     @SerialName("size_bytes") val sizeBytes: Long? = null,
+    val proxy: String = "",
 )
 
 @Serializable

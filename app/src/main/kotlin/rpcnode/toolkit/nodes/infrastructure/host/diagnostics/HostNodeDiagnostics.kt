@@ -7,6 +7,10 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
+import rpcnode.toolkit.chains.arb.infrastructure.ArbDiagnostics
+import rpcnode.toolkit.chains.polkadot.infrastructure.PolkadotHistoryDiagnostics
+import rpcnode.toolkit.chains.polkadot.infrastructure.PolkadotIndexerDiagnostics
+import rpcnode.toolkit.chains.cardano.infrastructure.CardanoDiagnostics
 import rpcnode.toolkit.chains.ton.infrastructure.TonDiagnostics
 import rpcnode.toolkit.chains.xrpl.infrastructure.XrplDiagnostics
 
@@ -59,7 +63,12 @@ object HostNodeDiagnostics
                     "ton_network" -> TonDiagnostics.network(check)
                     "ton_http_api" -> TonDiagnostics.httpApi(check)
                     "ton_catchup" -> TonDiagnostics.catchUp(check)
+                    "arb_l1" -> ArbDiagnostics.parentChain(check)
                     "xrpl_sync" -> XrplDiagnostics.sync(check)
+                    "polkadot_indexer" -> PolkadotIndexerDiagnostics.check(check)
+                    "polkadot_history" -> PolkadotHistoryDiagnostics.check(check)
+                    "cardano_ogmios" -> CardanoDiagnostics.ogmios(check)
+                    "cardano_dbsync" -> CardanoDiagnostics.dbSync(check)
                     else -> DiagnosticResult(check.id, "unknown", "Unknown check «${check.id}»", "Update the host agent")
                 }
             }.getOrElse { e ->

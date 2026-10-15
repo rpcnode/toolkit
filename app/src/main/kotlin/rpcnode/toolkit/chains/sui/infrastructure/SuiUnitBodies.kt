@@ -45,6 +45,7 @@ object SuiUnitBodies
         p2pPort: Int,
         genesisPath: String,
         archiveUrl: String,
+        seedPeers: List<SuiSeedPeer> = SuiClusters.lookup(env).seedPeers,
         enableEventProcessing: Boolean = ENABLE_EVENT_PROCESSING,
         numEpochsToRetain: String = NUM_EPOCHS_TO_RETAIN,
         archiveConcurrency: Int = ARCHIVE_CONCURRENCY,
@@ -57,12 +58,23 @@ object SuiUnitBodies
             appendLine("db-path: ${yamlQuote(dbPath)}")
             appendLine()
             appendLine("network-address: \"/ip4/127.0.0.1/tcp/8080/http\"")
-            appendLine("metrics-address: \"127.0.0.1:$metricsPort\"")
+            appendLine("metrics-address: \"0.0.0.0:$metricsPort\"")
+            // Legacy key name: sui-node serves gRPC (and /health) on this address; JSON-RPC answers 404 on current releases.
             appendLine("json-rpc-address: \"0.0.0.0:$rpcPort\"")
             appendLine("enable-event-processing: $enableEventProcessing")
             appendLine()
             appendLine("p2p-config:")
             appendLine("  listen-address: \"0.0.0.0:$p2pPort\"")
+            if (seedPeers.isNotEmpty())
+            {
+                appendLine("  # state-sync seed peers (docs.sui.io full-node guide); a full node without any cannot sync")
+                appendLine("  seed-peers:")
+                for (peer in seedPeers)
+                {
+                    appendLine("    - address: ${yamlQuote(peer.address)}")
+                    appendLine("      peer-id: ${yamlQuote(peer.peerId)}")
+                }
+            }
             appendLine()
             appendLine("genesis:")
             appendLine("  genesis-file-location: ${yamlQuote(genesisPath)}")

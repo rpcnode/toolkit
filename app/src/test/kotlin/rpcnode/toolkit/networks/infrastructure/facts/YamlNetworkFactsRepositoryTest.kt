@@ -73,7 +73,7 @@ class YamlNetworkFactsRepositoryTest
         val repo = YamlNetworkFactsRepository()
         val ids = repo.all().map { it.id.value }
         assertEquals(
-            listOf("arb", "base", "bch", "bitcoin", "bsc", "dash", "doge", "ethereum", "hyperliquid", "ltc", "polygon", "solana", "sui", "ton", "tron", "xrpl", "zcash"),
+            rpcnode.toolkit.ShippedNetworkIds.ALL,
             ids,
         )
 

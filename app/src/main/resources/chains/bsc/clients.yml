@@ -17,6 +17,7 @@ programs:
     ports:
       - { role: p2p, port: 30311, label: "P2P", config: required, protocol: both }
       - { role: http, port: 8575, label: "HTTP RPC", config: required }
+      - { role: ws, port: 8577, label: "WebSocket RPC", config: required }
   - env: testnet
     id: geth
     source: { type: github, repo: bnb-chain/bsc }
@@ -32,3 +33,4 @@ programs:
     ports:
       - { role: p2p, port: 30312, label: "P2P", config: required, protocol: both }
       - { role: http, port: 8576, label: "HTTP RPC", config: required }
+      - { role: ws, port: 8578, label: "WebSocket RPC", config: required }

@@ -48,7 +48,7 @@ clientConfig:
     - key: http-port
       source: catalog_port
       role: http
-      description: JSON-RPC admin HTTP port (127.0.0.1)
+      description: JSON-RPC HTTP port (0.0.0.0; admin rights only from this host)
     - key: p2p-port
       source: catalog_port
       role: p2p
@@ -56,11 +56,11 @@ clientConfig:
     - key: ws-port
       source: catalog_port
       role: ws
-      description: Public WebSocket port (127.0.0.1)
+      description: Public WebSocket port (0.0.0.0)
     - key: grpc-port
       source: catalog_port
       role: grpc
-      description: gRPC port for Clio (127.0.0.1)
+      description: gRPC port for Clio (0.0.0.0; secure_gateway 127.0.0.1)
     - key: xrpl_history
       source: install_option
       option: xrpl_history

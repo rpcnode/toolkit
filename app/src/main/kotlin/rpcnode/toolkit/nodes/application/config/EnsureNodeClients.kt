@@ -20,6 +20,7 @@ fun ApplyNodeClientConfigUseCase.asEnsureNodeClients(): EnsureNodeClients = Ensu
         is ApplyNodeClientConfigResult.Applied -> null
         is ApplyNodeClientConfigResult.SyncFailed -> r.message.ifBlank { r.error }
         is ApplyNodeClientConfigResult.AgentUnreachable -> r.detail.ifBlank { "agent unreachable" }
+        is ApplyNodeClientConfigResult.ClientBuilding -> r.detail
         else -> "client sync not possible: ${r::class.simpleName}"
     }
 }

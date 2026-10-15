@@ -18,6 +18,7 @@ import { normalizeDiskLayoutRoles } from '../../lib/diskLayoutRoles'
 import { agentVersionOutdated } from '../../lib/agentVersion'
 import { pct } from '../../lib/format'
 import { diskRolesFromNetworksCatalog, clientConfigFromNetworksCatalog, l1ParentFromNetworksCatalog, useNetworksCatalog } from '../../lib/networksCatalog'
+import { l1ParentSpec } from '../../lib/l1Parent'
 import {
   kotlinPanelOpsReady,
   nodeReadyForOps,
@@ -38,6 +39,7 @@ import {
   type SetupLaneId,
 } from '../../lib/setupLane'
 import { isSolanaNetwork, isXrplNetwork, workloadNeedsSnapshot } from '../../lib/network'
+import { isOpstackNetwork } from '../../lib/opstack'
 import { agentLogLines } from '../AgentLogsPanel'
 import { type XrplHistoryMode } from '../XrplHistoryPicker'
 import {
@@ -60,6 +62,7 @@ import type {
 } from './types'
 import {
   isNodeTypeOptionGroup,
+  isSnapshotOptionGroup,
   stepIndex,
   wizardSteps,
   wizardStepFromPanelStatus,
@@ -122,6 +125,8 @@ export function useWizardOrchestration({
   const [ports, setPorts] = useState<PlannedPorts | null>(null)
   const [portsLoading, setPortsLoading] = useState(false)
   const [nodePortsChecking, setNodePortsChecking] = useState(false)
+  /** Live host check failed (agent unreachable, …) — bind state of every port is unknown. */
+  const [nodePortsError, setNodePortsError] = useState<string | null>(null)
   const [portsError, setPortsError] = useState<string | null>(null)
   const [checkedPorts, setCheckedPorts] = useState<CheckedCatalogPort[]>([])
   /** Real per-network fixed ports (Kotlin catalog), live-checked against the host agent —
@@ -201,6 +206,9 @@ export function useWizardOrchestration({
   const [clientsSyncing, setClientsSyncing] = useState(false)
   const [clientsSynced, setClientsSynced] = useState(false)
   const [clientsError, setClientsError] = useState<string | null>(null)
+  /** Set while the panel compiles the client for this host's CPU (HTTP 202 client_building): not an error. */
+  const [clientsBuilding, setClientsBuilding] = useState<string | null>(null)
+  const [clientsBuildStatus, setClientsBuildStatus] = useState<string>('')
   const [clientsFiles, setClientsFiles] = useState<string[]>([])
   const [clientsPath, setClientsPath] = useState<string | null>(null)
   const clientsAutoStarted = useRef(false)
@@ -256,7 +264,8 @@ export function useWizardOrchestration({
   const manualBackToClients = useRef(false)
   const networkId = (workload?.network || '').toLowerCase()
   const wantsDiskLayout = MULTI_DISK_NETWORKS.has(networkId)
-  const wantsL1ParentPicker = networkId === 'base' || networkId === 'arb'
+  const wantsL1ParentPicker =
+    networkId === 'base' || networkId === 'arb' || networkId === 'robinhood' || networkId === 'optimism' || networkId === 'xai' || networkId === 'fuel' || isOpstackNetwork(networkId)
 
   useEffect(() => {
     if (!wantsL1ParentPicker || !networkId || !env) {
@@ -276,6 +285,8 @@ export function useWizardOrchestration({
         env: l1Env,
         status: 'active',
         server_id: workload?.server_id || undefined,
+        // Xai's parent chain is Arbitrum One: list the panel's arb nodes
+        network: l1ParentSpec(networkId).chain === 'arb' ? 'arb' : undefined,
       })
       .then((res) => {
         if (cancelled) return
@@ -331,7 +342,8 @@ export function useWizardOrchestration({
     setInstallOptions((prev) => ({
       ...prev,
       l1_rpc: choice.rpc,
-      l1_beacon: choice.beacon,
+      // no beacon on an Arbitrum One parent (Xai): leave the option out
+      ...(l1ParentSpec(networkId).beacon ? { l1_beacon: choice.beacon } : {}),
     }))
     setTestConnectResult({})
   }
@@ -345,7 +357,7 @@ export function useWizardOrchestration({
     [installGroups],
   )
   const snapshotOptionGroups = useMemo(
-    () => installGroups.filter((g) => g.id === 'snapshot'),
+    () => installGroups.filter(isSnapshotOptionGroup),
     [installGroups],
   )
   const wantsNodeTypeStep = nodeTypeOptionGroups.length > 0
@@ -416,6 +428,7 @@ export function useWizardOrchestration({
         clientConfigPorts,
         installOptions,
         snapshotPlan?.snapshot_types || [],
+        env,
       ),
     [
       clientConfig,
@@ -424,6 +437,7 @@ export function useWizardOrchestration({
       clientConfigPorts,
       installOptions,
       snapshotPlan?.snapshot_types,
+      env,
     ],
   )
   const sysctlKeyByOption = useMemo(() => {
@@ -479,13 +493,15 @@ export function useWizardOrchestration({
     if (!usingLiveNodeCatalog) {
       if (portsLoading && !portsConfirming) return 'pending'
       if (portsError || reachNote) return 'fail'
+    } else if (nodePortsError && !nodePortsChecking) {
+      return 'fail'
     }
     if (catalogPortsList.length === 0) return 'pending'
     const statuses = catalogPortsList.map(portCheckStatus)
     if (statuses.some((s) => s === 'fail')) return 'fail'
     if (statuses.every((s) => s === 'ok')) return 'ok'
     return 'pending'
-  }, [catalogPortsList, portsLoading, portsConfirming, portsError, reachNote, usingLiveNodeCatalog])
+  }, [catalogPortsList, portsLoading, portsConfirming, portsError, reachNote, usingLiveNodeCatalog, nodePortsError, nodePortsChecking])
   const disksContinueReady = useMemo(() => {
     if (unsupported) return false
     if (diskSaving || portsConfirming) return false
@@ -1126,12 +1142,17 @@ export function useWizardOrchestration({
         })
         setNodePortsCatalog(mapNodePortsResponse(res))
         if (res.ok === false) {
-          setPortsError(res.message || res.error || 'Could not check ports on the host')
+          const msg = res.message || res.error || 'Could not check ports on the host'
+          setPortsError(msg)
+          setNodePortsError(msg)
         } else {
           setPortsError(null)
+          setNodePortsError(null)
         }
       } catch (e) {
-        setPortsError(String((e as Error).message || e))
+        const msg = String((e as Error).message || e)
+        setPortsError(msg)
+        setNodePortsError(msg)
       } finally {
         setNodePortsChecking(false)
       }
@@ -1667,6 +1688,10 @@ export function useWizardOrchestration({
       for (const g of nodeTypeOptionGroups) {
         const v = (installOptions[g.id] || g.default || g.choices[0]?.id || '').trim()
         if (v) payload[g.id] = v
+        if (g.textInput) {
+          const t = (installOptions[g.textInput.id] || '').trim()
+          if (t) payload[g.textInput.id] = t
+        }
       }
       if (wantsXrplHistory && !payload.xrpl_history) {
         payload.xrpl_history = installOptions.xrpl_history || xrplHistory
@@ -1693,6 +1718,35 @@ export function useWizardOrchestration({
     agentAckedStep.current = 'clients'
   }
 
+  const clientsBuildRetry = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (clientsBuildRetry.current) window.clearTimeout(clientsBuildRetry.current)
+    },
+    [],
+  )
+
+  // While the client is being compiled, show what the build is doing (phase/step comes from the panel's client tracker).
+  useEffect(() => {
+    if (!clientsBuilding || !workload?.network || !env) return
+    let stopped = false
+    const poll = async () => {
+      try {
+        const res = await api.clientsPreview(workload.network!, env)
+        const row = (res.rows || []).find((r) => ['build', 'queued', 'download'].includes((r.download_phase || '').toLowerCase()))
+        if (!stopped) setClientsBuildStatus(row?.download_name || '')
+      } catch {
+        /* the panel may be restarting — keep the last status */
+      }
+    }
+    void poll()
+    const t = window.setInterval(() => void poll(), 5_000)
+    return () => {
+      stopped = true
+      window.clearInterval(t)
+    }
+  }, [clientsBuilding, workload?.network, env])
+
   async function syncClientsToHost(): Promise<boolean> {
     if (!workload?.id || clientsSyncing) return false
     setClientsSyncing(true)
@@ -1714,8 +1768,22 @@ export function useWizardOrchestration({
           })
           return true
         }
+        if (err === 'client_building') {
+          // The client for this host's CPU architecture is compiled on a build host: keep the step open and ask again.
+          setClientsSynced(false)
+          setClientsError(null)
+          setClientsBuilding(res.message || 'Compiling the client for this host — this can take a while')
+          if (clientsBuildRetry.current) window.clearTimeout(clientsBuildRetry.current)
+          clientsBuildRetry.current = window.setTimeout(() => {
+            clientsBuildRetry.current = null
+            void syncClientsToHost()
+          }, 15_000)
+          return false
+        }
+        setClientsBuilding(null)
         throw new Error(res.message || res.error || 'Could not sync clients to host')
       }
+      setClientsBuilding(null)
       setClientsSynced(true)
       setClientsFiles(res.files || [])
       setClientsPath(res.path || null)
@@ -1730,6 +1798,7 @@ export function useWizardOrchestration({
       return true
     } catch (e) {
       const msg = String((e as Error).message || e)
+      setClientsBuilding(null)
       setClientsSynced(false)
       setClientsError(msg)
       await setWlStatus('clients_error')
@@ -2138,6 +2207,7 @@ export function useWizardOrchestration({
         snapshot: typeId,
         source: snapshotSourceId,
         ...(custom ? { url: snapshotCustomUrl.trim() } : {}),
+        ...(installOptions.snapshot_mode ? { mode: installOptions.snapshot_mode } : {}),
       })
       if (res.ok === false) {
         throw new Error(res.message || res.error || 'Could not start snapshot download')
@@ -3204,6 +3274,8 @@ export function useWizardOrchestration({
     clientConfigPorts,
     clientConfigRows,
     clientsAutoStarted,
+    clientsBuilding,
+    clientsBuildStatus,
     clientsError,
     clientsFiles,
     clientsPath,
@@ -3301,6 +3373,7 @@ export function useWizardOrchestration({
     nodeLogScroller,
     nodePortsCatalog,
     nodePortsChecking,
+    nodePortsError,
     nodePortsLiveFetched,
     nodeProcessBusy,
     nodeProcessError,

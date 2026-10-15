@@ -2,6 +2,7 @@ package rpcnode.toolkit.nodes.application.diagnostics
 
 import rpcnode.toolkit.clients.domain.repository.ClientProgramCatalog
 import rpcnode.toolkit.networks.domain.repository.NetworkFactsRepository
+import rpcnode.toolkit.nodes.application.snapshot.ResolveSnapshotDestDirUseCase
 import rpcnode.toolkit.nodes.domain.model.NodeId
 import rpcnode.toolkit.nodes.domain.repository.NodeRepository
 import rpcnode.toolkit.servers.domain.repository.ServerRepository
@@ -57,6 +58,8 @@ class GetNodeDiagnosticsUseCase(
     private val facts: NetworkFactsRepository,
     private val catalog: ClientProgramCatalog,
     private val runOnHost: RunNodeDiagnosticsOnHost,
+    /** Lets log-based checks find the node's files; without it they get no `node_dir`. */
+    private val resolveDestDir: ResolveSnapshotDestDirUseCase? = null,
 )
 {
     suspend operator fun invoke(idRaw: String): GetNodeDiagnosticsResult
@@ -76,13 +79,15 @@ class GetNodeDiagnosticsUseCase(
             return GetNodeDiagnosticsResult.AgentUnreachable
         }
         val ports = catalog.programsFor(node.network, node.env).flatMap { it.ports }
+        val nodeDir = resolveDestDir?.invoke(node)?.trim().orEmpty()
         val checks = declared.map { d ->
             NodeDiagnosticCheck(
                 id = d.id,
                 port = d.port?.let { role -> ports.firstOrNull { it.role.equals(role, ignoreCase = true) }?.port } ?: 0,
                 protocol = d.protocol.orEmpty(),
                 // every check may need to know which env it runs for
-                params = d.params + ("env" to node.env.value),
+                params = d.params + ("env" to node.env.value) +
+                    if (nodeDir.isEmpty()) emptyMap() else mapOf("node_dir" to nodeDir),
             )
         }
         return when (val host = runOnHost.run(agentUrl, agentKey, node.id.value, checks))

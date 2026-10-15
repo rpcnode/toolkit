@@ -11,6 +11,8 @@ data class StartNodeOnHostCommand(
     val clientVersion: String = "",
     val launch: NodeLaunchSpec,
     val height: NodeHeightSpec,
+    /** Node's proxy URL from the panel DB ("" = direct) — the agent writes it to `.toolkit/proxy.env`. */
+    val proxy: String = "",
 )
 
 sealed interface StartNodeOnHostResult

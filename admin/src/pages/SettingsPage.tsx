@@ -6,6 +6,7 @@ import { AppChrome, PageHint } from '../components/AppChrome'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { ChannelOriginFields } from '../components/ChannelOriginFields'
 import { ChannelLinks } from '../components/ChannelLinks'
+import { ProxiesCard } from '../components/ProxiesCard'
 import { blockProps } from '../lib/blockId'
 import {
   advertisedOrigin,
@@ -266,6 +267,8 @@ export function SettingsPage() {
             </Group>
           </Stack>
         </Card>
+
+        <ProxiesCard />
 
         <Card {...blockProps('settings.github-token')}>
           <Stack gap="sm">

@@ -9,6 +9,7 @@ import {
   Group,
   Loader,
   Modal,
+  Popover,
   Progress,
   ScrollArea,
   Select,
@@ -21,13 +22,14 @@ import { notifications } from '@mantine/notifications'
 import {
   IconAlertTriangle,
   IconCopy,
+  IconCpu,
   IconDownload,
   IconPlus,
   IconRefresh,
   IconTrash,
 } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, type ClientRow, type ClientsPayload, type NetworkCatalogItem } from '../api'
+import { api, type ClientArch, type ClientRow, type ClientsPayload, type NetworkCatalogItem } from '../api'
 import { AppChrome } from '../components/AppChrome'
 import { NetworkIcon } from '../components/NetworkIcon'
 import {
@@ -722,6 +724,7 @@ function ProgramLine({
             </ActionIcon>
           </Tooltip>
         ) : null}
+        <ArchesButton arches={row.arches} />
         {copyURL ? (
           <Tooltip label="Copy URL">
             <ActionIcon
@@ -752,6 +755,52 @@ function clientRowReady(row: ClientRow): boolean {
 function clientRowFailed(row: ClientRow): boolean {
   if ((row.download_phase || '') === 'fail') return true
   return !!(row.download_error || '').trim()
+}
+
+/** Icon + popover: which CPU architectures of this client the panel has, and which are compiled on demand. */
+function ArchesButton({ arches }: { arches?: ClientArch[] }) {
+  if (!arches || arches.length === 0) return null
+  const ready = arches.filter((a) => a.ready).length
+  return (
+    <Popover width={300} position="bottom-end" withArrow shadow="md">
+      <Popover.Target>
+        <Tooltip label={`Architectures: ${ready}/${arches.length} ready`}>
+          <ActionIcon variant="subtle" size="sm" aria-label="Architectures" color={ready === arches.length ? 'teal' : 'gray'}>
+            <IconCpu size={14} />
+          </ActionIcon>
+        </Tooltip>
+      </Popover.Target>
+      <Popover.Dropdown>
+        <Stack gap={8}>
+          <Text size="xs" fw={600}>
+            CPU architectures
+          </Text>
+          {arches.map((a) => (
+            <Stack key={a.arch} gap={2}>
+              <Group justify="space-between" wrap="nowrap">
+                <Text size="sm" className="mono">
+                  {a.arch}
+                </Text>
+                <Badge size="xs" variant="light" tt="none" color={a.ready ? 'teal' : a.buildable ? 'blue' : 'gray'}>
+                  {a.ready ? 'ready' : a.buildable ? 'compiled on demand' : 'not available'}
+                </Badge>
+              </Group>
+              {a.ready ? (
+                <Text size="xs" c="dimmed" className="mono">
+                  {(a.files || []).join(', ')}
+                  {a.size_bytes ? ` · ${fmtBytes(a.size_bytes)}` : ''}
+                </Text>
+              ) : a.buildable ? (
+                <Text size="xs" c="dimmed">
+                  Built on a host agent of this architecture when a node is created.
+                </Text>
+              ) : null}
+            </Stack>
+          ))}
+        </Stack>
+      </Popover.Dropdown>
+    </Popover>
+  )
 }
 
 function fmtBytes(n: number): string {
@@ -860,7 +909,8 @@ function UpdateClientModal({
               phase === 'queued' ||
               phase === 'download' ||
               phase === 'extract' ||
-              phase === 'write'
+              phase === 'write' ||
+              phase === 'build'
             if (flying && prev) {
               return {
                 ...live,
@@ -896,7 +946,8 @@ function UpdateClientModal({
               phase === 'queued' ||
               phase === 'download' ||
               phase === 'extract' ||
-              phase === 'write'
+              phase === 'write' ||
+              phase === 'build'
             )
           })
           if (failed && !inFlight && syncAcceptedRef.current) {
@@ -1074,7 +1125,11 @@ function UpdateProgramLine({ row, active }: { row: ClientRow; active: boolean })
   const pct = Math.max(0, Math.min(100, Number(row.download_pct) || 0))
   const updated = !needsUpdate(row) && !!(row.pin || '').trim()
   const flying =
-    phase === 'queued' || phase === 'download' || phase === 'extract' || phase === 'write'
+    phase === 'queued' ||
+    phase === 'download' ||
+    phase === 'extract' ||
+    phase === 'write' ||
+    phase === 'build'
   const showBar = active && !row.skip_reason && (flying || updated || failed)
   const unknown = showBar && flying && (phase !== 'download' || !(row.download_total && row.download_total > 0))
 
@@ -1093,7 +1148,8 @@ function UpdateProgramLine({ row, active }: { row: ClientRow; active: boolean })
         ? `${fmtBytes(row.download_bytes || 0)} / ${fmtBytes(row.download_total)}`
         : fmtBytes(row.download_bytes || 0)
     detail = `${versionLabel} · ${row.download_name} · ${size}`
-  } else if (flying && (phase === 'queued' || !phase)) detail = `${versionLabel} · queued`
+  } else if (flying && phase === 'build') detail = `${versionLabel} · ${row.download_name || 'building in Docker'}`
+  else if (flying && (phase === 'queued' || !phase)) detail = `${versionLabel} · queued`
   else if (updated) detail = cur !== '—' ? cur : 'done'
 
   return (
@@ -1480,7 +1536,7 @@ function ProgramDownloadLine({ row, active }: { row: ClientRow; active: boolean 
         ? `${fmtBytes(row.download_bytes || 0)} / ${fmtBytes(row.download_total)}`
         : fmtBytes(row.download_bytes || 0)
     detail = `${row.download_name} · ${size}`
-  }
+  } else if (phase === 'build') detail = row.download_name || 'building in Docker'
   return (
     <Stack gap={4}>
       <Group justify="space-between" wrap="nowrap" gap="sm">

@@ -1,13 +1,16 @@
-# xrpld from Ripple apt pool (amd64 .deb). Version tags from XRPLF/rippled GitHub.
-# No Docker. arm64 has no official xrpld package in this pool — amd64 only.
-# Stable on-disk name: xrpld-amd64.deb. Upstream pool uses xrpld_{version}-1_amd64.deb.
+# xrpld is built from the XRPLF/rippled GitHub source release: the Ripple apt pool lags behind the releases (3.4.1 is not
+# in it, 3.3.0 is amendment blocked on both networks).
+# `build:` — when a release is added, the panel has a host agent of each CPU architecture of the fleet compile it
+# (Docker, xrpld.Dockerfile) and stores the result as xrpld-<arch>; a node on a missing architecture triggers that build.
+# The source stays as xrpld-src.tar.gz: a host that cannot run the prebuilt binary compiles it itself (run.sh.tmpl).
 programs:
   - env: mainnet
     id: xrpld
     source: { type: github, repo: XRPLF/rippled }
+    build: { dockerfile: xrpld.Dockerfile, outputs: [xrpld], platforms: [linux/amd64, linux/arm64] }
     artifacts:
-      - name: "xrpld-amd64.deb"
-        urlTemplate: "https://repos.ripple.com/repos/rippled-deb/pool/stable/xrpld_{version}-1_amd64.deb"
+      - name: "xrpld-src.tar.gz"
+        urlTemplate: "https://github.com/XRPLF/rippled/archive/refs/tags/{tag}.tar.gz"
     requirements: { logFile: logs/xrpld.log }
     ports:
       - { role: http, port: 5005, label: "JSON-RPC", config: required }
@@ -17,9 +20,10 @@ programs:
   - env: testnet
     id: xrpld
     source: { type: github, repo: XRPLF/rippled }
+    build: { dockerfile: xrpld.Dockerfile, outputs: [xrpld], platforms: [linux/amd64, linux/arm64] }
     artifacts:
-      - name: "xrpld-amd64.deb"
-        urlTemplate: "https://repos.ripple.com/repos/rippled-deb/pool/stable/xrpld_{version}-1_amd64.deb"
+      - name: "xrpld-src.tar.gz"
+        urlTemplate: "https://github.com/XRPLF/rippled/archive/refs/tags/{tag}.tar.gz"
     requirements: { logFile: logs/xrpld.log }
     ports:
       - { role: http, port: 5006, label: "JSON-RPC", config: required }

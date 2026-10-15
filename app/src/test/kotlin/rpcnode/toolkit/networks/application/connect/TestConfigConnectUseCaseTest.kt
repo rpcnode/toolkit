@@ -72,4 +72,23 @@ class TestConfigConnectUseCaseTest
         assertTrue(failed.detail.contains("wallet/getnodeinfo"), failed.detail)
         assertTrue(!failed.detail.contains("Unexpected JSON"), failed.detail)
     }
+
+    @Test
+    fun eth_ws_probes_a_websocket_url_through_the_same_host_over_http() = runTest {
+        val seen = mutableListOf<String>()
+        val engine = MockEngine { request ->
+            seen += request.url.toString()
+            respond("""{"jsonrpc":"2.0","id":1,"result":"0x1b4f2c0"}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+        }
+        val uc = TestConfigConnectUseCase(SimpleHttp(HttpClient(engine)))
+        val ok = assertIs<TestConfigConnectUseCase.Result.Ok>(uc("eth_ws", "wss://ethereum-rpc.publicnode.com"))
+        assertTrue(ok.detail.contains("height"), ok.detail)
+        assertIs<TestConfigConnectUseCase.Result.Ok>(uc("eth_ws", "ws://127.0.0.1:8546"))
+        assertIs<TestConfigConnectUseCase.Result.Ok>(uc("eth_ws", "https://ethereum-rpc.publicnode.com"))
+        assertTrue(seen[0].startsWith("https://ethereum-rpc.publicnode.com"), seen[0])
+        assertTrue(seen[1].startsWith("http://127.0.0.1:8546"), seen[1])
+        assertIs<TestConfigConnectUseCase.Result.BadUrl>(uc("eth_ws", "ftp://x"))
+        // eth_rpc keeps refusing ws:// — only http(s) is a JSON-RPC endpoint there
+        assertIs<TestConfigConnectUseCase.Result.BadUrl>(uc("eth_rpc", "wss://ethereum-rpc.publicnode.com"))
+    }
 }

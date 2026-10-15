@@ -90,6 +90,8 @@ data class NodeSnapshotStartBody(
     val source: String? = null,
     /** Direct archive link, used when [source] is `custom`. */
     val url: String? = null,
+    /** Download mode where the network offers one (BSC: `official` | `stream`). */
+    val mode: String? = null,
 )
 
 @Serializable

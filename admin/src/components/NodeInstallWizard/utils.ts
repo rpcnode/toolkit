@@ -18,6 +18,7 @@ import type {
   PlannedPorts,
   UnsupportedCapability,
 } from './types'
+import { OPSTACK_NETWORK_IDS } from '../../lib/opstack'
 
 /** Networks with tip multi_disk_roles (must match catalog DiskRoles). */
 export const MULTI_DISK_NETWORKS = new Set([
@@ -27,13 +28,18 @@ export const MULTI_DISK_NETWORKS = new Set([
   'bsc',
   'arb',
   'robinhood',
+  'xai',
+  'starknet',
   'base',
   'optimism',
+  ...OPSTACK_NETWORK_IDS,
   'tron',
+  'aleo',
   'ton',
   'sui',
   'aptos',
   'avalanche',
+  'arc',
   'bitcoin',
   'ltc',
   'dash',
@@ -45,6 +51,22 @@ export const MULTI_DISK_NETWORKS = new Set([
   'cardano',
   'etc',
   'hyperliquid',
+  'polkadot',
+  'near',
+  'fuel',
+  'stacks',
+  'aleo',
+  'gnosis',
+  'joc',
+  'flare',
+  'sonic',
+  'kaia',
+  'monad',
+  'vana',
+  'tempo',
+  'berachain',
+  'fluent',
+  'gravity',
 ])
 export function detectUnsupportedCapability(res: {
   error?: string
@@ -350,6 +372,7 @@ export function resolveClientConfigPreview(
   ports: CatalogPortPolicy[],
   options: Record<string, string>,
   snapshotTypes: Array<{ id?: string; kind?: string }> = [],
+  env = '',
 ): ClientConfigPreviewRow[] {
   const bindings = clientConfig?.bindings || []
   if (bindings.length === 0) {
@@ -383,6 +406,7 @@ export function resolveClientConfigPreview(
     const description = (b.description || '').trim() || path
     const roleId = (b.role || '').trim().toLowerCase()
     if (!installOptionGateOpen(b, options)) continue
+    if (b.only_env && b.only_env.length > 0 && !b.only_env.includes(env.trim().toLowerCase())) continue
     if (isCatalogPortBindingSource(source) && roleId) {
       if (!catalogPortConfigEnabled(roleId, ports, options)) continue
     }

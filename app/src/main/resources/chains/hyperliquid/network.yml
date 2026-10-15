@@ -2,6 +2,9 @@
 # oneEnvPerHost: hl-node panics if another process matching "hl-node" is already running.
 # Ports live in clients.yml beside this file.
 label: Hyperliquid
+# hl-visor verifies each downloaded hl-node with gpg (pub_key.asc imported into node_dir/.gnupg on Start).
+hostPackages:
+  - gnupg
 diskRoles:
   - id: chain
     label: Hyperliquid data
@@ -57,5 +60,9 @@ clientConfig:
       description: systemd open-file limit for hl-visor
 
 # Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+# nat: hl-node gossips on TCP 4001 (and 4002) and is dialled back by peers; behind a router without the forward it is not served.
 diagnostics:
   - id: path_mtu
+  - id: nat
+    port: p2p
+    protocol: tcp

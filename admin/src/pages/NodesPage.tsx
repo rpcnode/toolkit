@@ -382,6 +382,7 @@ const ENV_RANK: Record<string, number> = {
   hoodi: 16,
   puppynet: 17,
   westend: 18,
+  paseo: 18,
   preprod: 19,
   preview: 20,
   devnet: 21,
@@ -402,7 +403,7 @@ function networkRank(network: string): number {
 function envRank(env: string): number {
   const e = (env || '').toLowerCase()
   if (e in ENV_RANK) return ENV_RANK[e]
-  if (/(?:test|dev|nile|sepolia|signet|regtest|puppynet|westend|preprod|preview|hoodi|shasta)/i.test(e)) {
+  if (/(?:test|dev|nile|sepolia|signet|regtest|puppynet|westend|paseo|preprod|preview|hoodi|shasta)/i.test(e)) {
     return 50
   }
 
@@ -1308,7 +1309,7 @@ function NodeCardView({
   async function confirmNodeRestart() {
     setRestartBusy(true)
     try {
-      const res = await api.workloadsNodeProcessStart(id)
+      const res = await api.workloadsNodeProcessRestart(id)
       if (res.ok === false) throw new Error(res.message || res.error || 'restart failed')
       notifications.show({
         color: 'teal',

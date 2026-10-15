@@ -1,7 +1,11 @@
 package rpcnode.toolkit.nodes.application.snapshot
 
+import rpcnode.toolkit.proxies.application.ResolveNodeProxyUrl
 import java.time.Instant
 import rpcnode.toolkit.chains.bsc.infrastructure.http.BscSnapshotResolver
+import rpcnode.toolkit.chains.evmfamily.infrastructure.EvmLaunchOptions
+import rpcnode.toolkit.chains.evmfamily.infrastructure.EvmProfiles
+import rpcnode.toolkit.chains.evmfamily.infrastructure.EvmSnapshotSentinel
 import rpcnode.toolkit.networks.application.snapshot.PreferCdnSnapshotResult
 import rpcnode.toolkit.networks.application.snapshot.PreferCdnSnapshotUseCase
 import rpcnode.toolkit.networks.application.snapshot.defaultSnapshotType
@@ -44,6 +48,7 @@ class StartNodeSnapshotUseCase(
     private val resolveDestDir: ResolveSnapshotDestDirUseCase,
     private val startOnHost: StartSnapshotOnHost,
     private val ensureClients: EnsureNodeClients? = null,
+    private val resolveProxy: ResolveNodeProxyUrl? = null,
     private val clock: () -> String = { Instant.now().toString() },
 )
 {
@@ -52,6 +57,8 @@ class StartNodeSnapshotUseCase(
         snapshotType: String? = null,
         source: String? = null,
         customUrl: String? = null,
+        /** `stream` = BSC official parts piped into the datadir (no archive on the snapshots disk). */
+        mode: String? = null,
     ): StartNodeSnapshotResult
     {
         // Validate before anything is persisted or re-synced.
@@ -163,7 +170,12 @@ class StartNodeSnapshotUseCase(
         if (BscSnapshotResolver.isOfficialUrl(url))
         {
             val snapRole = snapshotsRoleDir(node.diskLayoutJson)
-            url = BscSnapshotResolver.withSnapDir(url, snapRole)
+            val stream = mode?.trim()?.lowercase() == BscSnapshotResolver.MODE_STREAM
+            url = BscSnapshotResolver.withOptions(url, snapRole, stream)
+        }
+        // A scripted EVM-family restore may need an operator-chosen install option (Monad: the TrieDB block device).
+        EvmProfiles.ALL.firstOrNull { it.network == node.network }?.let { profile ->
+            url = EvmSnapshotSentinel.withParams(url, EvmLaunchOptions.extraFrom(node.installOptionsJson, profile.optionKeys))
         }
         val server = servers.find(node.serverId) ?: return StartNodeSnapshotResult.ServerNotFound
         val agentUrl = server.agentUrl.trim()
@@ -181,6 +193,7 @@ class StartNodeSnapshotUseCase(
                 destDir = dest,
                 streamUnpack = resolved.streamUnpack == true,
                 sizeBytes = resolved.sizeBytes,
+                proxy = resolveProxy?.invoke(node).orEmpty(),
             ),
         ) ?: return StartNodeSnapshotResult.AgentUnreachable
         nodes.updateStatus(id, NodeStatus.parse("snapshot_running"), clock())

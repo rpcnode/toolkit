@@ -40,6 +40,10 @@ object SnapshotArchiveRef
         return lower.startsWith("https://chain.base.org/api/snapshots") ||
             lower.startsWith("base-official://") ||
             lower.startsWith("formal-r2://") ||
+            lower.startsWith("mithril://") ||
+            lower.startsWith("substrate-files://") ||
+            lower.startsWith("arc-snapshots://") ||
+            lower.startsWith("evm-snapshot://") ||
             lower.startsWith("bsc-official://")
     }
 

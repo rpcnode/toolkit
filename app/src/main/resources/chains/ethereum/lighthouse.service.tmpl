@@ -11,7 +11,7 @@ ExecStart={{bin}} bn \
   --execution-endpoint http://127.0.0.1:{{engine_port}} \
   --execution-jwt {{jwt_path}} \
   --checkpoint-sync-url {{checkpoint_url}} \
-  --http --http-address 127.0.0.1 --http-port {{beacon_port}} \
+  --http --http-address 0.0.0.0 --http-port {{beacon_port}} \
   --port {{consensus_p2p}} \
   --supernode \
   --prune-blobs false

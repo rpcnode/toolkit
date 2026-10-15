@@ -40,11 +40,14 @@ import rpcnode.toolkit.servers.infrastructure.http.HttpHostAgentClient
 import rpcnode.toolkit.panel.servers.presentation.http.agentIngestRoutes
 import rpcnode.toolkit.panel.servers.presentation.http.serversApiRoutes
 import rpcnode.toolkit.panel.settings.presentation.http.settingsApiRoutes
+import rpcnode.toolkit.panel.proxies.presentation.http.proxiesApiRoutes
 import rpcnode.toolkit.panel.setup.presentation.http.setupApiRoutes
 import rpcnode.toolkit.wiring.Toolkit
 
 fun main()
 {
+    // Node proxies may need Basic auth on the CONNECT tunnel; the JDK disables it by default.
+    rpcnode.toolkit.shared.infrastructure.http.HttpProxy.allowTunnelBasicAuth()
     val dirs = ProjectServerDirectories()
     val logFile = defaultServerLogFile(logDir = dirs.logDir())
     installServerFileLog(logFile)
@@ -85,6 +88,7 @@ fun Application.module(
     setupApiRoutes(toolkit)
     authApiRoutes(toolkit)
     settingsApiRoutes(toolkit)
+    proxiesApiRoutes(toolkit)
     notificationsApiRoutes(toolkit)
     networksApiRoutes(toolkit)
     clientsApiRoutes(toolkit)

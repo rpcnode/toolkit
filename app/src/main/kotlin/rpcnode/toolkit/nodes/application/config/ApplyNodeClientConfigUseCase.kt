@@ -5,8 +5,8 @@ import java.nio.file.Path
 import rpcnode.toolkit.clients.application.InstallPlan
 import rpcnode.toolkit.clients.application.InstallPlanFile
 import rpcnode.toolkit.clients.application.InstallPlanWriter
-import rpcnode.toolkit.clients.application.downloadone.DownloadClientProgramResult
-import rpcnode.toolkit.clients.application.downloadone.DownloadClientProgramUseCase
+import rpcnode.toolkit.clients.application.build.ClientBuildCoordinator
+import rpcnode.toolkit.clients.application.build.ClientReadiness
 import rpcnode.toolkit.clients.application.inferArchFromFileName
 import rpcnode.toolkit.clients.application.inferLaunch
 import rpcnode.toolkit.clients.application.installPlanFilesIncludingVersion
@@ -37,6 +37,8 @@ sealed interface ApplyNodeClientConfigResult
     data object NoDiskLayout : ApplyNodeClientConfigResult
     data object TemplateMissing : ApplyNodeClientConfigResult
     data object InvalidType : ApplyNodeClientConfigResult
+    /** The client for this host's CPU architecture is being compiled on the panel's build hosts; retry when done. */
+    data class ClientBuilding(val detail: String) : ApplyNodeClientConfigResult
     data class AgentUnreachable(val detail: String = "") : ApplyNodeClientConfigResult
     data class SyncFailed(val error: String, val message: String) : ApplyNodeClientConfigResult
 }
@@ -56,7 +58,7 @@ class ApplyNodeClientConfigUseCase(
     private val syncOnHost: SyncClientOnHost,
     private val installPlanWriter: InstallPlanWriter,
     private val clientsDestDir: Path,
-    private val downloadClient: DownloadClientProgramUseCase,
+    private val clientBuilds: ClientBuildCoordinator,
 )
 {
     suspend operator fun invoke(
@@ -108,13 +110,14 @@ class ApplyNodeClientConfigUseCase(
         }
         for (spec in programs)
         {
-            when (val downloaded = downloadClient(spec, force = false))
+            when (val ready = clientBuilds.ensure(spec, server.arch))
             {
-                is DownloadClientProgramResult.Ok -> Unit
-                is DownloadClientProgramResult.Failed ->
+                ClientReadiness.Ready -> Unit
+                is ClientReadiness.Building -> return ApplyNodeClientConfigResult.ClientBuilding(ready.detail)
+                is ClientReadiness.Failed ->
                     return ApplyNodeClientConfigResult.SyncFailed(
                         error = "client_download",
-                        message = downloaded.error,
+                        message = ready.error,
                     )
             }
         }
@@ -160,9 +163,10 @@ class ApplyNodeClientConfigUseCase(
             env = node.env.value,
         )
         // format: flags — still create datadir paths on the host; do not patch a conf file.
+        val filePaths = clientConfig.bindings.filter { it.file }.map { it.path }.toSet()
         val patchAssignments = if (flagsOnly)
         {
-            assignments.filter { (_, value) -> value.trim().startsWith("/") }
+            assignments.filter { (path, value) -> value.trim().startsWith("/") && path !in filePaths }
         }
         else
         {

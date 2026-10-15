@@ -11,7 +11,7 @@ import rpcnode.toolkit.catalog.domain.NetworkId
  */
 object NetworkPinOnly
 {
-    private val ids = setOf("ton", "robinhood", "optimism")
+    private val ids = setOf("ton", "robinhood")
 
     fun isPinOnly(id: NetworkId): Boolean = id.value in ids
 }

@@ -1,5 +1,17 @@
 package rpcnode.toolkit.wiring
 
+import rpcnode.toolkit.nodes.application.proxy.SetNodeProxyUseCase
+import rpcnode.toolkit.proxies.application.DeleteProxyUseCase
+import rpcnode.toolkit.proxies.application.ListProxiesUseCase
+import rpcnode.toolkit.proxies.application.ResolveNodeProxyUrl
+import rpcnode.toolkit.proxies.application.SaveProxyUseCase
+import rpcnode.toolkit.proxies.application.TestProxyUseCase
+import rpcnode.toolkit.proxies.application.HostAwareProxyCheckRunner
+import rpcnode.toolkit.proxies.domain.model.ProxyCheckRunner
+import rpcnode.toolkit.proxies.infrastructure.http.HttpCheckProxyOnHost
+import rpcnode.toolkit.proxies.infrastructure.http.HttpProxyChecker
+import rpcnode.toolkit.proxies.domain.repository.ProxyRepository
+import rpcnode.toolkit.proxies.infrastructure.persistence.SettingsProxyRepository
 import java.nio.file.Path
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +46,41 @@ import rpcnode.toolkit.chains.polygon.infrastructure.start.PolygonNodeStart
 import rpcnode.toolkit.chains.solana.infrastructure.http.SolanaClientReleaseResolver
 import rpcnode.toolkit.chains.solana.infrastructure.http.SolanaNetworkTipProbe
 import rpcnode.toolkit.chains.solana.infrastructure.start.SolanaNodeStart
+import rpcnode.toolkit.chains.arc.infrastructure.http.ArcClientReleaseResolver
+import rpcnode.toolkit.chains.arc.infrastructure.http.ArcNetworkTipProbe
+import rpcnode.toolkit.chains.arc.infrastructure.http.ArcSnapshotResolver
+import rpcnode.toolkit.chains.arc.infrastructure.start.ArcNodeStart
+import rpcnode.toolkit.chains.avalanche.infrastructure.http.AvalancheClientReleaseResolver
+import rpcnode.toolkit.chains.aptos.infrastructure.http.AptosClientReleaseResolver
+import rpcnode.toolkit.chains.aptos.infrastructure.http.AptosNetworkTipProbe
+import rpcnode.toolkit.chains.aptos.infrastructure.start.AptosNodeStart
+import rpcnode.toolkit.chains.cardano.infrastructure.http.CardanoClientReleaseResolver
+import rpcnode.toolkit.chains.cometbft.infrastructure.CometbftWiring
+import rpcnode.toolkit.chains.nonevm.infrastructure.NonEvmWiring
+import rpcnode.toolkit.chains.evmfamily.infrastructure.EvmWiring
+import rpcnode.toolkit.chains.cardano.infrastructure.http.CardanoNetworkTipProbe
+import rpcnode.toolkit.chains.cardano.infrastructure.http.CardanoSnapshotResolver
+import rpcnode.toolkit.chains.cardano.infrastructure.start.CardanoNodeStart
+import rpcnode.toolkit.chains.etc.infrastructure.http.EtcClientReleaseResolver
+import rpcnode.toolkit.chains.etc.infrastructure.http.EtcNetworkTipProbe
+import rpcnode.toolkit.chains.etc.infrastructure.start.EtcNodeStart
+import rpcnode.toolkit.chains.stellar.infrastructure.http.StellarArtifactUrlResolver
+import rpcnode.toolkit.chains.stellar.infrastructure.http.StellarAptIndex
+import rpcnode.toolkit.chains.stellar.infrastructure.http.StellarClientReleaseResolver
+import rpcnode.toolkit.chains.stellar.infrastructure.http.StellarNetworkTipProbe
+import rpcnode.toolkit.chains.stellar.infrastructure.start.StellarNodeStart
+import rpcnode.toolkit.chains.optimism.infrastructure.http.OptimismNetworkTipProbe
+import rpcnode.toolkit.chains.optimism.infrastructure.start.OptimismNodeStart
+import rpcnode.toolkit.chains.opstack.infrastructure.OpstackWiring
+import rpcnode.toolkit.chains.robinhood.infrastructure.http.RobinhoodClientReleaseResolver
+import rpcnode.toolkit.chains.robinhood.infrastructure.start.RobinhoodNodeStart
+import rpcnode.toolkit.chains.starknet.infrastructure.http.StarknetNetworkTipProbe
+import rpcnode.toolkit.chains.starknet.infrastructure.http.StarknetSnapshotResolver
+import rpcnode.toolkit.chains.starknet.infrastructure.start.StarknetNodeStart
+import rpcnode.toolkit.chains.xai.infrastructure.http.XaiClientReleaseResolver
+import rpcnode.toolkit.chains.xai.infrastructure.start.XaiNodeStart
+import rpcnode.toolkit.chains.avalanche.infrastructure.http.AvalancheNetworkTipProbe
+import rpcnode.toolkit.chains.avalanche.infrastructure.start.AvalancheNodeStart
 import rpcnode.toolkit.chains.sui.infrastructure.http.SuiClientReleaseResolver
 import rpcnode.toolkit.chains.sui.infrastructure.http.SuiNetworkTipProbe
 import rpcnode.toolkit.chains.sui.infrastructure.http.SuiSnapshotResolver
@@ -92,6 +139,12 @@ import rpcnode.toolkit.clients.application.version.ClientReleaseResolver
 import rpcnode.toolkit.clients.application.version.ResolveClientReleaseUseCase
 import rpcnode.toolkit.clients.domain.repository.ClientProgramCatalog
 import rpcnode.toolkit.clients.domain.repository.ClientVersionRepository
+import rpcnode.toolkit.clients.application.build.ClientBuildCoordinator
+import rpcnode.toolkit.clients.application.build.FleetClientBuilder
+import rpcnode.toolkit.clients.application.build.ListClientArches
+import rpcnode.toolkit.clients.infrastructure.docker.DockerClientBuilder
+import rpcnode.toolkit.clients.infrastructure.fleet.HttpBuildAgentGateway
+import rpcnode.toolkit.clients.infrastructure.fleet.ServerBuildHostDirectory
 import rpcnode.toolkit.clients.infrastructure.catalog.YamlClientProgramCatalog
 import rpcnode.toolkit.clients.infrastructure.filesystem.FileClientManifestWriter
 import rpcnode.toolkit.clients.infrastructure.filesystem.FileInstallPlanWriter
@@ -261,6 +314,7 @@ class Toolkit(
     val addClient: AddClientUseCase,
     val probeClients: ProbeClientsUseCase,
     val syncClients: SyncClientsUseCase,
+    val listClientArches: ListClientArches,
     val deleteClient: DeleteClientUseCase,
     val resolveClientRelease: ResolveClientReleaseUseCase,
     val githubTokenProvider: GitHubTokenProvider,
@@ -316,6 +370,11 @@ class Toolkit(
     val startNodeSnapshot: StartNodeSnapshotUseCase,
     val stopNodeSnapshot: StopNodeSnapshotUseCase,
     val getNodeSnapshotProgress: GetNodeSnapshotProgressUseCase,
+    val listProxies: ListProxiesUseCase,
+    val saveProxy: SaveProxyUseCase,
+    val deleteProxy: DeleteProxyUseCase,
+    val setNodeProxy: SetNodeProxyUseCase,
+    val testProxy: TestProxyUseCase,
 )
 {
     companion object
@@ -370,11 +429,14 @@ class Toolkit(
             val clientFilesReady: ClientFilesReadyChecker = DiskClientFilesReadyChecker(Path.of(cfg.clientsDestDir))
             val networkFacts: NetworkFactsRepository = mapping
             val snapshotMirrors = YamlSnapshotMirrorCatalog()
-            val snapshotResolvers: Map<NetworkId, SnapshotResolver> = mapOf(
+            val snapshotResolvers: Map<NetworkId, SnapshotResolver> = CometbftWiring.snapshotResolvers() + EvmWiring.snapshotResolvers() + NonEvmWiring.snapshotResolvers() + mapOf(
                 NetworkId.TRON to TronSnapshotResolver(mirrors = snapshotMirrors),
                 NetworkId.BSC to BscSnapshotResolver(),
                 NetworkId.BASE to BaseSnapshotResolver(),
                 NetworkId.SUI to SuiSnapshotResolver(),
+                NetworkId.CARDANO to CardanoSnapshotResolver(),
+                NetworkId.ARC to ArcSnapshotResolver(),
+                NetworkId.STARKNET to StarknetSnapshotResolver(mirrors = snapshotMirrors),
             )
             val resolveSnapshot = ResolveSnapshotUseCase(catalog, snapshotResolvers)
             val cdnMirrorProbe: CdnMirrorProbe = HttpCdnMirrorProbe()
@@ -399,8 +461,12 @@ class Toolkit(
             val githubTokenProvider: GitHubTokenProvider = SettingsBackedGitHubTokenProvider(settingsStore)
             val githubReleaseClient: GitHubReleaseClient = HttpGitHubReleaseClient(githubTokenProvider)
             val blockchairTip = BlockchairStatsTipProbe()
+            val stellarApt = StellarAptIndex()
             val clientReleaseResolvers: Map<NetworkId, ClientReleaseResolver> =
                 BitcoreChainWiring.clientReleaseResolvers(githubReleaseClient) +
+                    CometbftWiring.clientReleaseResolvers(githubReleaseClient) +
+                    NonEvmWiring.clientReleaseResolvers(githubReleaseClient) +
+                    OpstackWiring.clientReleaseResolvers(githubReleaseClient) +
                     mapOf(
                         NetworkId.TRON to TronClientReleaseResolver(githubReleaseClient),
                         NetworkId.ZCASH to ZcashClientReleaseResolver(githubReleaseClient),
@@ -413,6 +479,14 @@ class Toolkit(
                         NetworkId.SUI to SuiClientReleaseResolver(githubReleaseClient),
                         NetworkId.HYPERLIQUID to HyperliquidClientReleaseResolver(),
                         NetworkId.XRPL to XrplClientReleaseResolver(githubReleaseClient),
+                        NetworkId.AVALANCHE to AvalancheClientReleaseResolver(githubReleaseClient),
+                        NetworkId.ETC to EtcClientReleaseResolver(githubReleaseClient),
+                        NetworkId.APTOS to AptosClientReleaseResolver(githubReleaseClient),
+                        NetworkId.CARDANO to CardanoClientReleaseResolver(githubReleaseClient),
+                        NetworkId.STELLAR to StellarClientReleaseResolver(stellarApt),
+                        NetworkId.ARC to ArcClientReleaseResolver(githubReleaseClient),
+                        NetworkId.ROBINHOOD to RobinhoodClientReleaseResolver(ArbClientReleaseResolver(githubReleaseClient)),
+                        NetworkId.XAI to XaiClientReleaseResolver(ArbClientReleaseResolver(githubReleaseClient)),
                     )
             val artifactDownloader = ArbAwareArtifactDownloader(HttpArtifactDownloader(githubTokenProvider))
             val clientDownloadTracker: ClientDownloadTracker = InMemoryClientDownloadTracker()
@@ -436,6 +510,9 @@ class Toolkit(
                 settings = notificationSettingsStore,
                 telegram = telegramBotApi,
             )
+            val serverRepository: ServerRepository = SqliteServerRepository(db)
+            val serverMetricsRepository = SqliteServerMetricsRepository(db)
+            val buildHosts = ServerBuildHostDirectory(serverRepository, serverMetricsRepository)
             val downloadClientProgram = DownloadClientProgramUseCase(
                 versionRepository = clientVersionRepository,
                 githubReleaseClient = githubReleaseClient,
@@ -445,14 +522,27 @@ class Toolkit(
                 installPlanWriter = FileInstallPlanWriter(),
                 destDir = Path.of(cfg.clientsDestDir),
                 clientReleaseResolvers = clientReleaseResolvers,
-                artifactUrlResolvers = mapOf(
+                artifactUrlResolvers = EvmWiring.artifactUrlResolvers(githubReleaseClient) + mapOf(
                     NetworkId.ETHEREUM to EthereumGethArtifactUrlResolver(),
                     NetworkId.TRON to TronNileArtifactUrlResolver(),
+                    NetworkId.STELLAR to StellarArtifactUrlResolver(stellarApt),
                 ),
+                builder = FleetClientBuilder(
+                    directory = buildHosts,
+                    gateway = HttpBuildAgentGateway(),
+                    classLoader = Thread.currentThread().contextClassLoader,
+                    local = DockerClientBuilder(),
+                ),
+                buildFleet = buildHosts,
+            )
+            val clientBuilds = ClientBuildCoordinator(
+                versions = clientVersionRepository,
+                download = downloadClientProgram,
+                tracker = clientDownloadTracker,
+                scope = backgroundScope,
+                destDir = Path.of(cfg.clientsDestDir),
             )
 
-            val serverRepository: ServerRepository = SqliteServerRepository(db)
-            val serverMetricsRepository = SqliteServerMetricsRepository(db)
             val hostAgent = HttpHostAgentClient()
             val snapshotHost = HttpSnapshotHostClient()
             val hostDisks = GetHostDisksUseCase(
@@ -464,6 +554,15 @@ class Toolkit(
                 reader = HttpHostSysctlReader(),
             )
             val nodeRepository: NodeRepository = SqliteNodeRepository(db)
+            val proxyRepository: ProxyRepository = SettingsProxyRepository(
+                db = db,
+                secrets = AesGcmSecretBox(
+                    keyFile = dataDir.resolve("panel.notify.key"),
+                    envKeyBase64 = cfg.notifyKey,
+                ),
+            )
+            val proxyChecker: ProxyCheckRunner = HostAwareProxyCheckRunner(HttpProxyChecker(), serverRepository, HttpCheckProxyOnHost())
+            val resolveNodeProxy = ResolveNodeProxyUrl(proxyRepository)
             val finishRemoveServer = FinishRemoveServerUseCase(serverRepository, hostAgent)
             val removeServer = RemoveServerUseCase(
                 servers = serverRepository,
@@ -491,10 +590,14 @@ class Toolkit(
                 syncOnHost = HttpSyncClientOnHost(),
                 installPlanWriter = FileInstallPlanWriter(),
                 clientsDestDir = Path.of(cfg.clientsDestDir),
-                downloadClient = downloadClientProgram,
+                clientBuilds = clientBuilds,
             )
             val tipProbes = NetworkTipProbeRegistry(
                 BitcoreChainWiring.tipProbes(blockchairTip) +
+                    CometbftWiring.tipProbes() +
+                    NonEvmWiring.tipProbes() +
+                    EvmWiring.tipProbes() +
+                    OpstackWiring.tipProbes() +
                     mapOf(
                         NetworkId.TRON to TronNetworkTipProbe(),
                         NetworkId.ZCASH to blockchairTip,
@@ -508,10 +611,24 @@ class Toolkit(
                         NetworkId.HYPERLIQUID to HyperliquidNetworkTipProbe(),
                         NetworkId.TON to TonNetworkTipProbe(),
                         NetworkId.XRPL to XrplNetworkTipProbe(),
+                        NetworkId.AVALANCHE to AvalancheNetworkTipProbe(),
+                        NetworkId.ETC to EtcNetworkTipProbe(),
+                        NetworkId.APTOS to AptosNetworkTipProbe(),
+                        NetworkId.CARDANO to CardanoNetworkTipProbe(),
+                        NetworkId.STELLAR to StellarNetworkTipProbe(),
+                        NetworkId.ARC to ArcNetworkTipProbe(),
+                        NetworkId.ROBINHOOD to ArbNetworkTipProbe(),
+                        NetworkId.XAI to ArbNetworkTipProbe(),
+                        NetworkId.STARKNET to StarknetNetworkTipProbe(),
+                        NetworkId.OPTIMISM to OptimismNetworkTipProbe(),
                     ),
             )
             val tipCache = NetworkTipCache(networkFacts, tipProbes)
             val chainStartsMap = BitcoreChainWiring.chainStarts() +
+                CometbftWiring.chainStarts() +
+                NonEvmWiring.chainStarts() +
+                EvmWiring.chainStarts() +
+                OpstackWiring.chainStarts() +
                 mapOf(
                     NetworkId.TRON to TronNodeStart(),
                     NetworkId.ZCASH to ZcashNodeStart(),
@@ -525,6 +642,16 @@ class Toolkit(
                     NetworkId.HYPERLIQUID to HyperliquidNodeStart(),
                     NetworkId.TON to TonNodeStart(),
                     NetworkId.XRPL to XrplNodeStart(),
+                    NetworkId.AVALANCHE to AvalancheNodeStart(),
+                    NetworkId.ETC to EtcNodeStart(),
+                    NetworkId.APTOS to AptosNodeStart(),
+                    NetworkId.CARDANO to CardanoNodeStart(),
+                    NetworkId.STELLAR to StellarNodeStart(),
+                    NetworkId.ARC to ArcNodeStart(),
+                    NetworkId.ROBINHOOD to RobinhoodNodeStart(),
+                    NetworkId.XAI to XaiNodeStart(),
+                    NetworkId.STARKNET to StarknetNodeStart(),
+                    NetworkId.OPTIMISM to OptimismNodeStart(),
                 )
             val startNode = StartNodeUseCase(
                 saveInstallOptions = saveNodeInstallOptions,
@@ -537,6 +664,7 @@ class Toolkit(
                 startOnHost = HttpStartNodeOnHost(),
                 chainStarts = chainStartsMap,
                 ensureClients = applyNodeClientConfig.asEnsureNodeClients(),
+                resolveProxy = resolveNodeProxy,
             )
             val updateClientOnHost = HttpUpdateClientOnHost()
             val clientUpdateProgress = ClientUpdateProgressStore()
@@ -551,6 +679,7 @@ class Toolkit(
                 installPlanWriter = FileInstallPlanWriter(),
                 clientsDestDir = Path.of(cfg.clientsDestDir),
                 downloadClient = downloadClientProgram,
+                clientBuilds = clientBuilds,
                 chainStarts = chainStartsMap,
                 progress = clientUpdateProgress,
             )
@@ -570,6 +699,7 @@ class Toolkit(
             val getNodeHeight = GetNodeHeightUseCase(
                 nodes = nodeRepository,
                 tipCache = tipCache,
+                facts = networkFacts,
             )
             val getNodeLogs = GetNodeLogsUseCase(
                 nodes = nodeRepository,
@@ -585,6 +715,7 @@ class Toolkit(
                 facts = networkFacts,
                 catalog = clientProgramCatalog,
                 runOnHost = HttpNodeDiagnosticsHostClient(),
+                resolveDestDir = resolveSnapshotDestDir,
             )
             val getNodeClientVersion = GetNodeClientVersionUseCase(
                 nodes = nodeRepository,
@@ -666,6 +797,7 @@ class Toolkit(
                 resolveDestDir = resolveSnapshotDestDir,
                 startOnHost = snapshotHost,
                 ensureClients = applyNodeClientConfig.asEnsureNodeClients(),
+                resolveProxy = resolveNodeProxy,
             )
 
             return Toolkit(
@@ -736,6 +868,7 @@ class Toolkit(
 
                 clientProgramCatalog = clientProgramCatalog,
                 listClients = ListClientsUseCase(clientVersionRepository, clientProgramCatalog),
+                listClientArches = ListClientArches(clientProgramCatalog, Path.of(cfg.clientsDestDir)),
                 previewClients = PreviewClientsUseCase(
                     clientVersionRepository,
                     clientProgramCatalog,
@@ -882,6 +1015,11 @@ class Toolkit(
                     servers = serverRepository,
                     pollHost = snapshotHost,
                 ),
+                listProxies = ListProxiesUseCase(proxyRepository, nodeRepository),
+                saveProxy = SaveProxyUseCase(proxyRepository, proxyChecker),
+                deleteProxy = DeleteProxyUseCase(proxyRepository, nodeRepository),
+                setNodeProxy = SetNodeProxyUseCase(nodeRepository, proxyRepository),
+                testProxy = TestProxyUseCase(proxyRepository, proxyChecker),
             )
         }
     }

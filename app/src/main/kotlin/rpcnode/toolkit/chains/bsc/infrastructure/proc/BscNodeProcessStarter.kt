@@ -68,6 +68,7 @@ class BscNodeProcessStarter : HostNodeProcessStarter
                     datadir = datadir.toString(),
                     configPath = genesis.configPath,
                     rpcPort = ports.http,
+                    wsPort = ports.ws,
                     p2pPort = ports.p2p,
                     cacheMb = BscClusters.cacheMb(envId),
                     logFile = logFile,

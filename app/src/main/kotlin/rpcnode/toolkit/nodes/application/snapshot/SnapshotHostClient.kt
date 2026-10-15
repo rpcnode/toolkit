@@ -6,6 +6,8 @@ data class SnapshotHostStartCommand(
     val destDir: String,
     val streamUnpack: Boolean,
     val sizeBytes: Long?,
+    /** Node's proxy URL ("" = direct) for the download on the host. */
+    val proxy: String = "",
 )
 
 data class SnapshotHostProgress(

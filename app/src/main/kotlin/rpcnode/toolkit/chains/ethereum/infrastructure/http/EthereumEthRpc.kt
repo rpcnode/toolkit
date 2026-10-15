@@ -139,6 +139,32 @@ object EthereumEthRpc
         }
     }
 
+    fun latestBlockRequest(): String =
+        """{"jsonrpc":"2.0","id":1,"method":"eth_getBlockByNumber","params":["latest",false]}"""
+
+    /** `result.timestamp` (unix seconds) of an `eth_getBlockByNumber` answer. */
+    fun parseBlockTimestamp(body: String?): Long?
+    {
+        if (body.isNullOrBlank())
+        {
+            return null
+        }
+        val root = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull() ?: return null
+        val result = root["result"] as? JsonObject ?: return null
+        val hex = result["timestamp"]?.jsonPrimitive?.contentOrNull?.trim() ?: return null
+        return parseHexInt64(hex)
+    }
+
+    suspend fun latestBlockTimestamp(http: SimpleHttp, url: String): Long?
+    {
+        val endpoint = url.trim().trimEnd('/')
+        if (endpoint.isEmpty())
+        {
+            return null
+        }
+        return parseBlockTimestamp(http.postJson(endpoint, latestBlockRequest()))
+    }
+
     suspend fun blockNumber(http: SimpleHttp, url: String): Long?
     {
         val endpoint = url.trim().trimEnd('/')

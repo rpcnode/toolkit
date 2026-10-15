@@ -135,7 +135,7 @@ class SnapshotStreamExtractTest
             Files.writeString(dest.resolve("FullNode.jar"), "jar-bytes")
             val retries = mutableListOf<String>()
             SnapshotStreamExtract(
-                streamCopier = { url, expected ->
+                streamCopier = { url, expected, _ ->
                     ResumableStreamCopier(url, expected, backoffMs = { 1L }, sleep = { Thread.sleep(1) })
                 },
             ).fetchAndExtract(

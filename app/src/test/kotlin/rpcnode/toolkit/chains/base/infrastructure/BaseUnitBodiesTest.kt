@@ -29,6 +29,27 @@ class BaseUnitBodiesTest
     }
 
     @Test
+    fun reth_unit_uses_the_current_tx_gossip_flag()
+    {
+        val body = BaseUnitBodies.reth(
+            env = "sepolia",
+            bin = "/opt/base/sepolia/bin/base-reth-node",
+            datadir = "/data/rpcnode/base/sepolia/execution",
+            jwtPath = "/etc/base/sepolia/jwt.hex",
+            rpcPort = 8573,
+            wsPort = 8583,
+            enginePort = 8574,
+            p2pPort = 30354,
+            discoveryV5 = 9213,
+            cluster = BaseClusters.lookup("sepolia"),
+            logFile = "/data/rpcnode/base/sepolia/execution/logs/node.out",
+        )
+        // base-reth-node 1.4.x rejects `--rollup.disable-tx-pool-gossip` (exit 2, "unexpected argument"); reth's own flag is used
+        assertTrue(body.contains("--disable-tx-gossip"))
+        assertTrue(!body.contains("--rollup.disable-tx-pool-gossip"))
+    }
+
+    @Test
     fun consensus_unit_requires_reth()
     {
         val body = BaseUnitBodies.consensus(

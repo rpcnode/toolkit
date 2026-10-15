@@ -340,6 +340,17 @@ export type ClientRow = {
   download_total?: number
   download_pct?: number
   download_error?: string
+  /** CPU architectures of this client: stored on the panel, or still compiled on demand. */
+  arches?: ClientArch[]
+}
+
+export type ClientArch = {
+  arch: string
+  ready: boolean
+  /** Not stored yet, but compiled on a host agent when a node of this architecture is created. */
+  buildable?: boolean
+  files?: string[]
+  size_bytes?: number
 }
 
 export type NetworkEnvDetail = {
@@ -911,6 +922,17 @@ export type Workload = {
   live_test_status?: string
   live_test_at?: string
   live_test_error?: string
+  /** Settings → Proxies id this node's outbound traffic goes through; "" = direct. */
+  proxy_id?: string
+}
+
+/** Settings → Proxies row. `url` has the password masked as `***`. */
+export type ProxyItem = {
+  id: string
+  name: string
+  url: string
+  /** Names of nodes using this proxy. */
+  nodes?: string[]
 }
 
 export type WorkloadPort = {
@@ -1051,6 +1073,8 @@ export type ClientConfigBinding = {
   /** Emit binding only when install_options[this key] equals when_install_option_value (default "1"). */
   when_install_option?: string | null
   when_install_option_value?: string | null
+  /** Env ids this binding applies to (empty = all): per-env literals of one shared client config. */
+  only_env?: string[]
   /** Live Test connect probe from network.yml testConnect. */
   test_connect?: ClientConfigTestConnect | null
 }
@@ -1219,6 +1243,26 @@ export const api = {
     github_token?: string
     clear_github_token?: boolean
   }) => putJSON<PanelSettings>('/api/settings', body),
+
+  proxies: () => getJSON<{ items?: ProxyItem[] }>('/api/proxies'),
+  createProxy: (body: { name: string; url: string; skip_check?: boolean; server_id?: string }) =>
+    postJSON<ProxyItem>('/api/proxies', body),
+  /**
+   * Live connect through the proxy (HTTPS HEAD); nothing is saved. Send `id` + masked/blank url to test a saved one.
+   * `server_id` makes that host's agent do the connect (the proxy may be allow-listed for the server only).
+   */
+  testProxy: (body: { id?: string; url: string; server_id?: string }) =>
+    postJSON<{ ok: boolean; latency_ms?: number; message?: string }>('/api/proxies/test', body),
+  /** Send the masked url back unchanged (or blank) to keep the stored password. */
+  updateProxy: (id: string, body: { name: string; url: string; skip_check?: boolean; server_id?: string }) =>
+    putJSON<ProxyItem>(`/api/proxies/${encodeURIComponent(id)}`, body),
+  deleteProxy: (id: string) => delJSON<{ items?: ProxyItem[] }>(`/api/proxies/${encodeURIComponent(id)}`),
+  /** Pick the node's proxy ("" = direct). The host applies it on the next Start / Restart and Snapshot. */
+  setNodeProxy: (nodeId: string, proxyId: string) =>
+    putJSON<{ ok?: boolean; node_id?: string; proxy_id?: string }>(
+      `/api/nodes/${encodeURIComponent(nodeId)}/proxy`,
+      { proxy_id: proxyId },
+    ),
 
   /** Panel CDN channel — same chainAgentVersion as the agent JAR (not host DB). */
   agentChannel: (opts?: { refresh?: boolean }) =>
@@ -1499,6 +1543,19 @@ export const api = {
       error?: string
       message?: string
     }>(`/api/nodes/${encodeURIComponent(id)}/process/start`),
+  /**
+   * Stop, then start with a freshly rendered unit. Start alone is a no-op on a running node, so anything that has to
+   * be applied (L1 endpoints, proxy) needs this.
+   */
+  workloadsNodeProcessRestart: (id: string) =>
+    postJSON<{
+      ok?: boolean
+      node_id?: string
+      pid?: number
+      action?: string
+      error?: string
+      message?: string
+    }>(`/api/nodes/${encodeURIComponent(id)}/process/restart`),
   workloadsHostDisks: async (opts: { server_id: string }) => {
     const q = new URLSearchParams()
     q.set('server_id', opts.server_id)
@@ -1785,7 +1842,10 @@ export const api = {
       error?: string
       message?: string
     }>(`/api/nodes/${encodeURIComponent(id)}/snapshot`),
-  nodeSnapshotStart: (id: string, body?: { snapshot?: string; source?: string; url?: string }) =>
+  nodeSnapshotStart: (
+    id: string,
+    body?: { snapshot?: string; source?: string; url?: string; mode?: string },
+  ) =>
     postJSON<{
       ok?: boolean
       type_id?: string
@@ -1968,7 +2028,7 @@ export const api = {
 
   networks: () => getJSON<NetworksPayload>('/api/networks'),
   networksAll: () => getJSON<NetworksPayload>('/api/networks?all=1'),
-  /** Live probe for Start clientConfig.bindings[].test_connect (eth_rpc / beacon_genesis / tron_http). */
+  /** Live probe for Start clientConfig.bindings[].test_connect (eth_rpc / eth_ws / beacon_genesis / tron_http). */
   networksTestConnect: (body: { kind: string; url: string }) =>
     postJSON<{
       ok?: boolean
@@ -1980,9 +2040,11 @@ export const api = {
    * Active Ethereum nodes + env publicTip (RPC/beacon) for L2 Start pickers.
    * `status` defaults to active on the server.
    */
-  networksEthereumNodes: (opts: { env: string; status?: string; server_id?: string }) => {
+  networksEthereumNodes: (opts: { env: string; status?: string; server_id?: string; network?: 'arb' }) => {
     const q = new URLSearchParams()
     q.set('env', opts.env)
+    // `arb` = Arbitrum One nodes (the parent chain of Xai); omitted = Ethereum
+    if (opts.network) q.set('network', opts.network)
     if (opts.status) q.set('status', opts.status)
     if (opts.server_id) q.set('server_id', opts.server_id)
     return getJSON<{

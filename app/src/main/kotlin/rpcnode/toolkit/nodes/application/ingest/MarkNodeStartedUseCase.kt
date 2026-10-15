@@ -5,7 +5,9 @@ import rpcnode.toolkit.clients.application.formatPinsVersion
 import rpcnode.toolkit.clients.application.pinsUpdateAvailable
 import rpcnode.toolkit.clients.domain.repository.ClientVersionRepository
 import rpcnode.toolkit.networks.application.tip.NetworkTipCache
+import rpcnode.toolkit.networks.domain.model.DEFAULT_TIP_LAG_BLOCKS
 import rpcnode.toolkit.networks.domain.repository.NetworkFactsRepository
+import rpcnode.toolkit.networks.domain.repository.tipLagFor
 import rpcnode.toolkit.nodes.domain.model.Node
 import rpcnode.toolkit.nodes.domain.model.NodeId
 import rpcnode.toolkit.nodes.domain.model.NodeStatus
@@ -88,7 +90,7 @@ class IngestNodeHeightsUseCase(
     private val clients: ClientVersionRepository,
     private val facts: NetworkFactsRepository,
     private val tipCache: NetworkTipCache,
-    private val tipLagActive: Long = 3,
+    private val tipLagActive: Long = DEFAULT_TIP_LAG_BLOCKS,
     private val clock: () -> String = { Instant.now().toString() },
 )
 {
@@ -139,7 +141,7 @@ class IngestNodeHeightsUseCase(
                 }
                 if (sample.height >= 0)
                 {
-                    val caughtUp = tip != null && tip > 0 && (tip - sample.height) <= tipLagActive
+                    val caughtUp = tip != null && tip > 0 && (tip - sample.height) <= (facts.tipLagFor(node.network, node.env) ?: tipLagActive)
                     val hostDone = !sample.syncing && (sample.syncPct == null || sample.syncPct >= 99.9)
                     if (
                         node.status.value == NodeStatus.SYNC.value &&

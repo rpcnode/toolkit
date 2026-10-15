@@ -14,7 +14,7 @@ import rpcnode.toolkit.nodes.application.start.NodeLaunchSpec
 import rpcnode.toolkit.nodes.infrastructure.host.HostNodeLaunchSupport
 
 /**
- * XRPL start entirely under [nodeDir]: extract deb → validators → cfg → unit.
+ * XRPL start entirely under [nodeDir]: run script (builds xrpld from source) → validators → cfg → unit.
  * Never writes `/opt/ripple` or `/etc/opt/ripple`.
  */
 class XrplNodeProcessStarter : HostNodeProcessStarter
@@ -40,10 +40,14 @@ class XrplNodeProcessStarter : HostNodeProcessStarter
             ?: XrplHistory.WEEKS
         val policy = XrplHistory.parse(historyMode)
 
-        val bins = when (val ensured = XrplHostBinaries.ensure(root))
+        val srcTar = XrplHostBinaries.sourceArchive(root)
+        val prebuilt = XrplHostBinaries.prebuilt(root)
+        if (srcTar == null && prebuilt == null)
         {
-            is XrplHostBinaries.Result.Failed -> return HostNodeStartResult.Failed(ensured.detail)
-            is XrplHostBinaries.Result.Ok -> ensured.bins
+            return HostNodeStartResult.Failed(
+                "neither a prebuilt xrpld-${XrplHostBinaries.hostArch()} nor the source archive ${XrplHostBinaries.SOURCE_ARCHIVE} " +
+                    "is under $root — sync clients (XRPLF/rippled release) first",
+            )
         }
 
         val data = argPath(launch.args, "--toolkit-ledger=")
@@ -53,6 +57,7 @@ class XrplNodeProcessStarter : HostNodeProcessStarter
         val cfgPath = root.resolve(XrplUnitBodies.CFG_NAME)
         val validatorsPath = root.resolve(XrplUnitBodies.VALIDATORS_NAME)
         val historyPath = root.resolve(XrplUnitBodies.HISTORY_JSON)
+        val script = root.resolve(XrplUnitBodies.RUN_SCRIPT)
         val nudb = data.resolve("db").resolve("nudb")
         val hasLedger = Files.isDirectory(nudb) &&
             runCatching {
@@ -64,6 +69,19 @@ class XrplNodeProcessStarter : HostNodeProcessStarter
             Files.createDirectories(data.resolve("db").resolve("nudb"))
             Files.createDirectories(root.resolve("logs"))
             Files.createDirectories(root.resolve(".toolkit"))
+            Files.createDirectories(script.parent)
+            Files.writeString(
+                script,
+                XrplUnitBodies.runScript(
+                    nodeDir = root.toAbsolutePath().normalize().toString(),
+                    srcTar = srcTar?.toAbsolutePath()?.normalize()?.toString().orEmpty(),
+                    prebuilt = prebuilt?.toAbsolutePath()?.normalize()?.toString().orEmpty(),
+                    bin = XrplHostBinaries.binary(root).toAbsolutePath().normalize().toString(),
+                    conf = cfgPath.toAbsolutePath().normalize().toString(),
+                    logFile = logPath.toAbsolutePath().normalize().toString(),
+                ),
+            )
+            script.toFile().setExecutable(true, false)
             Files.writeString(validatorsPath, XrplValidators.body(envId))
             Files.writeString(
                 historyPath,
@@ -71,13 +89,16 @@ class XrplNodeProcessStarter : HostNodeProcessStarter
             )
             Files.writeString(
                 cfgPath,
-                XrplUnitBodies.cfg(
-                    cluster = cluster,
-                    etc = root,
-                    data = data,
-                    ports = ports,
-                    policy = policy,
-                    hasLedger = hasLedger,
+                XrplUnitBodies.applyCfgOverrides(
+                    XrplUnitBodies.cfg(
+                        cluster = cluster,
+                        etc = root,
+                        data = data,
+                        ports = ports,
+                        policy = policy,
+                        hasLedger = hasLedger,
+                    ),
+                    rpcnode.toolkit.nodes.infrastructure.host.UnitFlagOverrides.fromArgs(launch.args),
                 ),
             )
         }
@@ -86,11 +107,12 @@ class XrplNodeProcessStarter : HostNodeProcessStarter
             return HostNodeStartResult.Failed(e.message ?: "write xrpld.cfg failed")
         }
 
-        val binAbs = bins.node.toAbsolutePath().normalize().toString()
+        val binAbs = XrplHostBinaries.binary(root).toAbsolutePath().normalize().toString()
         val confAbs = cfgPath.toAbsolutePath().normalize().toString()
         val body = XrplUnitBodies.unit(
             env = envId,
             nodeDir = root.toAbsolutePath().normalize().toString(),
+            execStart = script.toAbsolutePath().normalize().toString(),
             bin = binAbs,
             conf = confAbs,
             logFile = logPath.toAbsolutePath().normalize().toString(),
@@ -103,8 +125,9 @@ class XrplNodeProcessStarter : HostNodeProcessStarter
             primaryBody = body,
             companions = emptyList(),
             launch = launch.copy(
-                entry = "bin/${XrplUnitBodies.BIN_NAME}",
+                entry = XrplUnitBodies.RUN_SCRIPT,
                 logFile = relativeLog,
+                extractArchiveGlob = null,
             ),
         )
     }

@@ -1,5 +1,10 @@
 package rpcnode.toolkit.agent.presentation.http
 
+import rpcnode.toolkit.proxies.domain.model.ProxyCheck
+import rpcnode.toolkit.proxies.domain.model.ProxyChecker
+import rpcnode.toolkit.proxies.domain.model.ProxyUrl
+import rpcnode.toolkit.proxies.infrastructure.http.HttpProxyChecker
+import rpcnode.toolkit.nodes.infrastructure.host.NodeProxyEnv
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import io.ktor.http.HttpHeaders
@@ -9,6 +14,7 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.header
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondOutputStream
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
@@ -37,6 +43,9 @@ import rpcnode.toolkit.agent.application.client.ClientUpdateSnapshot
 import rpcnode.toolkit.agent.application.client.combinedLog
 import rpcnode.toolkit.agent.application.client.ClientRollbackResult
 import rpcnode.toolkit.agent.application.client.SyncClientFromPanelUseCase
+import rpcnode.toolkit.agent.application.client.HostBuildCommand
+import rpcnode.toolkit.agent.application.client.HostBuildStart
+import rpcnode.toolkit.agent.application.client.HostClientBuildUseCase
 import rpcnode.toolkit.agent.application.client.UpdateClientOnHostUseCase
 import rpcnode.toolkit.agent.application.metrics.CollectHostMetricsUseCase
 import rpcnode.toolkit.agent.infrastructure.node.readNodeClientVersion
@@ -265,6 +274,8 @@ data class AgentSnapshotStartBody(
     @SerialName("dest_dir") val destDir: String = "",
     @SerialName("stream_unpack") val streamUnpack: Boolean = false,
     @SerialName("size_bytes") val sizeBytes: Long? = null,
+    /** Node's outbound proxy URL; blank = direct. */
+    val proxy: String = "",
 )
 
 @Serializable
@@ -319,6 +330,37 @@ data class AgentReadFileResponse(
     val content: String = "",
     val error: String? = null,
     val message: String? = null,
+)
+
+@Serializable
+data class AgentBuildBody(
+    @SerialName("job_id") val jobId: String = "",
+    val network: String = "",
+    val program: String = "",
+    val version: String = "",
+    val tag: String = "",
+    val platform: String = "",
+    val dockerfile: String = "",
+    val outputs: List<String> = emptyList(),
+)
+
+@Serializable
+data class AgentBuildReleaseBody(@SerialName("job_id") val jobId: String = "")
+
+@Serializable
+data class AgentBuildAnswer(val ok: Boolean = true, val error: String = "", val message: String = "")
+
+@Serializable
+data class AgentBuildLog(val ok: Boolean = true, val lines: List<String> = emptyList())
+
+@Serializable
+data class AgentBuildProgress(
+    val ok: Boolean = true,
+    val phase: String = "unknown",
+    val detail: String = "",
+    @SerialName("log_tail") val logTail: List<String> = emptyList(),
+    val files: List<String> = emptyList(),
+    @SerialName("log_file") val logFile: String = "",
 )
 
 @Serializable
@@ -401,6 +443,17 @@ data class AgentClientRollbackBody(
 )
 
 @Serializable
+data class AgentProxyCheckBody(val url: String = "")
+
+@Serializable
+data class AgentProxyCheckResponse(
+    val ok: Boolean,
+    @SerialName("latency_ms") val latencyMs: Long = 0,
+    val target: String = "",
+    val error: String = "",
+)
+
+@Serializable
 data class AgentNodeStartBody(
     @SerialName("node_id") val nodeId: String = "",
     val network: String = "",
@@ -412,6 +465,8 @@ data class AgentNodeStartBody(
     @SerialName("client_version") val clientVersion: String = "",
     val launch: AgentNodeLaunchBody = AgentNodeLaunchBody(),
     val height: AgentNodeHeightBody = AgentNodeHeightBody(),
+    /** Node's outbound proxy URL from the panel DB: blank clears it, null (older panel) leaves `.toolkit/proxy.env` as is. */
+    val proxy: String? = null,
 )
 
 @Serializable
@@ -705,11 +760,13 @@ fun Application.agentApiRoutes(
     readHostFile: ReadHostFileUseCase = ReadHostFileUseCase(),
     syncClient: SyncClientFromPanelUseCase? = null,
     updateClient: UpdateClientOnHostUseCase? = null,
+    buildClient: HostClientBuildUseCase? = null,
     startNode: StartNodeProcessUseCase? = null,
     getNodeLogs: GetNodeProcessLogsUseCase? = null,
     getNodeClientVersion: GetNodeClientVersionUseCase? = null,
     getNodeRpcAuth: GetNodeRpcAuthUseCase? = null,
     listLocalNodes: ListLocalNodesUseCase? = null,
+    checkProxy: ProxyChecker = HttpProxyChecker(),
     probeHostDeps: ProbeHostDepsUseCase? = null,
     startHostDepsInstall: StartHostDepsInstallUseCase? = null,
     getHostDepsProgress: GetHostDepsProgressUseCase? = null,
@@ -999,6 +1056,7 @@ fun Application.agentApiRoutes(
                     destDir = body.destDir,
                     streamUnpack = body.streamUnpack,
                     sizeBytes = body.sizeBytes,
+                    proxy = body.proxy,
                 )
             )
             {
@@ -1211,6 +1269,96 @@ fun Application.agentApiRoutes(
                     )
             }
         }
+        post("/api/v1/client/build") {
+            if (!call.authorized(cfg.token))
+            {
+                return@post
+            }
+            val builder = buildClient
+            if (builder == null)
+            {
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    AgentBuildAnswer(ok = false, error = "not_wired", message = "Client build not configured"),
+                )
+                return@post
+            }
+            val body = call.receive<AgentBuildBody>()
+            val started = builder.start(
+                HostBuildCommand(
+                    jobId = body.jobId, network = body.network, program = body.program, version = body.version,
+                    tag = body.tag, platform = body.platform, dockerfile = body.dockerfile, outputs = body.outputs,
+                ),
+            )
+            when (started)
+            {
+                HostBuildStart.Accepted -> call.respond(AgentBuildAnswer(message = "accepted"))
+                is HostBuildStart.Busy ->
+                    call.respond(HttpStatusCode.Conflict, AgentBuildAnswer(ok = false, error = "busy", message = started.detail))
+                is HostBuildStart.Unavailable ->
+                    call.respond(HttpStatusCode.ServiceUnavailable, AgentBuildAnswer(ok = false, error = "unavailable", message = started.detail))
+                is HostBuildStart.Invalid ->
+                    call.respond(HttpStatusCode.BadRequest, AgentBuildAnswer(ok = false, error = "invalid", message = started.detail))
+            }
+        }
+        get("/api/v1/client/build/progress") {
+            if (!call.authorized(cfg.token))
+            {
+                return@get
+            }
+            val builder = buildClient
+            if (builder == null)
+            {
+                call.respond(HttpStatusCode.ServiceUnavailable, AgentBuildAnswer(ok = false, error = "not_wired"))
+                return@get
+            }
+            val st = builder.status(call.request.queryParameters["job_id"].orEmpty())
+            call.respond(
+                AgentBuildProgress(phase = st.phase, detail = st.detail, logTail = st.logTail, files = st.files, logFile = st.logFile),
+            )
+        }
+        get("/api/v1/client/build/log") {
+            if (!call.authorized(cfg.token))
+            {
+                return@get
+            }
+            val tail = buildClient?.logTail(
+                call.request.queryParameters["job_id"].orEmpty(),
+                call.request.queryParameters["lines"]?.toIntOrNull() ?: 200,
+            )
+            if (tail == null)
+            {
+                call.respond(HttpStatusCode.NotFound, AgentBuildAnswer(ok = false, error = "no_log"))
+                return@get
+            }
+            call.respond(AgentBuildLog(lines = tail))
+        }
+        get("/api/v1/client/build/artifact") {
+            if (!call.authorized(cfg.token))
+            {
+                return@get
+            }
+            val file = buildClient?.artifact(
+                call.request.queryParameters["job_id"].orEmpty(),
+                call.request.queryParameters["name"].orEmpty(),
+            )
+            if (file == null)
+            {
+                call.respond(HttpStatusCode.NotFound, AgentBuildAnswer(ok = false, error = "not_found"))
+                return@get
+            }
+            call.respondOutputStream(io.ktor.http.ContentType.Application.OctetStream) {
+                java.nio.file.Files.newInputStream(file).use { it.copyTo(this) }
+            }
+        }
+        post("/api/v1/client/build/release") {
+            if (!call.authorized(cfg.token))
+            {
+                return@post
+            }
+            buildClient?.release(call.receive<AgentBuildReleaseBody>().jobId)
+            call.respond(AgentBuildAnswer(message = "released"))
+        }
         get("/api/v1/client") {
             if (!call.authorized(cfg.token))
             {
@@ -1404,6 +1552,10 @@ fun Application.agentApiRoutes(
                 return@post
             }
             val body = call.receive<AgentNodeStartBody>()
+            if (body.proxy != null && body.nodeDir.isNotBlank())
+            {
+                NodeProxyEnv.write(java.nio.file.Path.of(body.nodeDir.trim()), body.proxy)
+            }
             when (
                 val result = start(
                     NodeStartCommand(
@@ -1534,6 +1686,27 @@ fun Application.agentApiRoutes(
             }
         }
         // Node checks declared in chains/<id>/network.yml → diagnostics (panel resolves the ports).
+        post("/api/v1/proxy/check") {
+            if (!call.authorized(cfg.token))
+            {
+                return@post
+            }
+            val body = call.receive<AgentProxyCheckBody>()
+            val url = when (val parsed = ProxyUrl.parse(body.url))
+            {
+                is ProxyUrl.Parse.Ok -> parsed.url
+                ProxyUrl.Parse.Empty ->
+                    return@post call.respond(HttpStatusCode.BadRequest, AgentProxyCheckResponse(ok = false, error = "url is required"))
+                is ProxyUrl.Parse.Invalid ->
+                    return@post call.respond(HttpStatusCode.BadRequest, AgentProxyCheckResponse(ok = false, error = parsed.reason))
+            }
+            when (val check = checkProxy.check(url))
+            {
+                is ProxyCheck.Ok -> call.respond(AgentProxyCheckResponse(ok = true, latencyMs = check.latencyMs, target = check.target))
+                is ProxyCheck.Failed -> call.respond(AgentProxyCheckResponse(ok = false, error = check.reason))
+            }
+        }
+
         post("/api/v1/node/diagnostics") {
             if (!call.authorized(cfg.token))
             {

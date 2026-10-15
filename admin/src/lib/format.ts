@@ -29,9 +29,8 @@ export function formatSyncPct(progress: number): string {
   if (!Number.isFinite(progress) || progress <= 0) return '0%'
   if (progress >= 99.95) return '100%'
   if (progress < 1) return `${progress.toFixed(3)}%`
-  if (progress < 10) return `${progress.toFixed(1)}%`
-
-  return `${Math.round(progress)}%`
+  // One decimal all the way: a multi-day sync moves ~1% per half hour, an integer "24%" looks frozen.
+  return `${progress.toFixed(1)}%`
 }
 
 export function parseSyncPctFromDetail(detail?: string | null): number | null {

@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory={{node_dir}}
-ExecStart={{bin}} --conf {{conf}}
+ExecStart={{exec_start}}
 # Bounded server_stop so NuDB can close. timeout 15s — stalled RPC must not hang systemd.
 ExecStop=-/usr/bin/timeout 15 {{bin}} --conf {{conf}} server_stop
 Restart=on-failure

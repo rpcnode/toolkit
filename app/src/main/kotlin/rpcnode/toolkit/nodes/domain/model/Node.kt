@@ -17,6 +17,8 @@ data class Node(
     val status: NodeStatus = NodeStatus.AWAITING_PORTS,
     val diskLayoutJson: String = "",
     val installOptionsJson: String = "",
+    /** Global proxy list id this node's outbound traffic goes through; blank = direct. */
+    val proxyId: String = "",
     val height: Long = 0,
     val heightAt: String = "",
     /** Last known public tip for this network/env (panel probe), for sync progress. */

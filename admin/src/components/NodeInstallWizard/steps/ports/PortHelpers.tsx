@@ -247,7 +247,11 @@ export function PortLine({
           <Badge color={bindBusy ? 'red' : 'teal'} variant="light" size="sm">
             {bindBusy ? `busy${who ? ` · ${who}` : ''}` : 'free'}
           </Badge>
-        ) : null}
+        ) : (
+          <Badge color="gray" variant="outline" size="sm">
+            not checked
+          </Badge>
+        )}
         {bindBusy && onKill ? (
           <Tooltip
             label={
@@ -288,7 +292,11 @@ export function PortLine({
           <Badge color={bindBusy ? 'red' : 'teal'} variant="light" size="xs">
             {bindBusy ? 'busy' : 'free'}
           </Badge>
-        ) : null}
+        ) : (
+          <Badge color="gray" variant="outline" size="xs">
+            not checked
+          </Badge>
+        )}
         {external && reach && reach !== 'n/a' ? (
           <Badge color={reachColor} variant="light" size="xs">
             {reach}

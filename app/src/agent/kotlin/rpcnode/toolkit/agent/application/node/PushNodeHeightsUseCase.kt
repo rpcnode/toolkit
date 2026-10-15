@@ -42,6 +42,9 @@ class PushNodeHeightsUseCase(
 {
     private val log = LoggerFactory.getLogger(PushNodeHeightsUseCase::class.java)
 
+    /** Nodes already reported as parked, so the log says it once per outage, not every 30 s. */
+    private val parkedLogged = mutableSetOf<String>()
+
     suspend operator fun invoke()
     {
         val enrolled = enrollment.read() ?: return
@@ -79,8 +82,22 @@ class PushNodeHeightsUseCase(
         }
         for (dead in registry.list().filter { n -> n.nodeId !in parked && alive.none { it.nodeId == n.nodeId } })
         {
+            // A dropped node silently stops reporting (the panel then shows 0% forever), so say why it was dropped.
+            log.warn(
+                "dropping {}/{} ({}) from the registry: pid {} is gone and unit {} is not installed",
+                dead.network,
+                dead.env,
+                dead.nodeId,
+                dead.pid,
+                HostNodeLaunchSupport.unitName(dead.network, dead.env),
+            )
             registry.remove(dead.nodeId)
         }
+        if (parked.isNotEmpty() && parkedLogged.addAll(parked))
+        {
+            log.info("parked nodes (unit installed, process not running): {}", parked)
+        }
+        parkedLogged.retainAll(parked)
         if (alive.isEmpty())
         {
             return

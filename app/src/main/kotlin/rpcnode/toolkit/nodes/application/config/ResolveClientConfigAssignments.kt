@@ -173,7 +173,8 @@ internal fun installOptionGateOpen(
 {
     val key = binding.whenInstallOption?.trim()?.ifEmpty { null } ?: return true
     val want = binding.whenInstallOptionValue?.trim()?.ifEmpty { null } ?: "1"
-    return options[key]?.trim() == want
+    // `a,b` = any of the values (e.g. Cardano indexer: ogmios,both)
+    return options[key]?.trim() in want.split(',').map { it.trim() }.filter { it.isNotEmpty() }
 }
 
 fun clientConfigTemplateName(config: ClientConfigFacts, env: String): String?

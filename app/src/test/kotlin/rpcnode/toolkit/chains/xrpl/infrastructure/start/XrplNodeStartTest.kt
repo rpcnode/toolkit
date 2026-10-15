@@ -2,6 +2,7 @@ package rpcnode.toolkit.chains.xrpl.infrastructure.start
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import rpcnode.toolkit.catalog.domain.NetworkId
 import rpcnode.toolkit.nodes.application.start.ChainNodeStartContext
@@ -28,14 +29,14 @@ class XrplNodeStartTest
         )
         assertEquals(NetworkId.XRPL, XrplNodeStart().networkId)
         assertEquals("binary", plan.launch.kind)
-        assertEquals("bin/xrpld", plan.launch.entry)
+        assertEquals("bin/rpcnode-xrpl-run.sh", plan.launch.entry)
         assertEquals("xrpl_rpc", plan.height.kind)
         assertEquals("http", plan.height.portRole)
         assertEquals("logs/xrpld.log", plan.launch.logFile)
         assertTrue(plan.launch.args.contains("--toolkit-env=mainnet"))
         assertTrue(plan.launch.args.contains("--toolkit-history=day"))
         assertTrue(plan.launch.args.contains("--toolkit-ledger=/data/rpcnode/xrpl/mainnet/ledger"))
-        assertEquals("xrpld-*.deb", plan.launch.extractArchiveGlob)
+        assertNull(plan.launch.extractArchiveGlob)
     }
 
     @Test

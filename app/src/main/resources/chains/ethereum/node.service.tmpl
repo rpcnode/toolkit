@@ -8,18 +8,14 @@ Type=simple
 ExecStart={{bin}} \
   --datadir {{datadir}} \
   --http --http.addr 0.0.0.0 --http.port {{http_port}} \
-  --http.api eth,net,web3,txpool \
-  --http.vhosts * \
+  --ws --ws.addr 0.0.0.0 --ws.port {{ws_port}} \
   --authrpc.addr 127.0.0.1 --authrpc.port {{engine_port}} \
   --authrpc.jwtsecret {{jwt_path}} \
   --authrpc.vhosts localhost \
   --syncmode {{syncmode}} \
   --gcmode {{gcmode}} \
   --state.scheme path \
-  --cache {{cache_mb}} \
-  --ipcdisable \
-  --maxpeers 100 \
-  --rpc.batch-request-limit 2000{{history_flag}} \
+  --ipcdisable{{tunable_flags}}{{history_flag}} \
   --port {{p2p_port}}{{network_flag}}
 Restart=on-failure
 RestartSec=10

@@ -2,6 +2,9 @@ package rpcnode.toolkit.nodes.application.height
 
 import java.time.Instant
 import rpcnode.toolkit.networks.application.tip.NetworkTipCache
+import rpcnode.toolkit.networks.domain.model.DEFAULT_TIP_LAG_BLOCKS
+import rpcnode.toolkit.networks.domain.repository.NetworkFactsRepository
+import rpcnode.toolkit.networks.domain.repository.tipLagFor
 import rpcnode.toolkit.nodes.domain.model.NodeId
 import rpcnode.toolkit.nodes.domain.model.NodeStatus
 import rpcnode.toolkit.nodes.domain.repository.NodeRepository
@@ -31,7 +34,8 @@ sealed interface GetNodeHeightResult
 class GetNodeHeightUseCase(
     private val nodes: NodeRepository,
     private val tipCache: NetworkTipCache,
-    private val tipLagActive: Long = 3,
+    private val tipLagActive: Long = DEFAULT_TIP_LAG_BLOCKS,
+    private val facts: NetworkFactsRepository? = null,
     private val clock: () -> String = { Instant.now().toString() },
 )
 {
@@ -65,7 +69,7 @@ class GetNodeHeightUseCase(
         if (
             status.value == NodeStatus.SYNC.value &&
             behind != null &&
-            behind <= tipLagActive &&
+            behind <= (facts?.tipLagFor(node.network, node.env) ?: tipLagActive) &&
             (node.syncPct < 0 || node.syncPct >= 99.9)
         )
         {

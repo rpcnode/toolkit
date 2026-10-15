@@ -43,10 +43,12 @@ class XrplNodeHeightProbe(
         {
             return null
         }
-        val info = XrplRpc.serverInfo(http, "http://127.0.0.1:$httpPort") ?: return null
-        if (!info.ok)
+        val info = XrplRpc.serverInfo(http, "http://127.0.0.1:$httpPort")
+        if (info == null || !info.ok)
         {
-            return null
+            // A node that cannot catch up (wrongLedger, no peers) stalls its own RPC for minutes, so the bar would
+            // never appear: keep the last known % (0 on a fresh node) instead of reporting nothing.
+            return HostNodeHeightReading(height = -1, syncPct = lastPct(nodeDir) ?: 0.0, syncing = true)
         }
         val envId = XrplClusters.normalizeEnv(env)
         val policy = loadPolicy(nodeDir)
@@ -63,15 +65,32 @@ class XrplNodeHeightProbe(
             target = policy.ledgers,
         )
         val syncing = !(live && histOk)
+        remember(nodeDir, pct)
         if (info.seq <= 0)
         {
-            return HostNodeHeightReading(height = 0, syncPct = pct.takeIf { it > 0 }, syncing = true)
+            // No validated ledger yet: still syncing, and an explicit 0 is what makes the bar show up.
+            return HostNodeHeightReading(height = 0, syncPct = pct, syncing = true)
         }
         return HostNodeHeightReading(
             height = info.seq,
             syncPct = pct,
             syncing = syncing,
         )
+    }
+
+    private fun lastPctFile(nodeDir: String): Path =
+        Path.of(nodeDir.trim()).resolve(".toolkit").resolve("sync-last-pct")
+
+    private fun lastPct(nodeDir: String): Double? =
+        runCatching { Files.readString(lastPctFile(nodeDir)).trim().toDouble() }.getOrNull()?.takeIf { it in 0.0..100.0 }
+
+    private fun remember(nodeDir: String, pct: Double)
+    {
+        runCatching {
+            val file = lastPctFile(nodeDir)
+            Files.createDirectories(file.parent)
+            Files.writeString(file, "$pct\n")
+        }
     }
 
     private fun loadPolicy(nodeDir: String): XrplHistoryPolicy

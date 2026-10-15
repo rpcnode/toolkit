@@ -106,4 +106,17 @@ class SnapshotHttpDownloadTest
         assertTrue(Files.readAllBytes(dest).contentEquals(payload))
         Files.deleteIfExists(dest)
     }
+
+    @Test
+    fun aria2_and_curl_get_the_proxy_as_a_flag_because_detached_units_do_not_inherit_the_agent_env()
+    {
+        val dest = java.nio.file.Path.of("/data/x/.toolkit/a.tgz")
+        val dl = SnapshotHttpDownload()
+        val aria = dl.downloadCommand(rpcnode.toolkit.agent.infrastructure.proc.EnsureHostDownloader.Tool.Aria2, "https://m/a.tgz", dest, "http://u:p@h:3128")
+        assertEquals(listOf("--all-proxy=http://u:p@h:3128", "https://m/a.tgz"), aria.takeLast(2))
+        val curl = dl.downloadCommand(rpcnode.toolkit.agent.infrastructure.proc.EnsureHostDownloader.Tool.Curl, "https://m/a.tgz", dest, "http://u:p@h:3128")
+        assertEquals(listOf("-x", "http://u:p@h:3128", "https://m/a.tgz"), curl.takeLast(3))
+        val direct = dl.downloadCommand(rpcnode.toolkit.agent.infrastructure.proc.EnsureHostDownloader.Tool.Curl, "https://m/a.tgz", dest)
+        assertTrue(direct.none { it == "-x" })
+    }
 }

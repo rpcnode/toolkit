@@ -91,9 +91,57 @@ fun inferLaunch(
     {
         return InstallPlanLaunch(kind = "binary", entry = "geth")
     }
+    if (tar != null && programId.equals("aptos-node", ignoreCase = true))
+    {
+        return InstallPlanLaunch(kind = "binary", entry = "bin/aptos-node")
+    }
+    if (tar != null && programId.equals("core-geth", ignoreCase = true))
+    {
+        return InstallPlanLaunch(kind = "binary", entry = "bin/geth")
+    }
+    if (tar != null && programId.equals("cardano-node", ignoreCase = true))
+    {
+        return InstallPlanLaunch(kind = "binary", entry = "bin/cardano-node")
+    }
     if (tar != null && programId.equals("sui-node", ignoreCase = true))
     {
         return InstallPlanLaunch(kind = "binary", entry = "bin/sui-node")
+    }
+    if (tar != null && programId.equals("world-chain", ignoreCase = true))
+    {
+        return InstallPlanLaunch(kind = "binary", entry = "bin/world-chain")
+    }
+    if (tar != null && programId.equals("arc-node", ignoreCase = true))
+    {
+        return InstallPlanLaunch(kind = "binary", entry = "bin/arc-node-execution")
+    }
+    if (tar != null && programId.equals("juno", ignoreCase = true))
+    {
+        return InstallPlanLaunch(kind = "binary", entry = "bin/juno")
+    }
+    if (tar != null && programId.equals("polkadot", ignoreCase = true))
+    {
+        return InstallPlanLaunch(kind = "binary", entry = "bin/polkadot")
+    }
+    if (tar != null && programId.equals("neard", ignoreCase = true))
+    {
+        return InstallPlanLaunch(kind = "binary", entry = "bin/neard")
+    }
+    if (tar != null && programId.equals("stacks-node", ignoreCase = true))
+    {
+        return InstallPlanLaunch(kind = "binary", entry = "bin/stacks-node")
+    }
+    if (tar != null && programId.equals("snarkos", ignoreCase = true))
+    {
+        return InstallPlanLaunch(kind = "binary", entry = "bin/snarkos")
+    }
+    if (tar != null && programId.equals("fuel-core", ignoreCase = true))
+    {
+        return InstallPlanLaunch(kind = "binary", entry = "bin/fuel-core")
+    }
+    if (tar != null && programId.equals("avalanchego", ignoreCase = true))
+    {
+        return InstallPlanLaunch(kind = "binary", entry = "bin/avalanchego")
     }
     if (tar != null && programId.equals("hl-visor", ignoreCase = true))
     {
@@ -154,6 +202,10 @@ fun preferredInstallPlanProgram(fallback: String, files: List<InstallPlanFile>):
     if (files.any { it.path.startsWith("geth-", ignoreCase = true) || it.path.equals("geth", ignoreCase = true) })
     {
         return "geth"
+    }
+    if (files.any { it.path.startsWith("cardano-node-linux-", ignoreCase = true) })
+    {
+        return "cardano-node"
     }
     return fallback
 }

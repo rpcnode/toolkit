@@ -8,6 +8,7 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
+import rpcnode.toolkit.shared.infrastructure.http.HttpProxy
 
 /**
  * Copies an HTTP body into [OutputStream] and keeps going when the network drops.
@@ -30,12 +31,15 @@ class ResumableStreamCopier(
     private val backoffMs: (consecutiveFailures: Int) -> Long = { n -> minOf(60_000L, 1_000L shl minOf(n, 6)) },
     connectTimeoutMs: Long = 30_000,
     private val sleep: (Long) -> Unit = { Thread.sleep(it) },
+    /** `http://[user:pass@]host:port` — the node's proxy; blank = direct. */
+    proxy: String = "",
 )
 {
     private val client: HttpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofMillis(connectTimeoutMs))
         .followRedirects(HttpClient.Redirect.NORMAL)
         .version(HttpClient.Version.HTTP_1_1)
+        .apply { HttpProxy.apply(this, proxy) }
         .build()
 
     /** The consumer closed or failed — not a network problem, never retried. */

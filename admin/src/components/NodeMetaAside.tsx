@@ -13,6 +13,8 @@ import { clientUpdateClickable } from '../lib/nodeLifecycle'
 import { NodeAgentVersion } from './AgentVersion'
 import { NodeDiskSummary } from './NodeDiskSummary'
 import { NodeLifecycleDates } from './NodeLifecycleDates'
+import { NodeParentChain, isL2Network } from './NodeParentChain'
+import { NodeProxySelect } from './NodeProxySelect'
 
 const RPC_USER_PASSWORD_NETWORKS = new Set(['dash', 'ltc', 'doge', 'bch'])
 
@@ -28,6 +30,8 @@ type Props = {
   /** Already masked on render; the full value stays for copy. */
   fullnodeEndpoint?: string | null
   onClientUpdate: () => void
+  /** Called after the node's settings changed on the panel (L1 endpoints) so the page reloads it. */
+  onChanged?: () => void
 }
 
 function MetaRow({
@@ -295,7 +299,7 @@ function nodeTypeDisplay(workload: Workload | null): string | null {
   const opts = workload?.install_options
   if (!opts || typeof opts !== 'object') return null
 
-  const skip = new Set(['snapshot', 'l1_rpc', 'l1_beacon'])
+  const skip = new Set(['snapshot', 'l1_rpc', 'l1_beacon', 'prune_blocks', 'restore', 'snapshot_url'])
   const net = (workload?.network || '').toLowerCase()
   const env = (workload?.env || '').toLowerCase()
   const catalog = getNetworks().find((n) => n.id === net)
@@ -342,6 +346,7 @@ export function NodeMetaAside({
   phase,
   fullnodeEndpoint,
   onClientUpdate,
+  onChanged,
 }: Props) {
   const endpoint = String(fullnodeEndpoint || '').trim()
   const configPath = String(status?.config?.path || '').trim()
@@ -432,6 +437,17 @@ export function NodeMetaAside({
         <MetaRow label="agent" wrap>
           <NodeAgentVersion status={status} tipVersion={tipAgentVersion} hideLabel />
         </MetaRow>
+        {nodeId ? (
+          <MetaRow label="proxy" title="Outbound HTTP proxy (Settings → Proxies) — applied on the next Start / Restart">
+            <NodeProxySelect
+              nodeId={nodeId}
+              serverId={workload?.server_id}
+              value={workload?.proxy_id}
+              size="xs"
+              applyHint="Proxy saved — Restart the node to apply it on the host"
+            />
+          </MetaRow>
+        ) : null}
       </div>
 
       {hasDates ? (
@@ -442,6 +458,12 @@ export function NodeMetaAside({
             synced={workload?.synced_at}
             updated={status?.served_at || status?.updated_at || workload?.updated_at}
           />
+        </div>
+      ) : null}
+
+      {isL2Network(workload?.network) ? (
+        <div className="node-meta__group">
+          <NodeParentChain workload={workload} onChanged={onChanged} />
         </div>
       ) : null}
 

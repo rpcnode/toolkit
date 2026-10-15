@@ -22,6 +22,21 @@ class EthereumEthRpcTest
     }
 
     @Test
+    fun parse_block_timestamp_hex()
+    {
+        val body = """{"jsonrpc":"2.0","id":1,"result":{"number":"0x1","timestamp":"0x64"}}"""
+        assertEquals(100L, EthereumEthRpc.parseBlockTimestamp(body))
+    }
+
+    @Test
+    fun parse_block_timestamp_null_when_missing()
+    {
+        assertNull(EthereumEthRpc.parseBlockTimestamp("""{"jsonrpc":"2.0","id":1,"result":null}"""))
+        assertNull(EthereumEthRpc.parseBlockTimestamp("""{"jsonrpc":"2.0","id":1,"error":{"message":"x"}}"""))
+        assertNull(EthereumEthRpc.parseBlockTimestamp(null))
+    }
+
+    @Test
     fun parse_syncing_false()
     {
         val body = """{"jsonrpc":"2.0","id":1,"result":false}"""

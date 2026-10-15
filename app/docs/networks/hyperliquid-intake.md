@@ -127,7 +127,7 @@ Exec flags (unit): `run-non-validator --replica-cmds-style actions --serve-eth-r
 - Ensure `{node_dir}/bin/hl-visor` (synced bare binary)
 - Import `pub_key.asc` via gpg when present (best-effort)
 - `{node_dir}/hl/` workdir + `hyperliquid_data` → chain role
-- Write `visor.json` + `override_gossip_config.json` (live peers + seeds)
+- Write `visor.json` + `override_gossip_config.json` (live peers + seeds) into `hl/`, `{node_dir}/` and `{node_dir}/bin/` (hl-visor reads `visor.json` next to its executable)
 - Unit `rpcnode-hyperliquid-<env>`: `HOME=node_dir`, `WorkingDirectory=node_dir/hl`
 - **Never** write `/opt/hyperliquid` or `/etc/hyperliquid`
 

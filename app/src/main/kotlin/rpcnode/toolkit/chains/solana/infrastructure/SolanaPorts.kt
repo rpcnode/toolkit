@@ -8,6 +8,10 @@ data class SolanaPorts(
     val http: Int,
     val p2p: Int,
 )
+{
+    /** Agave serves pubsub on the RPC port + 1 and has no flag for it. */
+    val ws: Int get() = http + 1
+}
 
 object SolanaPortTable
 {

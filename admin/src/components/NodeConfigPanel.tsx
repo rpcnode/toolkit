@@ -47,6 +47,9 @@ import { copyText } from '../lib/copyText'
 import { blockProps } from '../lib/blockId'
 import { officialDocsUrl } from '../lib/networkDocs'
 import { fallbackInstallGroups } from './InstallOptionsPicker'
+import { GethFlagsEditor } from './GethFlagsEditor'
+import { ExtraFlagsEditor } from './ExtraFlagsEditor'
+import { prodPresetFor } from '../lib/prodPresets'
 import { xrplHistoryInstallLabel, type XrplHistoryMode } from './XrplHistoryPicker'
 
 type KvRow = {
@@ -437,7 +440,8 @@ function installOptionDisplayRows(
       })
       continue
     }
-    rows.push({ id: k, label: k, value: v })
+    // a signed snapshot URL carries its signature in the query: show the file only
+    rows.push({ id: k, label: k, value: k === 'snapshot_url' ? String(v).split('?')[0] : v })
   }
   return rows
 }
@@ -663,6 +667,33 @@ export function NodeConfigPanel({
     setNewVal('')
   }
 
+  /** Prod recommendations: set preset keys that exist, append the ones the file does not have yet. */
+  const applyConfPreset = () => {
+    const conf = prodPresetFor(network)?.conf
+    if (!doc || !conf) return
+    const present = new Set(rows.map((r) => r.key.toLowerCase()))
+    const existing = Object.entries(conf).filter(([k]) => present.has(k.toLowerCase()))
+    const missing = Object.entries(conf).filter(([k]) => !present.has(k.toLowerCase()))
+    if (existing.length) {
+      const byKey = new Map(existing.map(([k, v]) => [k.toLowerCase(), v]))
+      applyRows(rows.map((r) => (byKey.has(r.key.toLowerCase()) ? { ...r, value: byKey.get(r.key.toLowerCase())! } : r)))
+    }
+    if (missing.length) {
+      const docId = doc.id
+      const fallback = doc.content ?? ''
+      setDrafts((prev) => {
+        let out = prev[docId] ?? fallback
+        if (out && !out.endsWith('\n')) out += '\n'
+        for (const [k, v] of missing) out += `${k}=${v}\n`
+        return { ...prev, [docId]: out }
+      })
+    }
+    notifications.show({
+      color: 'teal',
+      message: 'Prod recommendations applied to the draft — review and Save to write the file',
+    })
+  }
+
   const confirmSave = async () => {
     if (!data?.documents) return
     setSaving(true)
@@ -775,6 +806,27 @@ export function NodeConfigPanel({
               {error}
             </Alert>
           ) : null}
+
+          <ExtraFlagsEditor
+            nodeId={nodeId}
+            network={network}
+            installOptions={installOptions}
+            onApplied={() => {
+              void load()
+              onApplied?.()
+            }}
+          />
+
+          <GethFlagsEditor
+            nodeId={nodeId}
+            network={network}
+            env={env}
+            installOptions={installOptions}
+            onApplied={() => {
+              void load()
+              onApplied?.()
+            }}
+          />
 
           {installOptionRows.length > 0 ? (
             <Card withBorder padding="sm" radius="md">
@@ -994,6 +1046,17 @@ export function NodeConfigPanel({
                       >
                         Add
                       </Button>
+                      {prodPresetFor(network)?.conf ? (
+                        <Tooltip
+                          label={(prodPresetFor(network)?.notes || []).join(' · ') || 'Checked against the client option reference'}
+                          multiline
+                          w={320}
+                        >
+                          <Button size="xs" variant="light" color="teal" onClick={applyConfPreset}>
+                            Prod recommendations
+                          </Button>
+                        </Tooltip>
+                      ) : null}
                     </Group>
                   ) : null}
                 </>

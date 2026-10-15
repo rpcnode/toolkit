@@ -22,6 +22,7 @@ import {
 } from '@tabler/icons-react'
 import { blockProps } from '../../../../lib/blockId'
 import { copyText } from '../../../../lib/copyText'
+import { NodeProxySelect } from '../../../NodeProxySelect'
 import { PortCatalogAccordion } from './PortHelpers'
 import { isCheckPortsTimeout } from '../../utils'
 import { useWizard, type WizardApi } from '../../wizardContext'
@@ -48,6 +49,7 @@ function View({
     reachNote,
     catalogPortsList,
     nodePortsChecking,
+    nodePortsError,
     nodePortsLiveFetched,
     checkHostPortsLive,
     portsOverallStatus,
@@ -221,6 +223,23 @@ function View({
                       </Button>
                     </Group>
                   ) : null}
+                  {usingLiveNodeCatalog && nodePortsError && !nodePortsChecking ? (
+                    <Alert
+                      color="red"
+                      icon={<IconAlertTriangle size={16} />}
+                      title={
+                        isCheckPortsTimeout(nodePortsError)
+                          ? 'Host agent did not answer — ports not checked'
+                          : 'Could not check ports'
+                      }
+                    >
+                      <Text size="sm">
+                        {nodePortsError} Whether these ports are free is unknown. Check that the
+                        agent is running on the host and reachable from the panel, then press
+                        Re-check ports.
+                      </Text>
+                    </Alert>
+                  ) : null}
                   {nodePortsChecking ? (
                     <Alert color="gray" variant="light" title="Checking ports on the host…">
                       Probing catalog ports against the host agent.
@@ -234,6 +253,18 @@ function View({
                   )}
                 </>
               )}
+
+              {workload?.id ? (
+                <Box mt="md" maw={420} {...blockProps('node.detail.wizard.proxy')}>
+                  <NodeProxySelect
+                    nodeId={workload.id}
+                    serverId={workload.server_id}
+                    value={workload.proxy_id}
+                    label="Outbound proxy"
+                    description="Snapshot downloads and the node itself go through it (Settings → Proxies). Direct = no proxy."
+                  />
+                </Box>
+              ) : null}
 
               <Group
                 className="node-install-wizard__actions"

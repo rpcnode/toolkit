@@ -45,13 +45,50 @@ while true; do
   sleep 45
 done
 set -o pipefail
-"$TOOL" download-formal-snapshot \
-  --latest \
-  --genesis "$GENESIS" \
-  --network "$ENV" \
-  --path "$DB" \
-  --num-parallel-downloads 50 \
-  --no-sign-request 2>&1 | tee -a "$LOG"
+CMD=("$TOOL" download-formal-snapshot
+  --latest
+  --genesis "$GENESIS"
+  --network "$ENV"
+  --path "$DB"
+  --num-parallel-downloads 50
+  --no-sign-request)
+# indicatif hides its bars when stderr is not a TTY → run under a pty
+# (util-linux `script`), split \r redraws into lines, strip ANSI and
+# bar glyphs. PROGRESS keeps the latest line per bar for the agent.
+PROGRESS="$(dirname "$LOG")/sui-snapshot-progress.txt"
+: >"$PROGRESS"
+filter() {
+  awk -v progress="$PROGRESS" '
+    BEGIN { RS = "[\r\n]+" }
+    {
+      s = $0
+      gsub(/\033\[[0-9;?]*[ -\/]*[@-~]/, "", s)
+      gsub(/[^ -~]/, "", s)
+      gsub(/  +/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s)
+      if (s == "") next
+      if (match(s, /[0-9]+( out of |\/)[0-9]+/)) {
+        label = substr(s, RSTART + RLENGTH); sub(/\(.*/, "", label)
+        gsub(/^ +| +$/, "", label)
+        if (label == "") label = (s ~ /verified/) ? "checkpoints verified" : "checkpoint summaries"
+        key = s; sub(/^\[[0-9:]+\] /, "", key); sub(/ \(.*/, "", key)
+        if (key == lastkey[label]) next
+        lastkey[label] = key
+        if (!(label in cur)) order[++n] = label
+        cur[label] = s
+        printf "" >progress
+        for (i = 1; i <= n; i++) print cur[order[i]] >>progress
+        close(progress)
+      } else if (s in seen) next
+      seen[s] = 1
+      print s
+      fflush()
+    }'
+}
+if command -v script >/dev/null 2>&1; then
+  script -qefc "$(printf '%q ' "${CMD[@]}")" /dev/null </dev/null 2>&1 | filter | tee -a "$LOG"
+else
+  "${CMD[@]}" 2>&1 | filter | tee -a "$LOG"
+fi
 RC=${PIPESTATUS[0]}
 snapdiag "download_done rc=$RC"
 if [ "$RC" -ne 0 ]; then

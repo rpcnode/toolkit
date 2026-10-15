@@ -92,6 +92,33 @@ import rpcnode.toolkit.chains.polygon.infrastructure.http.PolygonNodeHeightProbe
 import rpcnode.toolkit.chains.polygon.infrastructure.proc.PolygonNodeProcessStarter
 import rpcnode.toolkit.chains.solana.infrastructure.http.SolanaNodeHeightProbe
 import rpcnode.toolkit.chains.solana.infrastructure.proc.SolanaNodeProcessStarter
+import rpcnode.toolkit.chains.arc.infrastructure.http.ArcNodeHeightProbe
+import rpcnode.toolkit.chains.arc.infrastructure.proc.ArcNodeProcessStarter
+import rpcnode.toolkit.chains.avalanche.infrastructure.http.AvalancheNodeHeightProbe
+import rpcnode.toolkit.chains.aptos.infrastructure.http.AptosNodeHeightProbe
+import rpcnode.toolkit.chains.aptos.infrastructure.proc.AptosNodeProcessStarter
+import rpcnode.toolkit.chains.etc.infrastructure.http.EtcNodeHeightProbe
+import rpcnode.toolkit.chains.etc.infrastructure.proc.EtcNodeProcessStarter
+import rpcnode.toolkit.chains.cardano.infrastructure.http.CardanoNodeHeightProbe
+import rpcnode.toolkit.chains.cometbft.infrastructure.CometbftProfiles
+import rpcnode.toolkit.chains.evmfamily.infrastructure.EvmProfiles
+import rpcnode.toolkit.chains.evmfamily.infrastructure.proc.EvmNodeProcessStarter
+import rpcnode.toolkit.chains.cometbft.infrastructure.http.CometbftNodeHeightProbe
+import rpcnode.toolkit.chains.nonevm.infrastructure.NonEvmWiring
+import rpcnode.toolkit.chains.cometbft.infrastructure.proc.CometbftNodeProcessStarter
+import rpcnode.toolkit.chains.cardano.infrastructure.proc.CardanoNodeProcessStarter
+import rpcnode.toolkit.chains.stellar.infrastructure.http.StellarNodeHeightProbe
+import rpcnode.toolkit.chains.stellar.infrastructure.proc.StellarNodeProcessStarter
+import rpcnode.toolkit.chains.optimism.infrastructure.http.OptimismNodeHeightProbe
+import rpcnode.toolkit.chains.optimism.infrastructure.proc.OptimismNodeProcessStarter
+import rpcnode.toolkit.chains.opstack.infrastructure.OpstackNetworks
+import rpcnode.toolkit.chains.opstack.infrastructure.http.OpstackNodeHeightProbe
+import rpcnode.toolkit.chains.opstack.infrastructure.proc.OpstackNodeProcessStarter
+import rpcnode.toolkit.chains.robinhood.infrastructure.proc.RobinhoodNodeProcessStarter
+import rpcnode.toolkit.chains.starknet.infrastructure.http.StarknetNodeHeightProbe
+import rpcnode.toolkit.chains.starknet.infrastructure.proc.StarknetNodeProcessStarter
+import rpcnode.toolkit.chains.xai.infrastructure.proc.XaiNodeProcessStarter
+import rpcnode.toolkit.chains.avalanche.infrastructure.proc.AvalancheNodeProcessStarter
 import rpcnode.toolkit.chains.sui.infrastructure.http.SuiNodeHeightProbe
 import rpcnode.toolkit.chains.sui.infrastructure.proc.SuiNodeProcessStarter
 import rpcnode.toolkit.chains.xrpl.infrastructure.http.XrplNodeHeightProbe
@@ -107,6 +134,8 @@ import rpcnode.toolkit.chains.zcash.infrastructure.proc.ZcashNodeProcessStarter
 
 fun main(args: Array<String>)
 {
+    // Node proxies use Basic auth on the CONNECT tunnel; the JDK disables it by default. Must precede any HttpClient.
+    rpcnode.toolkit.shared.infrastructure.http.HttpProxy.allowTunnelBasicAuth()
     val cmd = args.firstOrNull()?.trim()?.lowercase().orEmpty()
     when (cmd)
     {
@@ -266,6 +295,80 @@ private fun runAgentServer()
             starter = ArbNodeProcessStarter(),
             height = ArbNodeHeightProbe(),
         ),
+        "optimism" to ChainNodeRuntime(
+            network = "optimism",
+            starter = OptimismNodeProcessStarter(),
+            height = OptimismNodeHeightProbe(),
+        ),
+        *OpstackNetworks.ALL.map { spec ->
+            spec.network.value to ChainNodeRuntime(
+                network = spec.network.value,
+                starter = OpstackNodeProcessStarter(spec),
+                height = OpstackNodeHeightProbe(logName = "${spec.network.value}.log"),
+            )
+        }.toTypedArray(),
+        *NonEvmWiring.hostRuntimes().map { (network, runtime) ->
+            network to ChainNodeRuntime(network = network, starter = runtime.first, height = runtime.second)
+        }.toTypedArray(),
+        "robinhood" to ChainNodeRuntime(
+            network = "robinhood",
+            starter = RobinhoodNodeProcessStarter(),
+            height = ArbNodeHeightProbe(),
+        ),
+        "xai" to ChainNodeRuntime(
+            network = "xai",
+            starter = XaiNodeProcessStarter(),
+            height = ArbNodeHeightProbe(),
+        ),
+        "starknet" to ChainNodeRuntime(
+            network = "starknet",
+            starter = StarknetNodeProcessStarter(),
+            height = StarknetNodeHeightProbe(),
+        ),
+        "arc" to ChainNodeRuntime(
+            network = "arc",
+            starter = ArcNodeProcessStarter(),
+            height = ArcNodeHeightProbe(),
+        ),
+        "avalanche" to ChainNodeRuntime(
+            network = "avalanche",
+            starter = AvalancheNodeProcessStarter(),
+            height = AvalancheNodeHeightProbe(),
+        ),
+        "aptos" to ChainNodeRuntime(
+            network = "aptos",
+            starter = AptosNodeProcessStarter(),
+            height = AptosNodeHeightProbe(),
+        ),
+        "etc" to ChainNodeRuntime(
+            network = "etc",
+            starter = EtcNodeProcessStarter(),
+            height = EtcNodeHeightProbe(),
+        ),
+        *CometbftProfiles.ALL.map { p ->
+            p.network.value to ChainNodeRuntime(
+                network = p.network.value,
+                starter = CometbftNodeProcessStarter(p),
+                height = CometbftNodeHeightProbe(),
+            )
+        }.toTypedArray(),
+        *EvmProfiles.ALL.map { p ->
+            p.network.value to ChainNodeRuntime(
+                network = p.network.value,
+                starter = EvmNodeProcessStarter(p),
+                height = p.heightProbe(),
+            )
+        }.toTypedArray(),
+        "cardano" to ChainNodeRuntime(
+            network = "cardano",
+            starter = CardanoNodeProcessStarter(),
+            height = CardanoNodeHeightProbe(),
+        ),
+        "stellar" to ChainNodeRuntime(
+            network = "stellar",
+            starter = StellarNodeProcessStarter(),
+            height = StellarNodeHeightProbe(),
+        ),
         "sui" to ChainNodeRuntime(
             network = "sui",
             starter = SuiNodeProcessStarter(),
@@ -311,6 +414,7 @@ private fun runAgentServer()
         notifyPanel = nodeEvents,
         agentToken = cfg.token,
     )
+    val buildClient = rpcnode.toolkit.agent.application.client.HostClientBuildUseCase(scope = pushScope)
     NodeHeightPusher(
         push = PushNodeHeightsUseCase(
             enrollment = enrollment,
@@ -395,6 +499,7 @@ private fun runAgentServer()
                 probeSnapshotSpeed,
                 syncClient = syncClient,
                 updateClient = updateClient,
+                buildClient = buildClient,
                 startNode = startNode,
                 getNodeLogs = GetNodeProcessLogsUseCase(runningNodes),
                 getNodeClientVersion = GetNodeClientVersionUseCase(runningNodes, enrollment),
@@ -463,6 +568,7 @@ fun Application.module(
     probeSnapshotSpeed: ProbeSnapshotSpeedUseCase = ProbeSnapshotSpeedUseCase(HttpSnapshotSpeedProbe()),
     syncClient: SyncClientFromPanelUseCase? = null,
     updateClient: UpdateClientOnHostUseCase? = null,
+    buildClient: rpcnode.toolkit.agent.application.client.HostClientBuildUseCase? = null,
     startNode: StartNodeProcessUseCase? = null,
     getNodeLogs: GetNodeProcessLogsUseCase? = null,
     getNodeClientVersion: GetNodeClientVersionUseCase? = null,
@@ -503,6 +609,7 @@ fun Application.module(
         probeSnapshotSpeed,
         syncClient = syncClient,
         updateClient = updateClient,
+        buildClient = buildClient,
         startNode = startNode,
         getNodeLogs = getNodeLogs,
         getNodeClientVersion = getNodeClientVersion,

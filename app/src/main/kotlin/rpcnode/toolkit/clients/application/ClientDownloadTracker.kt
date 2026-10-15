@@ -1,6 +1,6 @@
 package rpcnode.toolkit.clients.application
 
-enum class ClientDownloadPhase { QUEUED, DOWNLOAD, DONE, FAIL }
+enum class ClientDownloadPhase { QUEUED, DOWNLOAD, BUILD, DONE, FAIL }
 
 data class ClientDownloadProgress(
     val phase: ClientDownloadPhase,

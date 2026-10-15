@@ -20,12 +20,12 @@ Filled from Go sibling `../toolkit-go/internal/networks/xrpl/` and admin helpers
 |---|---|---|
 | 1 Product scope | OK | Stock non-validator xrpld RPC |
 | 2 Environments | OK | mainnet, testnet |
-| 3 Artifacts | OK | Ripple `.deb` pool (version from XRPLF/rippled GitHub) |
+| 3 Artifacts | OK | XRPLF/rippled source release (`xrpld-src.tar.gz`), built on the host |
 | 4 Ports | OK | http + p2p + ws + grpc |
 | 5 Disks | OK | ledger (SSD NuDB) |
 | 6 Client config | OK | `format: flags` — generated xrpld.cfg |
 | 7 Snapshot | OK | `never` — peer IBD / history window |
-| 8–9 Start / proc | OK | Extract deb under node_dir → unit → xrpld |
+| 8–9 Start / proc | OK | Run script builds xrpld once per release (Conan 2 + CMake + Clang 22) → unit runs it → xrpld |
 | 10–11 Height / tip | OK | `server_info` validated_ledger.seq |
 | 12–13 Lifecycle / options | OK | `xrpl_history` stock/day/weeks/full |
 | **Overall** | Ready to implement | |
@@ -35,10 +35,10 @@ Filled from Go sibling `../toolkit-go/internal/networks/xrpl/` and admin helpers
 ## 1. Product scope
 
 1. **Why:** Operators run stock XRPL full-history / windowed RPC (`xrpld`).
-2. **MVP:** Clients download (`.deb`), JBOD ledger disk, ports, history Install option, start unit, push ledger height + sync %, public tip lag.
+2. **MVP:** Clients download (source archive), JBOD ledger disk, ports, history Install option, start unit, push ledger height + sync %, public tip lag.
    **Host layout:** bins, cfg, validators, NuDB, logs under **node_dir** only.
    **Out of scope:** Clio + Scylla, validator / UNL publishing, Docker, Go `/opt`/`/etc` apt provision paths.
-3. **Pin-only?** No — public `.deb` at `repos.ripple.com` (amd64).
+3. **Pin-only?** No — public GitHub source release of `XRPLF/rippled`.
 4. **One env per host?** `false`.
 
 ---
@@ -57,13 +57,13 @@ Same binary family; network via `[network_id]` / `[ips_fixed]` / validators UNL.
 ## 3. Client binary & artifacts
 
 1. **Upstream:** GitHub `XRPLF/rippled` for version tags; binary from Ripple apt pool
-   `https://repos.ripple.com/repos/rippled-deb/pool/stable/xrpld_{version}-1_amd64.deb`.
+   `https://github.com/XRPLF/rippled/archive/refs/tags/{tag}.tar.gz` (the Ripple apt pool lags behind releases and the 3.3.x packages are amendment blocked, so no `.deb`).
 2. **Latest:** newest non-prerelease GitHub tag (prefer ≥ 3.3.0; avoid 3.2.x first-ledger bug).
-3. Stable name: `xrpld-amd64.deb` (amd64 only — no official arm64 `xrpld` package).
+3. Stable name: `xrpld-src.tar.gz`.
 4. Config: generated `xrpld.cfg` + `validators.txt` on Start (not downloaded).
 5. Program id: `xrpld`.
 6. Requirements: `logFile: logs/xrpld.log`.
-7. **No Docker.** Extract with `dpkg-deb -x` under node_dir (Polygon pattern).
+7. **No Docker.** `bin/rpcnode-xrpl-run.sh` compiles `xrpld` under node_dir (first start takes hours: Conan builds the dependencies) and then `exec`s it; the unit stays active during the build.
 
 ---
 
@@ -121,9 +121,9 @@ History window is an Install option, not a second disk role.
 
 ## 8–9. Start / process
 
-1. Sync `xrpld-amd64.deb` → extract `xrpld` under `{node_dir}/bin/`.
+1. Sync `xrpld-src.tar.gz`; the run script builds it into `{node_dir}/bin/xrpld` (marker `.toolkit/xrpld-built` = source top dir).
 2. Write `validators.txt`, `history.json`, `xrpld.cfg` under node_dir (data under ledger role).
-3. systemd unit: `ExecStart=…/xrpld --conf …`, bounded `server_stop` on ExecStop, `LimitNOFILE=1048576`.
+3. systemd unit: `ExecStart=…/bin/rpcnode-xrpl-run.sh`, bounded `server_stop` on ExecStop, `LimitNOFILE=1048576`.
 
 ---
 

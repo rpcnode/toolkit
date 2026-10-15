@@ -19,7 +19,10 @@ suspend fun resolveVersion(source: ClientVersionSource, githubReleaseClient: Git
         ResolvedVersion(version = source.version, tag = source.tag, sourceLabel = source.label)
     is ClientVersionSource.GitHubRelease ->
     {
-        val release = githubReleaseClient.latestRelease(source.repo, source.tagPrefix, source.includePrerelease)
+        val release = githubReleaseClient.latestRelease(
+            source.repo,
+            ReleaseFilter(tagPrefix = source.tagPrefix, includePrerelease = source.includePrerelease, tagSuffix = source.tagSuffix, requireAsset = source.requireAsset),
+        )
         if (release == null)
         {
             ResolvedVersion(version = "", tag = "", sourceLabel = source.repo, error = "no releases found for ${source.repo}")
@@ -29,6 +32,22 @@ suspend fun resolveVersion(source: ClientVersionSource, githubReleaseClient: Git
             ResolvedVersion(version = release.version, tag = release.tag, sourceLabel = source.repo)
         }
     }
+}
+
+/**
+ * The installed version the downgrade guard of [resolveClientRelease] compares against. Programs of one network can
+ * have unrelated version numbers (Optimism: `op-reth/v2.6.0` next to `op-node/v1.19.9`), so an installed pin that belongs
+ * to another release line (different `name/` tag prefix than the pinned source) must not make the right pin look old.
+ */
+fun installedVersionFor(spec: ClientProgramSpec, installedVersion: String, installedTag: String): String
+{
+    if (installedVersion.isBlank())
+    {
+        return ""
+    }
+    val line = (spec.source as? ClientVersionSource.Pinned)?.tag?.substringBefore('/', "").orEmpty()
+    val installedLine = installedTag.substringBefore('/', "")
+    return if (line.isNotEmpty() && installedLine.isNotEmpty() && line != installedLine) "" else installedVersion
 }
 
 /**

@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicLong
 import org.slf4j.LoggerFactory
 import rpcnode.toolkit.agent.application.client.ClientStagingLayout
 import rpcnode.toolkit.agent.infrastructure.proc.EnsureHostCurl
+import rpcnode.toolkit.chains.starknet.infrastructure.http.StarknetSnapshotResolver
 
 /**
  * Snapshot archive → [destDir].
@@ -25,8 +26,8 @@ import rpcnode.toolkit.agent.infrastructure.proc.EnsureHostCurl
  */
 class SnapshotStreamExtract(
     private val httpDownload: SnapshotHttpDownload = SnapshotHttpDownload(),
-    private val streamCopier: (url: String, expectedBytes: Long?) -> ResumableStreamCopier =
-        { url, expected -> ResumableStreamCopier(url, expected) },
+    private val streamCopier: (url: String, expectedBytes: Long?, proxy: String) -> ResumableStreamCopier =
+        { url, expected, proxy -> ResumableStreamCopier(url, expected, proxy = proxy) },
 )
 {
     private val log = LoggerFactory.getLogger(SnapshotStreamExtract::class.java)
@@ -37,6 +38,8 @@ class SnapshotStreamExtract(
         destDir: Path,
         expectedBytes: Long?,
         streamUnpack: Boolean = false,
+        /** The node's proxy URL; blank = direct. */
+        proxy: String = "",
         onProcess: (Process) -> Unit = {},
         onUnit: (unit: String) -> Unit = {},
         isAborted: () -> Boolean = { false },
@@ -66,6 +69,7 @@ class SnapshotStreamExtract(
                 url = url,
                 dest = dest,
                 expectedBytes = expectedBytes,
+                proxy = proxy,
                 onProcess = onProcess,
                 isAborted = isAborted,
                 onRetry = onRetry,
@@ -85,6 +89,7 @@ class SnapshotStreamExtract(
             url = url,
             dest = archive,
             expectedBytes = expectedBytes,
+            proxy = proxy,
             isAborted = isAborted,
             onRetry = onRetry,
             onProcess = onProcess,
@@ -117,6 +122,7 @@ class SnapshotStreamExtract(
         url: String,
         dest: Path,
         expectedBytes: Long?,
+        proxy: String,
         onProcess: (Process) -> Unit,
         isAborted: () -> Boolean,
         onRetry: (attempt: Int, already: Long, reason: String) -> Unit,
@@ -132,7 +138,13 @@ class SnapshotStreamExtract(
         clearDestEntirely(dest)
         Files.createDirectories(dest)
 
-        val tar = ProcessBuilder("tar", "-xzf", "-", "-C", dest.toString())
+        val decompress = streamTarArgs(url)
+        val tool = decompress.firstOrNull { it == "lz4" || it == "zstd" }
+        if (tool != null && !EnsureHostCurl.onPath(tool))
+        {
+            error("$tool is required to unpack this snapshot (install the $tool package on the host)")
+        }
+        val tar = ProcessBuilder(listOf("tar") + decompress + listOf("-C", dest.toString()))
             .redirectError(ProcessBuilder.Redirect.PIPE)
             .start()
         onProcess(tar)
@@ -143,7 +155,7 @@ class SnapshotStreamExtract(
         errDrain.isDaemon = true
         errDrain.start()
 
-        val copier = streamCopier(url, expectedBytes)
+        val copier = streamCopier(url, expectedBytes, proxy)
         try
         {
             copier.copy(tar.outputStream, isAborted, onRetry, onProgress)
@@ -353,6 +365,26 @@ class SnapshotStreamExtract(
     {
         const val ARCHIVE_NAME = "snapshot-archive.tgz"
 
+        /** tar arguments (without `-C`) that read the archive from stdin; the compression follows the URL suffix. */
+        fun streamTarArgs(url: String): List<String>
+        {
+            val path = url.trim().substringBefore('?').substringBefore('#').lowercase()
+            return when
+            {
+                // Juno's mirror serves the tar.zst from `/files/<name>/latest` (no suffix, no redirect)
+                StarknetSnapshotResolver.isOfficialUrl(url) -> listOf("-I", "zstd", "-xf", "-")
+                path.endsWith(".tar.lz4") || path.endsWith(".lz4") -> listOf("-I", "lz4", "-xf", "-")
+                path.endsWith(".tar.zst") || path.endsWith(".tar.zstd") -> listOf("-I", "zstd", "-xf", "-")
+                path.endsWith(".tar") -> listOf("-xf", "-")
+                else -> listOf("-xzf", "-")
+            }
+        }
+
+        private val DB_FILE = Regex("""^(\d+\.(sst|log|blob)|MANIFEST-\d+|OPTIONS-\d+|CURRENT|LOCK|marker\..+)$""")
+
+        /** Pebble / RocksDB file names: a stale one left by an earlier extract would corrupt the next snapshot. */
+        fun isKeyValueDbFile(name: String): Boolean = DB_FILE.matches(name)
+
         /** Top-level client files and `.toolkit` survive snapshot clear / stop wipe. */
         fun shouldPreserveAlongsideSnapshot(child: Path): Boolean
         {
@@ -362,6 +394,11 @@ class SnapshotStreamExtract(
                 return true
             }
             if (!Files.isRegularFile(child))
+            {
+                return false
+            }
+            // Pebble / RocksDB files at the top of the DB directory (Juno snapshots are flat) belong to the chain data
+            if (isKeyValueDbFile(name))
             {
                 return false
             }

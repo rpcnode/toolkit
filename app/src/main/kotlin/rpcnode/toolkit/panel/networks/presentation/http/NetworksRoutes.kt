@@ -11,6 +11,7 @@ import io.ktor.server.routing.routing
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import rpcnode.toolkit.catalog.domain.EnvId
+import rpcnode.toolkit.catalog.domain.NetworkId
 import rpcnode.toolkit.networks.application.connect.ListEthereumNodesUseCase
 import rpcnode.toolkit.networks.application.connect.ListL1ParentChoicesUseCase
 import rpcnode.toolkit.networks.application.connect.TestConfigConnectUseCase
@@ -228,7 +229,7 @@ fun Application.networksApiRoutes(toolkit: Toolkit)
                         NetworkTestConnectResponse(
                             ok = false,
                             error = "bad_kind",
-                            message = "unknown testConnect.kind — use eth_rpc, beacon_genesis, or tron_http",
+                            message = "unknown testConnect.kind — use eth_rpc, eth_ws, beacon_genesis, or tron_http",
                         ),
                     )
                 TestConfigConnectUseCase.Result.BadUrl ->
@@ -247,7 +248,9 @@ fun Application.networksApiRoutes(toolkit: Toolkit)
             val env = call.request.queryParameters["env"].orEmpty()
             val status = call.request.queryParameters["status"] ?: "active"
             val serverId = call.request.queryParameters["server_id"]?.trim()?.ifEmpty { null }
-            when (val result = toolkit.listEthereumNodes(env, status, serverId))
+            // `network=arb` lists Arbitrum One nodes (parent chain of Xai); default and anything else: Ethereum
+            val parent = if (call.request.queryParameters["network"]?.trim()?.lowercase() == "arb") NetworkId.ARB else NetworkId.ETHEREUM
+            when (val result = toolkit.listEthereumNodes(env, status, serverId, parent))
             {
                 is ListEthereumNodesUseCase.Result.Ready ->
                     call.respond(

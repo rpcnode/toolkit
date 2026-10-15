@@ -110,9 +110,11 @@ class SuiFormalSnapshotRunner
             ?: SuiHostBinaries.resolveTool(nodeDir.parent ?: nodeDir)
     }
 
-    fun startProcess(script: Path): Process
+    /** [env] is added to the agent's environment (the node's proxy variables). */
+    fun startProcess(script: Path, env: Map<String, String> = emptyMap()): Process
     {
         val pb = ProcessBuilder("bash", script.toAbsolutePath().toString())
+        pb.environment().putAll(env)
         pb.redirectErrorStream(true)
         return pb.start()
     }

@@ -68,6 +68,13 @@ class FakeNodeRepository(
         return true
     }
 
+    override suspend fun saveProxy(id: NodeId, proxyId: String, updatedAt: String): Boolean
+    {
+        val node = byId[id] ?: return false
+        byId[id] = node.copy(proxyId = proxyId, updatedAt = updatedAt)
+        return true
+    }
+
     override suspend fun updateStatus(id: NodeId, status: NodeStatus, updatedAt: String): Boolean
     {
         val node = byId[id] ?: return false

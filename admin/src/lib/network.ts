@@ -1,4 +1,5 @@
 import type { AgentCapabilities, StatusPayload } from '../types'
+import { isOpstackNetwork } from './opstack'
 
 /** True for bitcoin / btc chain ids. */
 export function isBitcoinNetwork(network?: string | null): boolean {
@@ -64,7 +65,9 @@ export function isNoSnapshotNetwork(network?: string | null): boolean {
     n === 'hyperliquid' ||
     n === 'arb' ||
     n === 'robinhood' ||
+    n === 'xai' ||
     n === 'optimism' ||
+    isOpstackNetwork(n) ||
     n === 'doge' ||
     n === 'ltc' ||
     n === 'dash' ||
@@ -75,7 +78,11 @@ export function isNoSnapshotNetwork(network?: string | null): boolean {
     n === 'etc' ||
     n === 'zcash' ||
     n === 'aptos' ||
-    n === 'avalanche'
+    n === 'avalanche' ||
+    n === 'gnosis' ||
+    n === 'joc' ||
+    n === 'flare' ||
+    n === 'vana'
   )
 }
 

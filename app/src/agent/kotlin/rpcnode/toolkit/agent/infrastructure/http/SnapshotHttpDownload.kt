@@ -43,6 +43,8 @@ class SnapshotHttpDownload(
         url: String,
         dest: Path,
         expectedBytes: Long?,
+        /** The node's proxy URL; blank = direct. */
+        proxy: String = "",
         isAborted: () -> Boolean = { false },
         onProcess: (Process) -> Unit = {},
         onUnit: (unit: String) -> Unit = {},
@@ -78,7 +80,7 @@ class SnapshotHttpDownload(
             {
                 if (tool != null)
                 {
-                    fetchNative(label, tool, url, dest, expectedBytes, isAborted, onProcess, onUnit, onProgress)
+                    fetchNative(label, tool, url, dest, expectedBytes, proxy, isAborted, onProcess, onUnit, onProgress)
                 }
                 else
                 {
@@ -111,6 +113,7 @@ class SnapshotHttpDownload(
         url: String,
         dest: Path,
         expectedBytes: Long?,
+        proxy: String,
         isAborted: () -> Boolean,
         onProcess: (Process) -> Unit,
         onUnit: (String) -> Unit,
@@ -124,7 +127,7 @@ class SnapshotHttpDownload(
             return
         }
         onProgress(already, expectedBytes)
-        val cmd = downloadCommand(tool, url, dest)
+        val cmd = downloadCommand(tool, url, dest, proxy)
         log.info("{} {} resume from {}", label, tool.bin, formatBytes(already))
         if (SystemdTransientDownload.available())
         {
@@ -136,7 +139,19 @@ class SnapshotHttpDownload(
         }
     }
 
-    private fun downloadCommand(tool: EnsureHostDownloader.Tool, url: String, dest: Path): List<String>
+    /** Explicit proxy flag: detached systemd-run units do not inherit the agent's environment. */
+    private fun proxyArgs(flag: String, proxy: String): List<String>
+    {
+        val p = proxy.trim()
+        return when
+        {
+            p.isEmpty() -> emptyList()
+            flag.endsWith("=") -> listOf("$flag$p")
+            else -> listOf(flag, p)
+        }
+    }
+
+    fun downloadCommand(tool: EnsureHostDownloader.Tool, url: String, dest: Path, proxy: String = ""): List<String>
     {
         val abs = dest.toAbsolutePath()
         val dir = abs.parent?.toString() ?: "."
@@ -161,8 +176,7 @@ class SnapshotHttpDownload(
                 "--console-log-level=notice",
                 "-d", dir,
                 "-o", name,
-                url,
-            )
+            ) + proxyArgs("--all-proxy=", proxy) + url
             EnsureHostDownloader.Tool.Curl -> listOf(
                 "curl",
                 "-fL",
@@ -172,8 +186,7 @@ class SnapshotHttpDownload(
                 "--speed-time", "180",
                 "-C", "-",
                 "-o", abs.toString(),
-                url,
-            )
+            ) + proxyArgs("-x", proxy) + url
         }
     }
 

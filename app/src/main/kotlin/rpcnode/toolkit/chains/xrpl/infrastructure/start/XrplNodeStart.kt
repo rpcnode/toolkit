@@ -37,9 +37,9 @@ class XrplNodeStart : ChainNodeStart
         return ChainNodeStartPlan(
             launch = NodeLaunchSpec(
                 kind = "binary",
-                entry = "bin/${XrplUnitBodies.BIN_NAME}",
+                entry = XrplUnitBodies.RUN_SCRIPT,
                 args = args,
-                extractArchiveGlob = "xrpld-*.deb",
+                extractArchiveGlob = null,
                 normalizeDir = null,
                 logFile = XrplUnitBodies.RELATIVE_LOG,
             ),

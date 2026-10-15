@@ -5,6 +5,7 @@ import rpcnode.toolkit.catalog.domain.NetworkId
 import rpcnode.toolkit.clients.application.ClientPreviewStore
 import rpcnode.toolkit.clients.application.ClientProgramKey
 import rpcnode.toolkit.clients.application.GitHubReleaseClient
+import rpcnode.toolkit.clients.application.installedVersionFor
 import rpcnode.toolkit.clients.application.resolveClientRelease
 import rpcnode.toolkit.clients.application.version.ClientReleaseResolver
 import rpcnode.toolkit.clients.domain.model.ClientProgramSpec
@@ -26,7 +27,10 @@ class ProbeClientProgramUseCase(
     suspend operator fun invoke(spec: ClientProgramSpec): ClientVersionPin
     {
         val existing = versionRepository.find(spec.network, spec.env, spec.programId)
-        val resolved = resolveClientRelease(spec, githubReleaseClient, clientReleaseResolvers, existing?.currentVersion.orEmpty())
+        val resolved = resolveClientRelease(
+            spec, githubReleaseClient, clientReleaseResolvers,
+            installedVersionFor(spec, existing?.currentVersion.orEmpty(), existing?.currentTag.orEmpty()),
+        )
         val now = Instant.now().toString()
         val key = ClientProgramKey(spec.network, spec.env, spec.programId)
 

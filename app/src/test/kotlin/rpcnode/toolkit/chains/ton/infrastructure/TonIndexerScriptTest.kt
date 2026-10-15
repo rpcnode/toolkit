@@ -34,7 +34,7 @@ class TonIndexerScriptTest
     }
 
     @Test
-    fun uses_the_host_postgresql_without_docker_and_keeps_every_listener_on_loopback()
+    fun uses_the_host_postgresql_without_docker_and_serves_the_api_on_all_interfaces()
     {
         assertFalse(script.contains("docker", ignoreCase = true), "no Docker anywhere in the indexer")
         // an existing server is detected first; only then is one installed
@@ -44,7 +44,7 @@ class TonIndexerScriptTest
         assertTrue(script.contains("create database \$PG_DB owner \$PG_ROLE tablespace \$PG_TS"))
         assertTrue(script.contains("PG_ROLE=\"rpcnode_ton_\${ENV_ID}\""), "a role/database named after the env, never the shared postgres one")
         assertFalse(script.contains("postgres@127.0.0.1"), "the apps never log in as the postgres superuser")
-        assertTrue(script.contains("-bind \"127.0.0.1:\$API_PORT\""))
+        assertTrue(script.contains("-bind \"0.0.0.0:\$API_PORT\""))
         assertTrue(script.contains("--bind 127.0.0.1"))
         assertTrue(script.contains("git clone --branch \"\$TAG\""))
     }

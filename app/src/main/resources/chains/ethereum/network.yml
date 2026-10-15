@@ -77,6 +77,10 @@ clientConfig:
       source: catalog_port
       role: http
       description: Geth JSON-RPC HTTP port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: Geth JSON-RPC WebSocket port
     - key: p2p-port
       source: catalog_port
       role: p2p

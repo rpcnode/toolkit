@@ -86,6 +86,10 @@ clientConfig:
       source: catalog_port
       role: http
       description: JSON-RPC HTTP port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: JSON-RPC WebSocket port
     - key: p2p-port
       source: catalog_port
       role: p2p

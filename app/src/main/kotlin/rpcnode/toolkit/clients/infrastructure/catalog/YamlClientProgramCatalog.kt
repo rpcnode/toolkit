@@ -6,6 +6,7 @@ import rpcnode.toolkit.catalog.domain.EnvId
 import rpcnode.toolkit.catalog.domain.NetworkId
 import rpcnode.toolkit.clients.domain.model.ClientArtifactRole
 import rpcnode.toolkit.clients.domain.model.ClientArtifactSpec
+import rpcnode.toolkit.clients.domain.model.ClientBuildSpec
 import rpcnode.toolkit.clients.domain.model.ClientProgramRequirements
 import rpcnode.toolkit.clients.domain.model.ClientProgramSpec
 import rpcnode.toolkit.clients.domain.model.ClientVersionSource
@@ -82,7 +83,29 @@ private fun parseProgram(network: NetworkId, raw: Any?): ClientProgramSpec?
         ports = parsePorts(m["ports"]),
         requirements = parseRequirements(m["requirements"]),
         skipReason = (m["skipReason"] as? String)?.trim()?.ifEmpty { null },
+        build = parseBuild(m["build"]),
     )
+}
+
+private fun parseBuild(raw: Any?): ClientBuildSpec?
+{
+    val m = raw as? Map<*, *> ?: return null
+    val dockerfile = (m["dockerfile"] as? String)?.trim().orEmpty()
+    if (dockerfile.isEmpty() || '/' in dockerfile || '\\' in dockerfile || ".." in dockerfile)
+    {
+        return null
+    }
+    val outputs = (m["outputs"] as? List<*>).orEmpty()
+        .mapNotNull { (it as? String)?.trim()?.takeIf { n -> n.isNotEmpty() && '/' !in n && ".." !in n } }
+    if (outputs.isEmpty())
+    {
+        return null
+    }
+    val platforms = (m["platforms"] as? List<*>).orEmpty()
+        .mapNotNull { (it as? String)?.trim()?.lowercase()?.takeIf { p -> p in ClientBuildSpec.SUPPORTED_PLATFORMS } }
+        .distinct()
+        .ifEmpty { listOf("linux/amd64") }
+    return ClientBuildSpec(dockerfile = dockerfile, outputs = outputs, platforms = platforms)
 }
 
 private fun parseRequirements(raw: Any?): ClientProgramRequirements
@@ -132,6 +155,8 @@ private fun parseSource(raw: Any?): ClientVersionSource?
                 repo = repo,
                 tagPrefix = (m["tagPrefix"] as? String)?.trim()?.ifEmpty { null },
                 includePrerelease = m["prerelease"] as? Boolean ?: false,
+                tagSuffix = (m["tagSuffix"] as? String)?.trim()?.ifEmpty { null },
+                requireAsset = (m["requireAsset"] as? String)?.trim()?.ifEmpty { null },
             )
         }
         "pinned" ->

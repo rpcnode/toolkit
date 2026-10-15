@@ -28,9 +28,14 @@ export const NODE_TYPE_STEP: { id: WizardStepId; label: string; blurb: string } 
   blurb: 'Full / archive / history',
 }
 
+/** Install-option groups chosen on the Snapshot step: the type plus `snapshot_*` (e.g. BSC download mode). */
+export function isSnapshotOptionGroup(g: InstallOptionGroup): boolean {
+  return g.id === 'snapshot' || g.id.startsWith('snapshot_')
+}
+
 /** Install-option groups chosen on the Node type step (not Snapshot). */
 export function isNodeTypeOptionGroup(g: InstallOptionGroup): boolean {
-  return g.id !== 'snapshot'
+  return !isSnapshotOptionGroup(g)
 }
 
 export function wizardSteps(allowSnapshot: boolean, withNodeType: boolean) {

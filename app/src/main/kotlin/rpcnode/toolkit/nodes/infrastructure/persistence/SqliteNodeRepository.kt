@@ -81,6 +81,7 @@ class SqliteNodeRepository(
                     it[nodeHttpPort] = node.nodeHttpPort
                     it[p2pPort] = node.p2pPort
                     it[status] = node.status.value
+                    it[proxyId] = node.proxyId
                     it[clientVersion] = node.clientVersion
                     it[clientLatest] = node.clientLatest
                     it[clientUpdateAvailable] = if (node.clientUpdateAvailable) 1 else 0
@@ -124,6 +125,16 @@ class SqliteNodeRepository(
             transaction(db.database) {
                 NodesTable.update({ NodesTable.id eq id.value }) {
                     it[NodesTable.installOptionsJson] = installOptionsJson
+                    it[NodesTable.updatedAt] = updatedAt
+                }
+            } > 0
+        }
+
+    override suspend fun saveProxy(id: NodeId, proxyId: String, updatedAt: String): Boolean =
+        withContext(Dispatchers.IO) {
+            transaction(db.database) {
+                NodesTable.update({ NodesTable.id eq id.value }) {
+                    it[NodesTable.proxyId] = proxyId
                     it[NodesTable.updatedAt] = updatedAt
                 }
             } > 0
@@ -224,6 +235,7 @@ class SqliteNodeRepository(
         status = NodeStatus.parse(this[NodesTable.status]),
         diskLayoutJson = this[NodesTable.diskLayoutJson],
         installOptionsJson = this[NodesTable.installOptionsJson],
+        proxyId = this[NodesTable.proxyId],
         height = this[NodesTable.height],
         heightAt = this[NodesTable.heightAt],
         networkHeight = this[NodesTable.networkHeight],

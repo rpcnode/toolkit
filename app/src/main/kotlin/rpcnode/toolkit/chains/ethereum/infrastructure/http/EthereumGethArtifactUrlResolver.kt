@@ -8,6 +8,8 @@ import rpcnode.toolkit.clients.domain.model.ClientProgramSpec
 /** Resolves geth linux tarball URLs via Azure gethstore listing. */
 class EthereumGethArtifactUrlResolver(
     private val gethstore: GethstoreBlobClient = GethstoreBlobClient(),
+    /** The network whose `geth` program uses `urlTemplate: gethstore` (Vana's Moksha testnet runs stock geth too). */
+    private val network: NetworkId = NetworkId.ETHEREUM,
 ) : ClientArtifactUrlResolver
 {
     override suspend fun resolve(
@@ -18,7 +20,7 @@ class EthereumGethArtifactUrlResolver(
         aarch64: Boolean,
     ): String?
     {
-        if (spec.network != NetworkId.ETHEREUM)
+        if (spec.network != network)
         {
             return null
         }

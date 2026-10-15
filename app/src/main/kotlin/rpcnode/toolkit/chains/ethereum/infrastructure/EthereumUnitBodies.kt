@@ -14,11 +14,13 @@ object EthereumUnitBodies
         datadir: String,
         jwtPath: String,
         rpcPort: Int,
+        wsPort: Int,
         p2pPort: Int,
         enginePort: Int,
         cluster: EthereumCluster,
         archive: Boolean,
         logFile: String,
+        gethFlags: String = "",
     ): String
     {
         val syncmode = if (archive) "full" else "snap"
@@ -32,11 +34,12 @@ object EthereumUnitBodies
                 "bin" to bin,
                 "datadir" to datadir,
                 "http_port" to rpcPort.toString(),
+                "ws_port" to wsPort.toString(),
                 "engine_port" to enginePort.toString(),
                 "jwt_path" to jwtPath,
                 "syncmode" to syncmode,
                 "gcmode" to gcmode,
-                "cache_mb" to EthereumClusters.cacheMb(env).toString(),
+                "tunable_flags" to EthereumGethFlags.render(env, gethFlags),
                 "history_flag" to historyFlag,
                 "p2p_port" to p2pPort.toString(),
                 "network_flag" to networkFlag,

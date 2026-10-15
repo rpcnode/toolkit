@@ -104,6 +104,8 @@ data class NodeItemResponse(
     @SerialName("live_test_status") val liveTestStatus: String = "",
     @SerialName("live_test_at") val liveTestAt: String = "",
     @SerialName("live_test_error") val liveTestError: String = "",
+    /** Global proxy list id ("" = direct). */
+    @SerialName("proxy_id") val proxyId: String = "",
     @SerialName("needs_snapshot") val needsSnapshot: Boolean = false,
     @SerialName("disk_layout") val diskLayout: JsonElement? = null,
     @SerialName("install_options") val installOptions: JsonElement? = null,
@@ -237,6 +239,8 @@ data class ClientConfigBindingResponse(
     val map: Map<String, String> = emptyMap(),
     @SerialName("when_install_option") val whenInstallOption: String? = null,
     @SerialName("when_install_option_value") val whenInstallOptionValue: String? = null,
+    /** Env ids this binding applies to; empty = every env (per-env literals such as the `--chain` of one binary). */
+    @SerialName("only_env") val onlyEnv: List<String> = emptyList(),
     @SerialName("test_connect") val testConnect: ClientConfigTestConnectResponse? = null,
 )
 
@@ -536,6 +540,59 @@ data class NodeRemovalResponse(
     val error: String? = null,
 )
 
+private suspend fun ApplicationCall.respondProcessControl(result: ControlNodeProcessResult)
+{
+    when (result)
+    {
+        is ControlNodeProcessResult.Ok ->
+            respond(
+                NodeProcessControlResponse(
+                    nodeId = result.nodeId,
+                    pid = result.pid,
+                    action = result.action,
+                ),
+            )
+        ControlNodeProcessResult.NotFound ->
+            respond(
+                HttpStatusCode.NotFound,
+                NodeProcessControlResponse(ok = false, error = "not_found"),
+            )
+        ControlNodeProcessResult.ServerNotFound ->
+            respond(
+                HttpStatusCode.NotFound,
+                NodeProcessControlResponse(ok = false, error = "server_not_found"),
+            )
+        ControlNodeProcessResult.AgentUnreachable ->
+            respond(
+                HttpStatusCode.BadGateway,
+                NodeProcessControlResponse(
+                    ok = false,
+                    error = "agent_unreachable",
+                    message = "Host agent did not answer",
+                ),
+            )
+        ControlNodeProcessResult.InvalidAgentKey ->
+            respond(
+                HttpStatusCode.Unauthorized,
+                NodeProcessControlResponse(
+                    ok = false,
+                    error = InvalidAgentKey.ERROR,
+                    message = InvalidAgentKey.MESSAGE,
+                ),
+            )
+        is ControlNodeProcessResult.Failed ->
+            respond(
+                HttpStatusCode.BadGateway,
+                NodeProcessControlResponse(
+                    ok = false,
+                    error = result.error,
+                    message = result.message,
+                ),
+            )
+    
+    }
+}
+
 private suspend fun ApplicationCall.respondNodeRemoval(result: NodeRemovalResult)
 {
     when (result)
@@ -709,6 +766,11 @@ fun Application.nodesApiRoutes(toolkit: Toolkit)
                             error = "invalid_options",
                             message = "Could not save install options",
                         ),
+                    )
+                is ApplyNodeClientConfigResult.ClientBuilding ->
+                    call.respond(
+                        HttpStatusCode.Accepted,
+                        NodeClientConfigApplyResponse(ok = false, error = "client_building", message = result.detail),
                     )
                 is ApplyNodeClientConfigResult.AgentUnreachable ->
                     call.respond(
@@ -1513,55 +1575,13 @@ fun Application.nodesApiRoutes(toolkit: Toolkit)
         }
 
         post("/api/nodes/{id}/process/start") {
-            val id = call.parameters["id"].orEmpty()
-            when (val result = toolkit.controlNodeProcess.start(id))
-            {
-                is ControlNodeProcessResult.Ok ->
-                    call.respond(
-                        NodeProcessControlResponse(
-                            nodeId = result.nodeId,
-                            pid = result.pid,
-                            action = result.action,
-                        ),
-                    )
-                ControlNodeProcessResult.NotFound ->
-                    call.respond(
-                        HttpStatusCode.NotFound,
-                        NodeProcessControlResponse(ok = false, error = "not_found"),
-                    )
-                ControlNodeProcessResult.ServerNotFound ->
-                    call.respond(
-                        HttpStatusCode.NotFound,
-                        NodeProcessControlResponse(ok = false, error = "server_not_found"),
-                    )
-                ControlNodeProcessResult.AgentUnreachable ->
-                    call.respond(
-                        HttpStatusCode.BadGateway,
-                        NodeProcessControlResponse(
-                            ok = false,
-                            error = "agent_unreachable",
-                            message = "Host agent did not answer",
-                        ),
-                    )
-                ControlNodeProcessResult.InvalidAgentKey ->
-                    call.respond(
-                        HttpStatusCode.Unauthorized,
-                        NodeProcessControlResponse(
-                            ok = false,
-                            error = InvalidAgentKey.ERROR,
-                            message = InvalidAgentKey.MESSAGE,
-                        ),
-                    )
-                is ControlNodeProcessResult.Failed ->
-                    call.respond(
-                        HttpStatusCode.BadGateway,
-                        NodeProcessControlResponse(
-                            ok = false,
-                            error = result.error,
-                            message = result.message,
-                        ),
-                    )
-            }
+            call.respondProcessControl(toolkit.controlNodeProcess.start(call.parameters["id"].orEmpty()))
+        }
+
+        // A running unit is left untouched by start, so a restart that must pick up new settings
+        // (L1 endpoints, proxy) stops it first.
+        post("/api/nodes/{id}/process/restart") {
+            call.respondProcessControl(toolkit.controlNodeProcess.restart(call.parameters["id"].orEmpty()))
         }
 
         post("/api/nodes") {
@@ -1636,7 +1656,7 @@ fun Application.nodesApiRoutes(toolkit: Toolkit)
         post("/api/nodes/{id}/snapshot/start") {
             val id = call.parameters["id"].orEmpty()
             val body = runCatching { call.receive<NodeSnapshotStartBody>() }.getOrElse { NodeSnapshotStartBody() }
-            call.respondNodeSnapshotStart(toolkit.startNodeSnapshot(id, body.snapshot, body.source, body.url))
+            call.respondNodeSnapshotStart(toolkit.startNodeSnapshot(id, body.snapshot, body.source, body.url, body.mode))
         }
 
         post("/api/nodes/{id}/snapshot/probe") {
@@ -1777,6 +1797,7 @@ private fun Node.toResponse(facts: NetworkFactsRepository) = NodeItemResponse(
     liveTestStatus = liveTestStatus,
     liveTestAt = liveTestAt,
     liveTestError = liveTestError,
+    proxyId = proxyId,
     needsSnapshot = nodeNeedsSnapshot(this, facts),
     diskLayout = parseDiskLayoutJson(diskLayoutJson),
     installOptions = parseDiskLayoutJson(installOptionsJson),
@@ -1804,6 +1825,7 @@ fun ClientConfigFacts.toResponse() = ClientConfigResponse(
             map = it.map,
             whenInstallOption = it.whenInstallOption,
             whenInstallOptionValue = it.whenInstallOptionValue,
+            onlyEnv = it.onlyEnv,
             testConnect = it.testConnect?.let { tc ->
                 ClientConfigTestConnectResponse(
                     kind = tc.kind,

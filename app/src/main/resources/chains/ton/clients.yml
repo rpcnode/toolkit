@@ -10,7 +10,7 @@ programs:
     ports:
       - { role: http, port: 8081, label: "TON HTTP API", config: required }
       - { role: p2p, port: 31310, label: "P2P (validator)", config: required, protocol: udp }
-      - { role: indexer, port: 8187, label: "Indexer API v3 (local)", config: none }
+      - { role: indexer, port: 8187, label: "Indexer API v3", config: none }
       - { role: indexer_redis, port: 16387, label: "Indexer Redis (local)", config: none }
       - { role: rpc_public, port: 8087, label: "Public API (v2 + v3)", config: none }
   - env: testnet
@@ -22,6 +22,6 @@ programs:
     ports:
       - { role: http, port: 8082, label: "TON HTTP API", config: required }
       - { role: p2p, port: 31311, label: "P2P (validator)", config: required, protocol: udp }
-      - { role: indexer, port: 8188, label: "Indexer API v3 (local)", config: none }
+      - { role: indexer, port: 8188, label: "Indexer API v3", config: none }
       - { role: indexer_redis, port: 16388, label: "Indexer Redis (local)", config: none }
       - { role: rpc_public, port: 8088, label: "Public API (v2 + v3)", config: none }

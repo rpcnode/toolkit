@@ -12,6 +12,7 @@ import rpcnode.toolkit.clients.application.ClientProgramKey
 import rpcnode.toolkit.clients.application.GitHubTokenProvider
 import rpcnode.toolkit.clients.application.downloadone.DownloadClientProgramUseCase
 import rpcnode.toolkit.clients.application.resolveClientTargets
+import rpcnode.toolkit.clients.domain.model.ClientVersionSource
 import rpcnode.toolkit.clients.domain.repository.ClientProgramCatalog
 import rpcnode.toolkit.clients.domain.repository.ClientVersionRepository
 import rpcnode.toolkit.networks.domain.model.NetworkPinOnly
@@ -55,7 +56,9 @@ class SyncClientsUseCase(
         }
 
         val targets = resolveClientTargets(versionRepository, programCatalog, network, env, program)
-        val pinOnlyOnly = targets.isNotEmpty() && targets.all { NetworkPinOnly.isPinOnly(it.network) }
+        val pinOnlyOnly = targets.isNotEmpty() && targets.all {
+            NetworkPinOnly.isPinOnly(it.network) || it.source is ClientVersionSource.Pinned
+        }
         if (tokenProvider.current().isNullOrBlank() && !pinOnlyOnly)
         {
             return SyncClientsResult.TokenRequired
@@ -68,7 +71,16 @@ class SyncClientsUseCase(
                 ClientProgramKey(spec.network, spec.env, spec.programId),
                 ClientDownloadProgress(ClientDownloadPhase.QUEUED),
             )
-            backgroundScope.launch { concurrency.withPermit { downloadOne(spec, force) } }
+            // A compile takes hours and is serialized by the download use case itself: it must not hold one of the few
+            // shared permits, or a handful of queued builds would starve every other download and probe.
+            if (spec.build != null)
+            {
+                backgroundScope.launch { downloadOne(spec, force) }
+            }
+            else
+            {
+                backgroundScope.launch { concurrency.withPermit { downloadOne(spec, force) } }
+            }
         }
         return SyncClientsResult.Started
     }

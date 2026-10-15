@@ -9,32 +9,20 @@ import rpcnode.toolkit.clients.application.GitHubRelease
 
 class XrplClientReleaseResolverTest
 {
-    private fun resolver(latest: String, pool: List<String>?) = XrplClientReleaseResolver(
+    private fun resolver(latest: String) = XrplClientReleaseResolver(
         FakeGitHubReleaseClient(mapOf("XRPLF/rippled" to GitHubRelease(tag = latest, version = latest))),
-        XrplDebPool { pool },
     )
 
     @Test
-    fun caps_to_newest_pooled_version_when_release_is_not_packaged_yet() = runTest {
-        val r = resolver("3.4.0", listOf("3.2.0", "3.2.1", "3.3.0")).resolve(EnvId.MAINNET)
-        assertEquals("3.3.0", r?.version)
-    }
-
-    @Test
-    fun uses_release_when_pooled() = runTest {
-        val r = resolver("3.4.0", listOf("3.3.0", "3.4.0")).resolve(EnvId.TESTNET)
-        assertEquals("3.4.0", r?.version)
+    fun takes_the_latest_github_release_even_when_the_apt_pool_lacks_it() = runTest {
+        val r = resolver("3.4.1").resolve(EnvId.MAINNET)
+        assertEquals("3.4.1", r?.version)
+        assertEquals("3.4.1", r?.tag)
     }
 
     @Test
     fun never_picks_broken_3_2() = runTest {
-        val r = resolver("3.2.1", listOf("3.2.0", "3.2.1", "3.3.0")).resolve(EnvId.MAINNET)
-        assertEquals("3.3.0", r?.version)
-    }
-
-    @Test
-    fun trusts_github_when_pool_unreadable() = runTest {
-        assertEquals("3.4.0", resolver("3.4.0", null).resolve(EnvId.MAINNET)?.version)
-        assertEquals("3.3.0", resolver("3.2.1", null).resolve(EnvId.MAINNET)?.version)
+        assertEquals("3.4.1", resolver("3.2.1").resolve(EnvId.TESTNET)?.version)
+        assertEquals("3.4.1", resolver("3.2.0").resolve(EnvId.MAINNET)?.version)
     }
 }

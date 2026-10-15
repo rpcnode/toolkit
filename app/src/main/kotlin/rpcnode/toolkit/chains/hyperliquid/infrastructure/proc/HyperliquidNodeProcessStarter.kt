@@ -18,6 +18,8 @@ import rpcnode.toolkit.nodes.infrastructure.host.HostNodeLaunchSupport
  */
 class HyperliquidNodeProcessStarter : HostNodeProcessStarter
 {
+    private val log = org.slf4j.LoggerFactory.getLogger(HyperliquidNodeProcessStarter::class.java)
+
     override fun start(
         nodeId: String,
         network: String,
@@ -66,8 +68,9 @@ class HyperliquidNodeProcessStarter : HostNodeProcessStarter
 
             val visorBody = HyperliquidUnitBodies.visorJson(cluster)
             val gossipBody = HyperliquidUnitBodies.gossipJson(cluster, peers)
-            // Workdir (hl/) + HOME (node_dir) — client reads cwd and/or ~.
-            for (dir in listOf(hlDir, root))
+            // Workdir (hl/), HOME (node_dir) and the binary's own dir (bin/): hl-visor reads visor.json next to
+            // its executable and panics ("missing file: …/bin/visor.json") when it is absent there.
+            for (dir in listOf(hlDir, root, HyperliquidHostBinaries.binDir(root)))
             {
                 Files.writeString(dir.resolve(HyperliquidUnitBodies.VISOR_JSON), visorBody)
                 Files.writeString(dir.resolve(HyperliquidUnitBodies.GOSSIP_JSON), gossipBody)
@@ -124,6 +127,11 @@ class HyperliquidNodeProcessStarter : HostNodeProcessStarter
         Files.createSymbolicLink(link, absTarget)
     }
 
+    /**
+     * hl-visor verifies every hl-node it downloads with `gpg` from the unit's HOME (= node_dir). Importing into the
+     * agent's own keyring (/root/.gnupg) leaves node_dir/.gnupg empty: verification fails and hl-visor exits in a
+     * restart loop. Import into node_dir/.gnupg, as the unit will see it.
+     */
     private fun importGpgBestEffort(nodeDir: Path)
     {
         val key = nodeDir.resolve("pub_key.asc")
@@ -131,11 +139,23 @@ class HyperliquidNodeProcessStarter : HostNodeProcessStarter
         {
             return
         }
+        val home = nodeDir.toAbsolutePath().normalize()
+        val gnupg = home.resolve(".gnupg")
         runCatching {
-            ProcessBuilder("gpg", "--import", key.toAbsolutePath().toString())
+            Files.createDirectories(gnupg)
+            runCatching {
+                Files.setPosixFilePermissions(gnupg, java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"))
+            }
+            val pb = ProcessBuilder("gpg", "--batch", "--homedir", gnupg.toString(), "--import", key.toAbsolutePath().toString())
                 .redirectErrorStream(true)
-                .start()
-                .waitFor()
-        }
+            pb.environment()["HOME"] = home.toString()
+            pb.environment()["GNUPGHOME"] = gnupg.toString()
+            val proc = pb.start()
+            val out = proc.inputStream.bufferedReader().readText()
+            if (proc.waitFor() != 0)
+            {
+                log.warn("hyperliquid gpg --import into {} failed: {}", gnupg, out.trim().take(400))
+            }
+        }.onFailure { log.warn("hyperliquid gpg --import into {}: {} (is gnupg installed?)", gnupg, it.message) }
     }
 }

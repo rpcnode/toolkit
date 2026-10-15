@@ -58,6 +58,7 @@ class HttpStartNodeOnHost(
                     clientVersion = command.clientVersion,
                     launch = command.launch.toPayload(),
                     height = command.height.toPayload(),
+                    proxy = command.proxy,
                 ),
             )
             val req = HttpRequest.newBuilder(URI(agentUrl.trimEnd('/') + "/api/v1/node/start"))
@@ -142,4 +143,5 @@ private data class StartNodePayload(
     @SerialName("client_version") val clientVersion: String = "",
     val launch: LaunchPayload,
     val height: HeightPayload,
+    val proxy: String = "",
 )

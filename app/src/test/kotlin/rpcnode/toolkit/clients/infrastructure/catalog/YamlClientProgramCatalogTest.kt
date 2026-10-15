@@ -144,4 +144,28 @@ class YamlClientProgramCatalogTest
         assertEquals("sigp/lighthouse", lighthouse(EnvId.SEPOLIA).repo)
         assertEquals(false, lighthouse(EnvId.MAINNET).includePrerelease)
     }
+
+    @Test
+    fun compiled_clients_declare_a_build_with_a_dockerfile_that_ships_on_the_classpath()
+    {
+        val catalog = YamlClientProgramCatalog()
+        val xrpl = catalog.programsFor(NetworkId.XRPL, EnvId.MAINNET).single().build
+        assertEquals("xrpld.Dockerfile", xrpl?.dockerfile)
+        assertEquals(listOf("xrpld"), xrpl?.outputs)
+        assertEquals(listOf("linux/amd64", "linux/arm64"), xrpl?.platforms)
+
+        val solana = catalog.programsFor(NetworkId.SOLANA, EnvId.MAINNET).single().build
+        assertEquals(listOf("agave-validator"), solana?.outputs)
+        assertEquals(listOf("linux/amd64"), solana?.platforms)
+
+        for (spec in catalog.all().filter { it.build != null })
+        {
+            val file = spec.build!!.dockerfile
+            assertTrue(
+                javaClass.classLoader.getResource("chains/${spec.network.value}/$file") != null,
+                "${spec.network.value}: $file is not on the classpath",
+            )
+        }
+        assertEquals(null, catalog.programsFor(NetworkId.BITCOIN, EnvId.MAINNET).single().build)
+    }
 }

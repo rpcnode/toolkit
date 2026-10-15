@@ -1,5 +1,14 @@
 package rpcnode.toolkit.panel
 
+import rpcnode.toolkit.nodes.application.proxy.SetNodeProxyUseCase
+import rpcnode.toolkit.proxies.FakeProxyRepository
+import rpcnode.toolkit.proxies.application.DeleteProxyUseCase
+import rpcnode.toolkit.proxies.application.ListProxiesUseCase
+import rpcnode.toolkit.proxies.application.SaveProxyUseCase
+import rpcnode.toolkit.proxies.application.TestProxyUseCase
+import rpcnode.toolkit.proxies.domain.model.ProxyCheck
+import rpcnode.toolkit.proxies.domain.model.ProxyCheckRunner
+import rpcnode.toolkit.proxies.domain.repository.ProxyRepository
 import java.nio.file.Files
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -236,6 +245,8 @@ internal fun testToolkit(
     hostSysctlReader: HostSysctlReader = HostSysctlReader { _, _ -> null },
     nodeRepository: NodeRepository = FakeNodeRepository(),
     telegramBotApi: TelegramBotApi = testTelegramBotApi,
+    proxyRepository: ProxyRepository = FakeProxyRepository(),
+    proxyChecker: ProxyCheckRunner = ProxyCheckRunner { _, _ -> ProxyCheck.Ok(1, "test") },
 ): Toolkit
 {
     val dir = Files.createTempDirectory("panel-auth")
@@ -317,6 +328,14 @@ internal fun testToolkit(
         clientReleaseResolvers = clientReleaseResolvers,
     )
 
+    val clientBuilds = rpcnode.toolkit.clients.application.build.ClientBuildCoordinator(
+        versions = clientVersionRepository,
+        download = downloadClientProgram,
+        tracker = clientDownloadTracker,
+        scope = backgroundScope,
+        destDir = dir.resolve("clients"),
+    )
+
     val finishRemoveServer = FinishRemoveServerUseCase(serverRepository, unenrollHostAgent)
 
     val hostDisksUseCase = GetHostDisksUseCase(
@@ -349,7 +368,7 @@ internal fun testToolkit(
         },
         installPlanWriter = FileInstallPlanWriter(),
         clientsDestDir = dir.resolve("clients"),
-        downloadClient = downloadClientProgram,
+        clientBuilds = clientBuilds,
     )
     val startNode = StartNodeUseCase(
         saveInstallOptions = saveNodeInstallOptions,
@@ -391,6 +410,7 @@ internal fun testToolkit(
         installPlanWriter = FileInstallPlanWriter(),
         clientsDestDir = dir.resolve("clients"),
         downloadClient = downloadClientProgram,
+        clientBuilds = clientBuilds,
         chainStarts = BitcoreChainWiring.chainStarts() +
             mapOf(
                 NetworkId.TRON to TronNodeStart(),
@@ -483,6 +503,7 @@ internal fun testToolkit(
 
         clientProgramCatalog = clientProgramCatalog,
         listClients = ListClientsUseCase(clientVersionRepository, clientProgramCatalog),
+        listClientArches = rpcnode.toolkit.clients.application.build.ListClientArches(clientProgramCatalog, dir.resolve("clients")),
         previewClients = PreviewClientsUseCase(clientVersionRepository, clientProgramCatalog, clientPreviewStore, clientDownloadTracker),
         addClient = AddClientUseCase(
             catalog = catalog,
@@ -680,7 +701,7 @@ internal fun testToolkit(
         stopAllNodes = StopAllNodesUseCase(
             nodes = nodeRepository,
             stop = { id -> ControlNodeProcessResult.Ok(id, 0, "stop") },
-            scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO),
+            scope = backgroundScope,
         ),
         getNodeConfig = GetNodeConfigUseCase(
             nodes = nodeRepository,
@@ -760,6 +781,11 @@ internal fun testToolkit(
             servers = serverRepository,
             pollHost = testSnapshotHost,
         ),
+        listProxies = ListProxiesUseCase(proxyRepository, nodeRepository),
+        saveProxy = SaveProxyUseCase(proxyRepository, proxyChecker),
+        deleteProxy = DeleteProxyUseCase(proxyRepository, nodeRepository),
+        setNodeProxy = SetNodeProxyUseCase(nodeRepository, proxyRepository),
+        testProxy = TestProxyUseCase(proxyRepository, proxyChecker),
     )
 }
 

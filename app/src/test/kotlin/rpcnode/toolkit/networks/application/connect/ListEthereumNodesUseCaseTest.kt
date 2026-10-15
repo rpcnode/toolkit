@@ -58,4 +58,48 @@ class ListEthereumNodesUseCaseTest
         assertEquals(pub.rpc, got.value.items.single().publicEndpoint)
         assertEquals("http://127.0.0.1:8546", got.value.items.single().rpc)
     }
+
+    @Test
+    fun arbitrum_one_parent_lists_arb_nodes_without_a_beacon() = runTest {
+        val server = Server(
+            id = ServerId.parse("srv-1")!!,
+            name = "host-a",
+            agentUrl = "http://10.0.0.5:9090",
+            createdAt = "t",
+            updatedAt = "t",
+        )
+        val arb = Node(
+            id = NodeId.parse("arb-1")!!,
+            serverId = server.id,
+            name = "Arbitrum One",
+            network = NetworkId.ARB,
+            env = EnvId.parse("mainnet")!!,
+            status = NodeStatus.ACTIVE,
+            createdAt = "t",
+            updatedAt = "t",
+        )
+        val eth = arb.copy(id = NodeId.parse("eth-1")!!, name = "Ethereum", network = NetworkId.ETHEREUM)
+        val uc = ListEthereumNodesUseCase(
+            facts = YamlNetworkFactsRepository(),
+            nodes = FakeNodeRepository(listOf(arb, eth)),
+            servers = FakeServerRepository(listOf(server)),
+        )
+        val sameHost = uc(envRaw = "mainnet", serverId = server.id.value, parent = NetworkId.ARB)
+        assertIs<ListEthereumNodesUseCase.Result.Ready>(sameHost)
+        val node = sameHost.value.items.single()
+        assertEquals("arb-1", node.id)
+        assertEquals("http://127.0.0.1:8647", node.rpc)
+        assertEquals("", node.beacon)
+        assertEquals("", assertNotNull(sameHost.value.public).beacon)
+        assertTrue(sameHost.value.public!!.rpc.contains("arbitrum"))
+        val remote = uc(envRaw = "mainnet", serverId = null, parent = NetworkId.ARB)
+        assertIs<ListEthereumNodesUseCase.Result.Ready>(remote)
+        assertEquals("http://10.0.0.5:8647", remote.value.items.single().rpc)
+        // only Ethereum and Arbitrum One are parents
+        assertIs<ListEthereumNodesUseCase.Result.UnknownEnv>(uc(envRaw = "mainnet", parent = NetworkId.BASE))
+        // Xai's parent picker is the Arbitrum One one, everyone else's Ethereum
+        assertEquals(NetworkId.ARB, ListEthereumNodesUseCase.parentNetworkFor("xai"))
+        assertEquals(NetworkId.ETHEREUM, ListEthereumNodesUseCase.parentNetworkFor("base"))
+        assertEquals("mainnet", ListEthereumNodesUseCase.l1EnvForChild("xai", "mainnet"))
+    }
 }

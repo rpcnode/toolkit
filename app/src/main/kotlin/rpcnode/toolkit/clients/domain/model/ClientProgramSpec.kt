@@ -10,11 +10,16 @@ sealed interface ClientVersionSource
      * Live-probed via the GitHub Releases API. [tagPrefix], when set, filters candidate tags.
      * [includePrerelease] follows release candidates too (for a network that needs one, e.g. a testnet
      * fork shipped before the stable release); the newest release wins, so stable takes over by itself.
+     * [tagSuffix] keeps only tags that end in it (`-testnet`), for a repo that publishes several network lines.
+     * [requireAsset] is a glob (`*`, `?`): a release counts only once it carries a matching asset, so a tag whose
+     * per-network files are uploaded later (heimdall `mainnet-*-config`) is not offered before they exist.
      */
     data class GitHubRelease(
         val repo: String,
         val tagPrefix: String? = null,
         val includePrerelease: Boolean = false,
+        val tagSuffix: String? = null,
+        val requireAsset: String? = null,
     ) : ClientVersionSource
 
     /**
@@ -85,6 +90,41 @@ data class ClientProgramRequirements(
     val logFile: String? = null,
 )
 
+/**
+ * Compile the client from source when a new version is added, instead of every host compiling it.
+ * [dockerfile] is a file beside `chains/<network>/clients.yml`; it receives `VERSION` and `TAG` build args and its last
+ * stage (`FROM scratch`) must hold each of [outputs] at the root. One build per entry of [platforms]; the results are
+ * published as `<output>-<arch>` (`x86_64` / `aarch64`) so the install plan hands every host the binary for its arch.
+ */
+data class ClientBuildSpec(
+    val dockerfile: String,
+    val outputs: List<String>,
+    val platforms: List<String> = listOf("linux/amd64"),
+)
+{
+    companion object
+    {
+        val SUPPORTED_PLATFORMS = setOf("linux/amd64", "linux/arm64")
+
+        /** `x86_64` / `aarch64` — the arch tag the install plan and the host agent use. */
+        fun archOf(platform: String): String = if (platform.endsWith("arm64")) "aarch64" else "x86_64"
+
+        fun platformOf(arch: String): String = if (arch == "aarch64") "linux/arm64" else "linux/amd64"
+
+        /** `x86_64` / `aarch64` from whatever a host reports (`amd64`, `arm64`, `x86_64`…); null when unknown. */
+        fun normalizeArch(raw: String?): String?
+        {
+            val a = raw?.trim()?.lowercase().orEmpty()
+            return when
+            {
+                a.contains("aarch64") || a.contains("arm64") -> "aarch64"
+                a.contains("x86_64") || a.contains("amd64") || a == "x64" -> "x86_64"
+                else -> null
+            }
+        }
+    }
+}
+
 /** What one program on one network/env can download — shipped catalog data, not runtime state. */
 data class ClientProgramSpec(
     val network: NetworkId,
@@ -96,4 +136,5 @@ data class ClientProgramSpec(
     val ports: List<ProgramPort> = emptyList(),
     val requirements: ClientProgramRequirements = ClientProgramRequirements(),
     val skipReason: String? = null,
+    val build: ClientBuildSpec? = null,
 )

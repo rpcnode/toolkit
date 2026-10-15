@@ -44,6 +44,30 @@ class BscSnapshotResolverTest
     }
 }
 
+class BscSnapshotStreamModeTest
+{
+    @Test
+    fun stream_mode_round_trips_with_snap_dir()
+    {
+        val url = BscSnapshotResolver.withOptions("bsc-official://mainnet/pruned", "/mnt/snap", stream = true)
+        val ref = BscSnapshotResolver.parse(url)
+        assertEquals(true, ref?.stream)
+        assertEquals("/mnt/snap", ref?.snapDir)
+        assertEquals("pruned", ref?.flavor)
+    }
+
+    @Test
+    fun official_mode_is_default_and_survives_with_snap_dir()
+    {
+        assertEquals(false, BscSnapshotResolver.parse("bsc-official://mainnet/pruned?snap=%2Fx")?.stream)
+        val streamed = BscSnapshotResolver.withOptions("bsc-official://testnet/full", null, stream = true)
+        assertEquals("bsc-official://testnet/full?mode=stream", streamed)
+        val moved = BscSnapshotResolver.withSnapDir(streamed, "/data/snap")
+        assertEquals(true, BscSnapshotResolver.parse(moved)?.stream)
+        assertEquals("/data/snap", BscSnapshotResolver.parse(moved)?.snapDir)
+    }
+}
+
 class BscEthRpcReuseTest
 {
     @Test

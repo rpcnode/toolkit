@@ -9,7 +9,7 @@ import rpcnode.toolkit.shared.infrastructure.http.SimpleHttp
 
 private val json = Json { ignoreUnknownKeys = true }
 
-/** Shared Sui JSON-RPC + Prometheus helpers (local height + public tip). */
+/** Shared Sui helpers: local height (Prometheus, `/health` headers) and public tip (JSON-RPC, GraphQL). */
 object SuiRpc
 {
     fun latestCheckpointRequest(): String =
@@ -45,6 +45,21 @@ object SuiRpc
             return null
         }
         return parseCheckpoint(http.postJson(endpoint, latestCheckpointRequest()))
+    }
+
+    /** sui-node puts the latest synced checkpoint in this header of every HTTP response (also `/health`). */
+    const val CHECKPOINT_HEADER = "x-sui-checkpoint-height"
+
+    fun parseCheckpointHeader(value: String?): Long? = value?.trim()?.toLongOrNull()?.takeIf { it >= 0 }
+
+    /** Local node height from `GET /health` on the RPC port — the port itself speaks gRPC, so no JSON-RPC here. */
+    suspend fun healthCheckpoint(http: SimpleHttp, rpcPort: Int): Long?
+    {
+        if (rpcPort <= 0)
+        {
+            return null
+        }
+        return parseCheckpointHeader(http.getHeader("http://127.0.0.1:$rpcPort/health", CHECKPOINT_HEADER))
     }
 
     fun parsePromSample(line: String): Pair<String, Long>?

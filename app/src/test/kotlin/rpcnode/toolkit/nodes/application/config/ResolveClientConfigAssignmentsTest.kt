@@ -263,4 +263,29 @@ class ResolveClientConfigAssignmentsTest
         assertEquals(mapOf("storage.checkpoint.version" to "2"), resolve("mainnet"))
         assertEquals(emptyMap(), resolve("nile"))
     }
+
+    @Test
+    fun install_option_gate_accepts_a_comma_separated_list_and_skips_other_values()
+    {
+        val config = ClientConfigFacts(
+            program = "cardano-node",
+            format = "flags",
+            bindings = listOf(
+                ClientConfigBindingFacts(
+                    path = "Ogmios.host", source = "literal", value = "127.0.0.1",
+                    whenInstallOption = "indexer", whenInstallOptionValue = "ogmios, both",
+                ),
+                ClientConfigBindingFacts(
+                    path = "DbSync.ledger_backend", source = "literal", value = "inmemory",
+                    whenInstallOption = "indexer", whenInstallOptionValue = "dbsync,both",
+                ),
+            ),
+        )
+        fun resolve(options: String) = resolveClientConfigAssignments(config, null, emptyList(), options)
+        assertEquals(setOf("Ogmios.host", "DbSync.ledger_backend"), resolve("""{"indexer":"both"}""").keys)
+        assertEquals(setOf("Ogmios.host"), resolve("""{"indexer":"ogmios"}""").keys)
+        assertEquals(setOf("DbSync.ledger_backend"), resolve("""{"indexer":"dbsync"}""").keys)
+        assertEquals(emptySet(), resolve("""{"indexer":"none"}""").keys)
+        assertEquals(emptySet(), resolve("{}").keys)
+    }
 }

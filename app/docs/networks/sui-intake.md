@@ -74,9 +74,9 @@ Same binary family; network via genesis + `--network` for formal snapshot + yaml
 | mainnet | p2p | 8084 |
 | testnet | http | 9410 |
 | testnet | metrics | 9185 |
-| testnet | p2p | 8085 |
+| testnet | p2p | 8185 |
 
-Height prefers **metrics** (`highest_synced_checkpoint`), fallback **http** JSON-RPC. Internal `network-address` stays `127.0.0.1:8080` (vendor pin, not catalog).
+The `http` port is **gRPC** (+ `GET /health`) on current sui-node; JSON-RPC answers 404 there. Height prefers **metrics** (`highest_synced_checkpoint`), fallback the `x-sui-checkpoint-height` header of `GET /health` on the http port. Internal `network-address` stays `127.0.0.1:8080` (vendor pin, not catalog).
 
 ---
 
@@ -101,7 +101,7 @@ Height prefers **metrics** (`highest_synced_checkpoint`), fallback **http** JSON
 | Key | Source | Applied |
 |---|---|---|
 | db-path | disk_role_dir state | fullnode.yaml |
-| json-rpc-address | catalog_port http | yaml |
+| json-rpc-address (legacy key name; serves gRPC) | catalog_port http | yaml |
 | metrics-address | catalog_port metrics | yaml |
 | p2p listen | catalog_port p2p | yaml |
 | enable-event-processing | literal true | yaml |
@@ -133,7 +133,7 @@ Height prefers **metrics** (`highest_synced_checkpoint`), fallback **http** JSON
 
 ## 10–11. Height / tip
 
-- Local: Prometheus `highest_synced_checkpoint` on metrics port; else JSON-RPC `sui_getLatestCheckpointSequenceNumber` on http.
+- Local: Prometheus `highest_synced_checkpoint` on metrics port; else `x-sui-checkpoint-height` header of `GET /health` on the http port; JSON-RPC only as a last resort for older nodes.
 - Tip: same JSON-RPC against YAML `publicTip.urls` (suiscan; Mysten fullnode JSON-RPC often deprecated). GraphQL fallback in tip probe.
 - Checkpoint 0 without formal marker must not look “synced” (admin already treats tip-dead).
 

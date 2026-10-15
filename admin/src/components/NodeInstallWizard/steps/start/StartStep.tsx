@@ -16,6 +16,7 @@ import { IconAlertTriangle, IconPlayerPlay, IconRefresh } from '@tabler/icons-re
 import { blockProps } from '../../../../lib/blockId'
 import { isSolanaNetwork } from '../../../../lib/network'
 import { InstallOptionsPicker } from '../../../InstallOptionsPicker'
+import { l1ParentSpec } from '../../../../lib/l1Parent'
 import { WizardStepHelp } from '../../WizardStepHelp'
 import {
   bindingForCatalogPortRole,
@@ -332,7 +333,7 @@ function View({
                 <Stack gap="xs">
                   <Group justify="space-between" align="center">
                     <Text size="sm" fw={600}>
-                      L1 parent (Ethereum)
+                      L1 parent ({l1ParentSpec(networkId).name})
                     </Text>
                     {l1ParentLoading ? <Loader size="xs" /> : null}
                   </Group>
@@ -352,7 +353,7 @@ function View({
                     }) => {
                       const selected =
                         (installOptions.l1_rpc || '').trim() === c.rpc &&
-                        (installOptions.l1_beacon || '').trim() === c.beacon
+                        (installOptions.l1_beacon || '').trim() === (c.beacon || '')
                       return (
                         <Button
                           key={c.id}
@@ -367,7 +368,7 @@ function View({
                     })}
                     {!l1ParentLoading && l1ParentChoices.length === 0 ? (
                       <Text size="xs" c="dimmed">
-                        No ethereum publicTip URL and no active ethereum nodes for this L1 env.
+                        No publicTip URL and no active {l1ParentSpec(networkId).name} nodes for this parent env.
                       </Text>
                     ) : null}
                   </Group>

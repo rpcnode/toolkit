@@ -4,7 +4,7 @@ package rpcnode.toolkit.chains.ton.infrastructure
 object TonPorts
 {
     /**
-     * [indexer] = loopback v3 API of the indexer; [indexerRedis] = its own Redis (loopback). The database is the host's
+     * [indexer] = v3 API of the indexer; [indexerRedis] = its own Redis (loopback only: an internal cache). The database is the host's
      * PostgreSQL (its own port, found by the install script), so it has no catalog port.
      * [publicApi] = the agent's router (v2 + v3 on one port).
      */

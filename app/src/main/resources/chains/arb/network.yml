@@ -111,3 +111,5 @@ clientConfig:
 # Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
 diagnostics:
   - id: path_mtu
+  # Nitro reads batches from the parent chain RPC; a pruned / rate-limited public L1 stalls the sync with no error in the UI.
+  - id: arb_l1

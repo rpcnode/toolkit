@@ -70,11 +70,11 @@ clientConfig:
     - key: json-rpc-address
       source: catalog_port
       role: http
-      description: JSON-RPC HTTP port (127.0.0.1)
+      description: RPC port (0.0.0.0) — gRPC + /health on sui-node 1.8x; the yaml key keeps its legacy name
     - key: metrics-address
       source: catalog_port
       role: metrics
-      description: Prometheus metrics port (127.0.0.1)
+      description: Prometheus metrics port (0.0.0.0)
     - key: p2p-listen
       source: catalog_port
       role: p2p

@@ -10,7 +10,7 @@ import rpcnode.toolkit.shared.infrastructure.http.SimpleHttp
 
 /**
  * Panel-side live probe for Start `clientConfig.bindings[].testConnect`.
- * Kinds are declared in chains/<id>/network.yml (`eth_rpc`, `beacon_genesis`, `tron_http`).
+ * Kinds are declared in chains/<id>/network.yml (`eth_rpc`, `eth_ws`, `beacon_genesis`, `tron_http`).
  */
 class TestConfigConnectUseCase(
     private val http: SimpleHttp = SimpleHttp(),
@@ -26,14 +26,17 @@ class TestConfigConnectUseCase(
 
     suspend operator fun invoke(kind: String, url: String): Result
     {
-        val endpoint = url.trim()
+        val wanted = kind.trim().lowercase()
+        // a WebSocket endpoint (Juno --eth-node) is probed through the same host over http(s)
+        val endpoint = if (wanted == "eth_ws") wsToHttp(url.trim()) else url.trim()
         if (endpoint.isEmpty() || (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")))
         {
             return Result.BadUrl
         }
-        return when (kind.trim().lowercase())
+        return when (wanted)
         {
             "eth_rpc" -> probeEthRpc(endpoint)
+            "eth_ws" -> probeEthRpc(endpoint)
             "beacon_genesis" -> probeBeaconGenesis(endpoint)
             "tron_http" -> probeTronHttp(endpoint)
             else -> Result.BadKind
@@ -86,5 +89,13 @@ class TestConfigConnectUseCase(
     companion object
     {
         private val json = Json { ignoreUnknownKeys = true }
+
+        /** `ws://` → `http://`, `wss://` → `https://`; http(s) URLs pass through, anything else is returned as is (BadUrl). */
+        fun wsToHttp(url: String): String = when
+        {
+            url.startsWith("wss://", ignoreCase = true) -> "https://" + url.substring(6)
+            url.startsWith("ws://", ignoreCase = true) -> "http://" + url.substring(5)
+            else -> url
+        }
     }
 }

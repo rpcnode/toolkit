@@ -15,6 +15,7 @@ class HttpGitHubReleaseClientPrereleaseTest
     private val releases = """
         [
           {"tag_name":"v9.0.0","draft":true,"prerelease":false,"assets":[]},
+          {"tag_name":"v8.4.0-alpha","draft":false,"prerelease":false,"assets":[]},
           {"tag_name":"v8.3.0-rc.0","draft":false,"prerelease":true,"assets":[]},
           {"tag_name":"v8.2.3","draft":false,"prerelease":false,"assets":[]}
         ]
@@ -44,8 +45,15 @@ class HttpGitHubReleaseClientPrereleaseTest
     }
 
     @Test
+    fun an_alpha_published_as_a_normal_release_is_skipped_too() = runTest {
+        // bnb-chain/bsc ships v1.8.0-alpha with prerelease=false; it must not become "latest"
+        assertEquals("v8.2.3", client.latestRelease("sigp/lighthouse", null)?.tag)
+        assertEquals("v8.4.0-alpha", client.latestRelease("sigp/lighthouse", null, includePrerelease = true)?.tag)
+    }
+
+    @Test
     fun release_candidates_count_when_asked_and_drafts_never_do() = runTest {
-        assertEquals("v8.3.0-rc.0", client.latestRelease("sigp/lighthouse", null, includePrerelease = true)?.tag)
+        assertEquals("v8.4.0-alpha", client.latestRelease("sigp/lighthouse", null, includePrerelease = true)?.tag)
     }
 
     @Test

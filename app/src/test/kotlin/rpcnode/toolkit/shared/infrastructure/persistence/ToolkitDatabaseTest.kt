@@ -54,6 +54,8 @@ class ToolkitDatabaseTest
                 assertEquals("15", rs.getString(1))
                 assertTrue(rs.next())
                 assertEquals("16", rs.getString(1))
+                assertTrue(rs.next())
+                assertEquals("17", rs.getString(1))
             }
         }
     }
@@ -69,7 +71,7 @@ class ToolkitDatabaseTest
                 "SELECT COUNT(*) FROM flyway_schema_history",
             ).use { rs ->
                 assertTrue(rs.next())
-                assertEquals(16, rs.getInt(1))
+                assertEquals(17, rs.getInt(1))
             }
         }
     }

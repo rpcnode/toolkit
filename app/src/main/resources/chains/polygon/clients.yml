@@ -25,7 +25,8 @@ programs:
       - { role: heimdall_api, port: 1317, label: "Heimdall REST", config: required }
   - env: mainnet
     id: heimdall
-    source: { type: github, repo: 0xPolygon/heimdall-v2 }
+    # A release counts only once its mainnet config deb is uploaded (v0.12.2 shipped amoy-only first).
+    source: { type: github, repo: 0xPolygon/heimdall-v2, requireAsset: "heimdall-mainnet-sentry-config_*-all.deb" }
     artifacts:
       - name: "heimdall-amd64.deb"
         nameAarch64: "heimdall-arm64.deb"
@@ -58,7 +59,7 @@ programs:
       - { role: heimdall_api, port: 1327, label: "Heimdall REST", config: required }
   - env: amoy
     id: heimdall
-    source: { type: github, repo: 0xPolygon/heimdall-v2 }
+    source: { type: github, repo: 0xPolygon/heimdall-v2, requireAsset: "heimdall-amoy-sentry-config_*-all.deb" }
     artifacts:
       - name: "heimdall-amd64.deb"
         nameAarch64: "heimdall-arm64.deb"

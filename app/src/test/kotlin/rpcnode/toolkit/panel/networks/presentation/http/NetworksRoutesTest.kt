@@ -64,9 +64,9 @@ class NetworksRoutesTest
         application { module(ServerConfig(), testToolkit()) }
         val body = Json.parseToJsonElement(client.get("/api/networks?all=1").bodyAsText()).jsonObject
         val items = body["items"]!!.jsonArray
-        assertEquals(17, items.size)
+        assertEquals(rpcnode.toolkit.ShippedNetworkIds.ALL.size, items.size)
         val ids = items.map { it.jsonObject["id"]!!.jsonPrimitive.content }.toSet()
-        assertEquals(setOf("arb", "base", "bch", "bitcoin", "bsc", "dash", "doge", "ethereum", "hyperliquid", "ltc", "polygon", "solana", "sui", "ton", "tron", "xrpl", "zcash"), ids)
+        assertEquals(rpcnode.toolkit.ShippedNetworkIds.ALL.toSet(), ids)
         for (item in items)
         {
             assertFalse(item.jsonObject["enabled"]!!.jsonPrimitive.boolean)

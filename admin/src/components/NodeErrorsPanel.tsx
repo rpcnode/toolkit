@@ -29,12 +29,16 @@ type LogsPayload = {
 const ERROR_LINE =
   /\b(error|fatal|panic|failed|exception|rejected|warning)\b|Config setting for|only applied on|^Error:/i
 
+/** Self-healing noise of a following node (Arc `--follow`): the node retries another endpoint on its own. */
+const BENIGN_LINE =
+  /Fetch failed: Failed to fetch certificates: JSON-RPC error: code -32603: (Upstream HTTP error: 429|Timeout fetching certificate)|Fetch failed: Failed to fetch certificates: JSON-RPC error: code -32004: Certificate not found|WebSocket connection failed, retrying in/
+
 function extractErrorLines(lines: string[]): string[] {
   const out: string[] = []
   const seen = new Set<string>()
   for (const line of lines) {
     const t = line.trim()
-    if (!t || !ERROR_LINE.test(t)) continue
+    if (!t || !ERROR_LINE.test(t) || BENIGN_LINE.test(t)) continue
     if (seen.has(t)) continue
     seen.add(t)
     out.push(t)

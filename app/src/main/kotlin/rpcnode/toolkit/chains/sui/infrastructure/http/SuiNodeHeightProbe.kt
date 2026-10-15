@@ -10,8 +10,9 @@ import rpcnode.toolkit.shared.infrastructure.http.SimpleHttp
 import rpcnode.toolkit.shared.infrastructure.http.SimpleHttpClients
 
 /**
- * Local Sui height via Prometheus `highest_synced_checkpoint`, falling back to
- * JSON-RPC `sui_getLatestCheckpointSequenceNumber`. While formal snapshot runs,
+ * Local Sui height via Prometheus `highest_synced_checkpoint`, falling back to the
+ * `x-sui-checkpoint-height` header of `GET /health` on the RPC port (that port is gRPC, not JSON-RPC;
+ * JSON-RPC `sui_getLatestCheckpointSequenceNumber` is the last resort for older nodes). While formal snapshot runs,
  * mirrors progress from `.snapshot-state.json` / log.
  */
 class SuiNodeHeightProbe(
@@ -33,14 +34,8 @@ class SuiNodeHeightProbe(
         val ports = SuiPortTable.forEnv(env)
         val metricsPort = ports.metrics
         val fromMetrics = SuiRpc.scrapeSyncedCheckpoint(http, metricsPort)
-        val fromRpc = if (httpPort > 0)
-        {
-            SuiRpc.latestCheckpoint(http, "http://127.0.0.1:$httpPort")
-        }
-        else
-        {
-            null
-        }
+        val fromRpc = SuiRpc.healthCheckpoint(http, httpPort)
+            ?: if (httpPort > 0) SuiRpc.latestCheckpoint(http, "http://127.0.0.1:$httpPort") else null
         val checkpoint = maxOfNullable(fromMetrics, fromRpc)
         val snap = SuiFormalSnapshotProgress.read(nodeDir)
         if (checkpoint == null && snap == null)

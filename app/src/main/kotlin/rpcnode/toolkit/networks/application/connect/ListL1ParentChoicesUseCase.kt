@@ -7,7 +7,7 @@ import rpcnode.toolkit.servers.domain.repository.ServerRepository
 
 /**
  * Start-step L1 parent choices for Base / Arb: ethereum `publicTip` + active
- * Ethereum nodes (via [ListEthereumNodesUseCase]).
+ * Ethereum nodes (via [ListEthereumNodesUseCase]). For Xai the parent is Arbitrum One: the `arb` nodes are listed instead.
  */
 class ListL1ParentChoicesUseCase(
     private val facts: NetworkFactsRepository,
@@ -65,7 +65,8 @@ class ListL1ParentChoicesUseCase(
         val l1Env = ListEthereumNodesUseCase.l1EnvForChild(networkId.value, envId)
             ?: return Result.NotApplicable
         val pickHelp = networkFacts.envs.single { it.id == envId }.l1PickHelp
-        val eth = when (val listed = ethereumNodes(envRaw = l1Env, statusRaw = "active", serverId = serverId))
+        val parent = ListEthereumNodesUseCase.parentNetworkFor(networkId.value)
+        val eth = when (val listed = ethereumNodes(envRaw = l1Env, statusRaw = "active", serverId = serverId, parent = parent))
         {
             is ListEthereumNodesUseCase.Result.Ready -> listed.value
             ListEthereumNodesUseCase.Result.UnknownEnv -> return Result.UnknownEnv

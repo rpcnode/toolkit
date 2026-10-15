@@ -2,75 +2,28 @@ package rpcnode.toolkit.chains.xrpl.infrastructure
 
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardCopyOption
-import java.nio.file.attribute.PosixFilePermission
-import org.slf4j.LoggerFactory
 
 /**
- * Installs `xrpld` from the Ripple `.deb` under `{nodeDir}/bin/`.
- * Never writes `/opt/ripple` or runs apt on the host.
+ * `xrpld` comes either prebuilt (compiled by the panel's build hosts, `xrpld-<arch>`) or is compiled on the host from the
+ * XRPLF/rippled source release by the run script (see `run.sh.tmpl`); this only locates those files and the binary left
+ * under `{nodeDir}/bin/`.
  */
 object XrplHostBinaries
 {
-    private val log = LoggerFactory.getLogger(XrplHostBinaries::class.java)
-
     const val BIN = XrplUnitBodies.BIN_NAME
-    private const val DEB_NAME = "xrpld-amd64.deb"
+    const val SOURCE_ARCHIVE = "xrpld-src.tar.gz"
 
-    data class Bins(val node: Path)
+    fun sourceArchive(nodeDir: Path): Path? =
+        nodeDir.resolve(SOURCE_ARCHIVE).takeIf { Files.isRegularFile(it) && Files.size(it) > 0 }
 
-    sealed interface Result
-    {
-        data class Ok(val bins: Bins) : Result
-        data class Failed(val detail: String) : Result
-    }
+    /** `xrpld-<arch>` compiled on a build host of this CPU architecture and synced with the client; null when absent. */
+    fun prebuilt(nodeDir: Path, arch: String = hostArch()): Path? =
+        nodeDir.resolve("$BIN-$arch").takeIf { Files.isRegularFile(it) && Files.size(it) > 0 && isElf(it) }
 
-    fun binDir(nodeDir: Path): Path = nodeDir.resolve("bin")
+    fun hostArch(): String =
+        if (System.getProperty("os.arch").orEmpty().lowercase().let { it.contains("aarch64") || it.contains("arm64") }) "aarch64" else "x86_64"
 
-    fun ensure(nodeDir: Path): Result
-    {
-        val root = nodeDir.toAbsolutePath().normalize()
-        val dest = binDir(root)
-        val nodeDest = dest.resolve(BIN)
-        if (ready(nodeDest))
-        {
-            return Result.Ok(Bins(node = nodeDest))
-        }
-        return try
-        {
-            Files.createDirectories(dest)
-            val deb = root.resolve(DEB_NAME)
-            if (!Files.isRegularFile(deb))
-            {
-                return Result.Failed(
-                    "xrpld .deb missing under $root — sync clients (Ripple xrpld pool) first",
-                )
-            }
-            val extractDir = root.resolve(".toolkit/deb-xrpld")
-            if (!extractDeb(deb, extractDir))
-            {
-                return Result.Failed("dpkg-deb extract failed: $DEB_NAME")
-            }
-            val found = findBinary(extractDir)
-                ?: return Result.Failed("xrpld binary not found inside $DEB_NAME")
-            Files.copy(found, nodeDest, StandardCopyOption.REPLACE_EXISTING)
-            makeExecutable(nodeDest)
-            if (!ready(nodeDest))
-            {
-                return Result.Failed("xrpld not executable after extracting $deb")
-            }
-            Result.Ok(Bins(node = nodeDest))
-        }
-        catch (e: Exception)
-        {
-            Result.Failed(e.message ?: "xrpld binary install failed")
-        }
-    }
-
-    // ELF check too: a non-binary left in bin/ by an older install (the package's logrotate file is also named
-    // `xrpld`) must be replaced, not reused — systemd fails on it with 203/EXEC "Exec format error".
-    private fun ready(path: Path): Boolean =
-        Files.isRegularFile(path) && Files.isExecutable(path) && isElf(path)
+    fun binary(nodeDir: Path): Path = nodeDir.resolve("bin").resolve(BIN)
 
     internal fun isElf(path: Path): Boolean =
         runCatching {
@@ -79,87 +32,4 @@ object XrplHostBinaries
                 input.read(head) == 4 && head.contentEquals(byteArrayOf(0x7f, 'E'.code.toByte(), 'L'.code.toByte(), 'F'.code.toByte()))
             }
         }.getOrDefault(false)
-
-    private fun extractDeb(deb: Path, dest: Path): Boolean
-    {
-        return try
-        {
-            if (Files.isDirectory(dest))
-            {
-                Files.walk(dest).use { stream ->
-                    stream.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
-                }
-            }
-            Files.createDirectories(dest)
-            val pb = ProcessBuilder(
-                "dpkg-deb",
-                "-x",
-                deb.toAbsolutePath().toString(),
-                dest.toAbsolutePath().toString(),
-            )
-            pb.redirectErrorStream(true)
-            val p = pb.start()
-            val out = p.inputStream.bufferedReader().readText().take(400)
-            val code = p.waitFor()
-            if (code != 0)
-            {
-                log.warn("dpkg-deb {}: {}", code, out)
-            }
-            code == 0
-        }
-        catch (e: Exception)
-        {
-            log.warn("dpkg-deb: {}", e.message)
-            false
-        }
-    }
-
-    /**
-     * The package also ships `etc/logrotate.d/xrpld` — a plain name match picked that text file. Take the usual
-     * install paths first, then any ELF file named `xrpld`.
-     */
-    internal fun findBinary(root: Path): Path?
-    {
-        if (!Files.isDirectory(root))
-        {
-            return null
-        }
-        for (rel in listOf("usr/bin/$BIN", "opt/ripple/bin/$BIN", "opt/xrpld/bin/$BIN", "usr/local/bin/$BIN"))
-        {
-            val p = root.resolve(rel)
-            if (Files.isRegularFile(p) && isElf(p))
-            {
-                return p
-            }
-        }
-        Files.walk(root, 6).use { stream ->
-            return stream
-                .filter { Files.isRegularFile(it) && it.fileName.toString() == BIN && isElf(it) }
-                .findFirst()
-                .orElse(null)
-        }
-    }
-
-    private fun makeExecutable(path: Path)
-    {
-        try
-        {
-            Files.setPosixFilePermissions(
-                path,
-                setOf(
-                    PosixFilePermission.OWNER_READ,
-                    PosixFilePermission.OWNER_WRITE,
-                    PosixFilePermission.OWNER_EXECUTE,
-                    PosixFilePermission.GROUP_READ,
-                    PosixFilePermission.GROUP_EXECUTE,
-                    PosixFilePermission.OTHERS_READ,
-                    PosixFilePermission.OTHERS_EXECUTE,
-                ),
-            )
-        }
-        catch (_: Exception)
-        {
-            path.toFile().setExecutable(true)
-        }
-    }
 }

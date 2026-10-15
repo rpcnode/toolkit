@@ -6,6 +6,8 @@ data class SnapshotJob(
     val destDir: String,
     val streamUnpack: Boolean = false,
     val sizeBytes: Long? = null,
+    /** Outbound HTTP proxy for this download (the node's proxy), blank = direct. */
+    val proxy: String = "",
     val pct: Double = 0.0,
     val phase: String = "idle",
     val detail: String = "",

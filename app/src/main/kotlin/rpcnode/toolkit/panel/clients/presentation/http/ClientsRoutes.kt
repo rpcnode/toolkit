@@ -43,6 +43,17 @@ data class ClientRowResponse(
     @SerialName("download_total") val downloadTotal: Long? = null,
     @SerialName("download_pct") val downloadPct: Double? = null,
     @SerialName("download_error") val downloadError: String? = null,
+    /** Per CPU architecture: stored on the panel, or still to be compiled on demand. */
+    val arches: List<ClientArchResponse> = emptyList(),
+)
+
+@Serializable
+data class ClientArchResponse(
+    val arch: String,
+    val ready: Boolean,
+    val buildable: Boolean = false,
+    val files: List<String> = emptyList(),
+    @SerialName("size_bytes") val sizeBytes: Long = 0,
 )
 
 @Serializable
@@ -140,7 +151,7 @@ fun Application.clientsApiRoutes(toolkit: Toolkit)
                     probedAt = result.probedAt,
                     githubTokenSet = toolkit.githubTokenProvider.current() != null,
                     dest = toolkit.clientsDestDir.toAbsolutePath().toString(),
-                    rows = result.rows.map { it.toResponse() },
+                    rows = result.rows.map { it.toResponse().withArches(toolkit) },
                     stats = result.stats.toResponse(),
                 ),
             )
@@ -161,7 +172,7 @@ fun Application.clientsApiRoutes(toolkit: Toolkit)
                 ClientsResponse(
                     network = network.value,
                     env = env.value,
-                    rows = result.rows.map { it.toResponse() },
+                    rows = result.rows.map { it.toResponse().withArches(toolkit) },
                     want = result.want,
                 ),
             )
@@ -267,6 +278,17 @@ private fun ClientVersionPin.toResponse() = ClientRowResponse(
     probeError = probeError,
     probedAt = probedAt,
 )
+
+private fun ClientRowResponse.withArches(toolkit: Toolkit): ClientRowResponse
+{
+    val network = NetworkId.parse(network) ?: return this
+    val env = EnvId.parse(env) ?: return this
+    return copy(
+        arches = toolkit.listClientArches(network, env, program).map {
+            ClientArchResponse(it.arch, it.ready, it.buildable, it.files, it.sizeBytes)
+        },
+    )
+}
 
 private fun ClientRowView.toResponse() = pin.toResponse().copy(
     downloadPhase = downloadPhase,
