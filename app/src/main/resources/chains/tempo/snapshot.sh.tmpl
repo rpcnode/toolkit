@@ -1,0 +1,23 @@
+# Tempo snapshot: `tempo download` restores execution data + consensus data of ONE snapshot (docs: keep them in lockstep).
+# Always passes a profile flag (without one the tool opens an interactive TUI). Resumable (.part files + HTTP Range).
+# The tool logs "progress=NN%" per phase (download, extract, verify): the state file shows the phase and its percentage.
+TEMPO='{{tempo}}'
+DATA='{{datadir}}'
+CHAIN='{{chain}}'
+PROFILE='{{profile}}'
+[ -x "$TEMPO" ] || fail "tempo missing at $TEMPO - sync the Tempo clients first"
+mkdir -p "$DATA"
+state download 0 "tempo download --chain $CHAIN --$PROFILE"
+"$TEMPO" download --chain "$CHAIN" --datadir "$DATA" --"$PROFILE" -y --color never 2>&1 | tr '\r' '\n' | while IFS= read -r line; do
+  echo "$line" >>"$LOG"
+  pct=$(printf '%s' "$line" | sed -n 's/.*progress=\([0-9][0-9]*\)\(\.[0-9]*\)\{0,1\}%.*/\1/p')
+  if [ -n "$pct" ]; then
+    phase=download
+    case "$line" in *xtract*) phase=extract ;; *erify*) phase=verify ;; esac
+    state "$phase" "$pct" "tempo download $CHAIN $PROFILE: $phase $pct%"
+  fi
+done
+[ "${PIPESTATUS[0]}" -eq 0 ] || fail "tempo download failed (see $LOG)"
+[ -d "$DATA/consensus" ] || fail "consensus data missing after tempo download"
+touch "$MARKER"
+state done 100 "Tempo snapshot restored"

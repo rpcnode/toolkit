@@ -1,0 +1,21 @@
+[Unit]
+Description={{description}}
+After=network-online.target {{node_unit}}
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+# optional overrides, e.g. RPCNODE_POLKADOT_API_TAG=v0.3.2
+EnvironmentFile=-/etc/rpcnode/polkadot.env
+ExecStart={{exec_start}}
+Restart=on-failure
+RestartSec=30
+Nice=10
+# the script builds first (long) and then execs the API; control-group so a stop also ends cargo / rustc
+TimeoutStopSec=60
+KillMode=control-group
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

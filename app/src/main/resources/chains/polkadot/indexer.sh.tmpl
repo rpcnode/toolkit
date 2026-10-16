@@ -1,0 +1,117 @@
+#!/bin/bash
+# RpcNode Polkadot REST API — polkadot-rest-api (Parity), built from source and run as one plain process. No containers.
+# It is the successor of substrate-api-sidecar (deprecated upstream, see docs/networks/polkadot-intake.md): a stateless REST
+# layer (blocks, extrinsics, accounts, fees, transaction submit) over this node's JSON-RPC. It has NO database: every query
+# is answered from the node, so history beyond ~256 blocks needs an archive node.
+# Flow: packages -> Rust toolchain (rustup-init, checksum verified, under {{idx_dir}}) -> source at the pinned tag ->
+# cargo build --release --locked (once per tag) -> wait until the node is synced -> exec the API.
+# The build is niced and capped (jobs <= cores/2 and <= RAM/4 GB) so it does not starve a node that is still syncing.
+# RPCNODE_POLKADOT_API_TAG=<tag> in /etc/rpcnode/polkadot.env builds another release.
+set -uo pipefail
+ENV_ID={{env}}
+IDX={{idx_dir}}
+STATE_DIR={{state_dir}}
+LOG={{log_file}}
+RPC_PORT={{rpc_port}}
+TAG="${RPCNODE_POLKADOT_API_TAG:-{{release_tag}}}"
+RUST_VERSION={{rust_version}}
+
+LOGDIR="$(dirname "$LOG")"
+SRC="$IDX/src"; BIN="$IDX/bin"
+export RUSTUP_HOME="$IDX/rustup" CARGO_HOME="$IDX/cargo"
+mkdir -p "$LOGDIR" "$IDX" "$BIN" "$STATE_DIR"
+chmod 755 "$IDX"
+exec >>"$LOG" 2>&1
+
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [polkadot-api] $*"; }
+
+# --- 1. packages (only when something is missing) ---------------------------------------------------------------------
+packages_ok() {
+  local c
+  for c in gcc make pkg-config git curl sha256sum; do command -v "$c" >/dev/null 2>&1 || return 1; done
+  pkg-config --exists openssl
+}
+
+install_packages() {
+  packages_ok && return 0
+  command -v apt-get >/dev/null 2>&1 || { log "missing build tools and no apt-get: install gcc make pkg-config git curl libssl-dev"; return 1; }
+  log "installing build dependencies"
+  DEBIAN_FRONTEND=noninteractive apt-get update -y && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential pkg-config libssl-dev git curl ca-certificates
+}
+
+# --- 2. Rust toolchain (the version of the upstream Dockerfile at this tag) -------------------------------------------------
+install_rust() {
+  [[ -x "$CARGO_HOME/bin/cargo" && -f "$STATE_DIR/polkadot-api-rust-$RUST_VERSION" ]] && return 0
+  local triple tmp want got
+  case "$(uname -m)" in
+    x86_64) triple=x86_64-unknown-linux-gnu ;;
+    aarch64) triple=aarch64-unknown-linux-gnu ;;
+    *) log "unsupported CPU $(uname -m)"; return 1 ;;
+  esac
+  tmp="$(mktemp -d)"
+  log "installing Rust $RUST_VERSION into $IDX (rustup-init, sha256 checked)"
+  curl -fsSL "https://static.rust-lang.org/rustup/dist/$triple/rustup-init" -o "$tmp/rustup-init" || { rm -rf "$tmp"; return 1; }
+  want="$(curl -fsSL "https://static.rust-lang.org/rustup/dist/$triple/rustup-init.sha256" | awk '{ print $1 }')"
+  got="$(sha256sum "$tmp/rustup-init" | awk '{ print $1 }')"
+  if [[ -z "$want" || "$want" != "$got" ]]; then log "rustup-init checksum mismatch"; rm -rf "$tmp"; return 1; fi
+  chmod +x "$tmp/rustup-init"
+  "$tmp/rustup-init" -y --no-modify-path --profile minimal --default-toolchain "$RUST_VERSION" || { rm -rf "$tmp"; return 1; }
+  rm -rf "$tmp"
+  touch "$STATE_DIR/polkadot-api-rust-$RUST_VERSION"
+}
+
+# --- 3. source + build (once per release tag) ------------------------------------------------------------------------------
+fetch_source() {
+  [[ -f "$SRC/Cargo.lock" && -f "$STATE_DIR/polkadot-api-src-$TAG" ]] && return 0
+  log "cloning paritytech/polkadot-rest-api $TAG"
+  rm -rf "$SRC"
+  git clone --branch "$TAG" --depth 1 https://github.com/paritytech/polkadot-rest-api.git "$SRC" || { rm -rf "$SRC"; return 1; }
+  touch "$STATE_DIR/polkadot-api-src-$TAG"
+}
+
+build_api() {
+  [[ -x "$BIN/polkadot-rest-api" && -f "$STATE_DIR/polkadot-api-build-$TAG" ]] && return 0
+  local ram_gb jobs cores
+  ram_gb=$(awk '/MemTotal/ { printf "%d", $2 / 1048576 }' /proc/meminfo)
+  cores=$(nproc)
+  jobs=$(( cores / 2 )); (( jobs > ram_gb / 4 )) && jobs=$(( ram_gb / 4 )); (( jobs < 1 )) && jobs=1
+  log "building polkadot-rest-api $TAG with $jobs job(s) (this takes a while, once per release)"
+  ( cd "$SRC" && PATH="$CARGO_HOME/bin:$PATH" nice -n 10 cargo build --release --locked --package polkadot-rest-api -j "$jobs" ) || return 1
+  install -m 755 "$SRC/target/release/polkadot-rest-api" "$BIN/polkadot-rest-api.new" || return 1
+  mv -f "$BIN/polkadot-rest-api.new" "$BIN/polkadot-rest-api" || return 1
+  rm -rf "$SRC/target"
+  touch "$STATE_DIR/polkadot-api-build-$TAG"
+}
+
+# --- 4. the node must be synced: the API reads the runtime metadata at start and exits when it cannot -------------------------
+rpc() {
+  curl -fsS -m 10 -H 'Content-Type: application/json' \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"$1\",\"params\":[]}" "http://127.0.0.1:$RPC_PORT/" 2>/dev/null
+}
+
+node_ready() {
+  local health header
+  health="$(rpc system_health)" || return 1
+  header="$(rpc chain_getHeader)" || return 1
+  # synced (not isSyncing) and past genesis (a best head above 0x0)
+  grep -Eq '"isSyncing": ?false' <<<"$health" && grep -Eq '"number": ?"0x[0-9a-f]*[1-9a-f][0-9a-f]*"' <<<"$header"
+}
+
+wait_for_node() {
+  local n=0
+  until node_ready; do
+    (( n % 20 == 0 )) && log "waiting for the node on :$RPC_PORT to finish syncing"
+    n=$((n + 1)); sleep 30
+  done
+}
+
+log "polkadot REST API for $ENV_ID starting (release $TAG, data in $IDX)"
+until install_packages && install_rust && fetch_source && build_api; do
+  log "install/build step failed — retrying in 10 min (details above)"
+  sleep 600
+done
+wait_for_node
+{{env_exports}}
+log "starting polkadot-rest-api on port $SAS_EXPRESS_PORT against $SAS_SUBSTRATE_URL"
+cd "$IDX" && exec "$BIN/polkadot-rest-api"

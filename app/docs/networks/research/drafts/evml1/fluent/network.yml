@@ -1,0 +1,92 @@
+# Fluent (blended-execution EVM L2, reth-based; mainnet chain id 25363, testnet 20994). One binary `fluent` (fluentlabs-xyz/fluentbase bins/fluent) — no companion consensus client,
+# blocks come over devp2p (docs/10-running-node-locally.md). Mainnet starts from genesis; testnet MUST be bootstrapped with `fluent download` first.
+# Sizing is INFERRED (no vendor figures): testnet snapshot size is not published; mainnet is young (18.0 M blocks).
+label: Fluent
+diskRoles:
+  - id: data
+    label: Node DB
+    media: nvme
+diskNotes:
+  - "fluent --datadir is the data role leaf (use a separate datadir per network — upstream warns about mixing)."
+  - "Testnet: `fluent init --datadir D --chain fluent-testnet` then `fluent download --datadir D --chain fluent-testnet` (official snapshot), then `fluent node`."
+  - "x86_64 only: v1.5.1 ships no aarch64 build."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Fluent Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 512
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: never
+    tipLagBlocks: 10
+    publicTip:
+      urls:
+        - https://rpc.fluent.xyz
+  - id: testnet
+    label: Fluent Testnet
+    diskHintGiB: 1024
+    fullNodeGiB: 512
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: required
+    tipLagBlocks: 10
+    publicTip:
+      urls:
+        - https://rpc.testnet.fluent.xyz
+    snapshotTypes:
+      - id: official
+        kind: full
+        label: Official testnet snapshot
+        hint: "`fluent download --chain fluent-testnet` (size not published; resumable)."
+        diskGiB: 512
+        default: true
+
+# CLI flags live in the systemd unit (chains/fluent). Capacity literals mirror node.service.tmpl (reth family prod preset).
+clientConfig:
+  program: fluent
+  format: flags
+  bindings:
+    - key: datadir
+      source: disk_role_dir
+      role: data
+      description: fluent --datadir (Disks data role)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: JSON-RPC WebSocket port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: P2P port (tcp + udp)
+    - key: metrics-port
+      source: catalog_port
+      role: metrics
+      description: Prometheus port, 127.0.0.1
+    - key: http-api
+      source: literal
+      value: "eth,net,web3,rpc"
+      description: --http.api / --ws.api
+    - key: rpc-max-connections
+      source: literal
+      value: "3000"
+      description: --rpc.max-connections
+    - key: rpc-max-response-size
+      source: literal
+      value: "64"
+      description: --rpc.max-response-size (MB)
+    - key: rpc-max-blocks-per-filter
+      source: literal
+      value: "50000"
+      description: --rpc.max-blocks-per-filter
+    - key: limit-nofile
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE
+
+diagnostics:
+  - id: path_mtu

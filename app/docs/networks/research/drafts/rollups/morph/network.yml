@@ -1,0 +1,170 @@
+# Morph (optimistic zkEVM rollup, own L2 consensus): TWO processes = geth fork (morph-l2/go-ethereum, execution) +
+# morphnode (morph-l2/morph, tendermint-style node + L1 derivation). Both container-only upstream (ghcr.io/morph-l2/{go-ethereum,node},
+# linux/amd64+arm64; GitHub releases carry no assets). Official "binary mode" = build from source with Go (run-morph-node Makefile).
+# Snapshots (snapshot.morph.network) are effectively required: derivation heights in the node env MUST match the chosen snapshot.
+label: Morph
+dataRoot: morph
+diskRoles:
+  - id: chaindata
+    label: geth datadir
+    media: nvme
+  - id: node
+    label: morphnode home (config + data)
+    media: ssd
+  - id: snapshots
+    label: snapshots / additional
+    media: ssd
+diskNotes:
+  - "geth --datadir = chaindata role leaf (snapshot dir geth/ lands inside it). morphnode --home = node role leaf (config/{config.toml,genesis.json}, data/ from the snapshot)."
+  - "config.toml, genesis.json (node) and static-nodes.json (geth) come from github.com/morph-l2/run-morph-node (mainnet/ | hoodi/); ports in config.toml are patched to the catalog."
+  - "morphnode needs an Ethereum L1 execution RPC + beacon API (required at startup in BOTH verify modes) — mainnet L1 for Morph mainnet, Hoodi L1 (chain id 560048) for the testnet."
+  - "The snapshot heights (DERIVATION_START_HEIGHT, L1_MSG_START_HEIGHT, L2_BASE_HEIGHT) come from the run-morph-node README table and must match the extracted snapshot."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Morph Mainnet
+    diskHintGiB: 512
+    fullNodeGiB: 256
+    archiveGiB: 1024
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: required
+    publicTip:
+      urls:
+        - https://rpc.morphl2.io
+        - https://rpc-quicknode.morphl2.io
+    snapshotTypes:
+      - id: full
+        kind: full
+        label: Snapshot (non-archive)
+        hint: snapshot.morph.network/mainnet/snapshot-<date>-N.tar.gz (~68 GB on 2026-09-17). Default.
+        diskGiB: 256
+        default: true
+      - id: archive
+        kind: archive
+        label: Archive snapshot
+        hint: snapshot-archive-<date>-N.tar.gz (~368 GB on 2026-10-10).
+        diskGiB: 1024
+    l1Parent:
+      rpc: https://ethereum-rpc.publicnode.com
+      beacon: https://ethereum-beacon-api.publicnode.com
+      pickHelp: |
+        Morph mainnet derives from Ethereum mainnet blobs. Click Public or pick an active Ethereum node (same-host uses 127.0.0.1).
+  - id: hoodi
+    label: Morph Hoodi Testnet
+    diskHintGiB: 128
+    fullNodeGiB: 64
+    archiveGiB: 128
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: required
+    publicTip:
+      urls:
+        - https://rpc-hoodi.morph.network
+    snapshotTypes:
+      - id: full
+        kind: full
+        label: Snapshot (non-archive)
+        hint: snapshot.morph.network/hoodi/snapshot-<date>-N.tar.gz (~15 GB). Default.
+        diskGiB: 64
+        default: true
+      - id: archive
+        kind: archive
+        label: Archive snapshot
+        hint: snapshot-archive-<date>-N.tar.gz (~28 GB).
+        diskGiB: 128
+    l1Parent:
+      rpc: https://ethereum-hoodi-rpc.publicnode.com
+      beacon: https://ethereum-hoodi-beacon-api.publicnode.com
+      pickHelp: |
+        Morph Hoodi derives from Ethereum Hoodi (chain id 560048).
+
+clientConfig:
+  program: geth
+  format: flags
+  bindings:
+    - key: snapshot
+      source: install_option
+      option: snapshot
+      default: "full"
+      description: full | archive snapshot flavor
+    - key: datadir
+      source: disk_role_dir
+      role: chaindata
+      description: geth --datadir
+    - key: node-home
+      source: disk_role_dir
+      role: node
+      description: morphnode --home
+    - key: snapshots
+      source: disk_role_dir
+      role: snapshots
+      description: Snapshot workspace
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: geth --http.port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: geth --ws.port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: geth --port
+    - key: engine-port
+      source: catalog_port
+      role: engine
+      description: geth --authrpc.port (127.0.0.1)
+    - key: metrics-port
+      source: catalog_port
+      role: metrics
+      description: geth --metrics.port (127.0.0.1)
+    - key: cl-rpc-port
+      source: catalog_port
+      role: cl_rpc
+      description: morphnode (tendermint) rpc laddr, config.toml [rpc] (127.0.0.1)
+    - key: cl-p2p-port
+      source: catalog_port
+      role: cl_p2p
+      description: morphnode p2p laddr, config.toml [p2p]
+    - key: cl-metrics-port
+      source: catalog_port
+      role: cl_metrics
+      description: config.toml [instrumentation] prometheus_listen_addr (127.0.0.1)
+    - key: cl-abci-port
+      source: catalog_port
+      role: cl_abci
+      description: config.toml proxy_app (127.0.0.1)
+    - key: http-api
+      source: literal
+      value: "web3,eth,net,morph"
+      description: --http.api / --ws.api (upstream script exposes debug,txpool,engine,admin — removed for a public port)
+    - key: maxpeers
+      source: literal
+      value: "50"
+      description: --maxpeers
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd open-file limit
+    - key: l1-rpc
+      source: install_option
+      option: l1_rpc
+      default: ""
+      description: MORPH_NODE_L1_ETH_RPC
+      testConnect:
+        kind: eth_rpc
+        label: Test connect
+        help: Panel POSTs eth_blockNumber.
+    - key: l1-beacon
+      source: install_option
+      option: l1_beacon
+      default: ""
+      description: MORPH_NODE_L1_ETH_BEACON_RPC (required, node exits without it)
+      testConnect:
+        kind: beacon_genesis
+        label: Test connect
+        help: Panel GETs {url}/eth/v1/beacon/genesis.
+diagnostics:
+  - id: path_mtu

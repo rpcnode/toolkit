@@ -1,0 +1,52 @@
+# Starknet: Nethermind Juno, GitHub release zip (one static binary inside, versioned file name juno-<tag>-linux-<arch>;
+# the process starter links it to bin/juno). Verified assets: juno-v0.16.8-linux-{amd64,arm64}.zip (+ darwin).
+# Snapshots: juno-snapshots.nethermind.io/files/<name>/latest (redirects to the dated file, tar.zst).
+programs:
+  - env: mainnet
+    id: juno
+    source: { type: github, repo: NethermindEth/juno }
+    artifacts:
+      - name: "juno-x86_64-linux.zip"
+        nameAarch64: "juno-aarch64-linux.zip"
+        urlTemplate: "https://github.com/NethermindEth/juno/releases/download/{tag}/juno-{tag}-linux-amd64.zip"
+        urlTemplateAarch64: "https://github.com/NethermindEth/juno/releases/download/{tag}/juno-{tag}-linux-arm64.zip"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 42530, label: "HTTP JSON-RPC", config: required }
+      - { role: ws, port: 42531, label: "WebSocket JSON-RPC", config: required }
+      - { role: metrics, port: 42534, label: "Metrics (127.0.0.1)", config: required }
+  - env: sepolia
+    id: juno
+    source: { type: github, repo: NethermindEth/juno }
+    artifacts:
+      - name: "juno-x86_64-linux.zip"
+        nameAarch64: "juno-aarch64-linux.zip"
+        urlTemplate: "https://github.com/NethermindEth/juno/releases/download/{tag}/juno-{tag}-linux-amd64.zip"
+        urlTemplateAarch64: "https://github.com/NethermindEth/juno/releases/download/{tag}/juno-{tag}-linux-arm64.zip"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 42540, label: "HTTP JSON-RPC", config: required }
+      - { role: ws, port: 42541, label: "WebSocket JSON-RPC", config: required }
+      - { role: metrics, port: 42544, label: "Metrics (127.0.0.1)", config: required }
+
+# Juno snapshot mirror. Keys match network.yml snapshotTypes[].id. discover: redirect = HEAD <mirror>/files/<slug>/latest
+# with redirects followed; the final Content-Disposition filename / Location is the dated file (new discover mode).
+snapshots:
+  mainnet:
+    pruned:
+      mirror: "https://juno-snapshots.nethermind.io/files/mainnet-pruned/latest"
+      filename: juno_mainnet_pruned.tar.zst
+      discover: redirect
+    full:
+      mirror: "https://juno-snapshots.nethermind.io/files/mainnet/latest"
+      filename: juno_mainnet.tar.zst
+      discover: redirect
+  sepolia:
+    pruned:
+      mirror: "https://juno-snapshots.nethermind.io/files/sepolia-pruned/latest"
+      filename: juno_sepolia_pruned.tar.zst
+      discover: redirect
+    full:
+      mirror: "https://juno-snapshots.nethermind.io/files/sepolia/latest"
+      filename: juno_sepolia.tar.zst
+      discover: redirect

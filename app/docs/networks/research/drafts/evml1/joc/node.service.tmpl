@@ -1,0 +1,36 @@
+# Nethermind for JOC. {{config}} = joc-mainnet | joc-mainnet_archive | joc-testnet | joc-testnet_archive.
+# No Engine API / JWT: the shipped joc configs set Merge.Enabled=false (Clique).
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{bin_dir}}
+ExecStart={{bin}} \
+  -c {{config}} \
+  --data-dir {{data_dir}} \
+  --JsonRpc.Enabled true \
+  --JsonRpc.Host 0.0.0.0 \
+  --JsonRpc.Port {{http_port}} \
+  --JsonRpc.WebSocketsPort {{ws_port}} \
+  --JsonRpc.EnabledModules Eth,Net,Web3,Subscribe,Rpc \
+  --JsonRpc.MaxBatchSize 1000 \
+  --JsonRpc.RequestQueueLimit 500 \
+  --Network.P2PPort {{p2p_port}} \
+  --Network.DiscoveryPort {{p2p_port}} \
+  --Network.MaxActivePeers 50 \
+  --Metrics.Enabled true \
+  --Metrics.ExposeHost 127.0.0.1 \
+  --Metrics.ExposePort {{metrics_port}}
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=300
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE=1048576
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

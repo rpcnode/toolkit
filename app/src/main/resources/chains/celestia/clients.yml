@@ -1,0 +1,21 @@
+# Celestia: celestia-appd from upstream GitHub releases (no Docker). Draft, see specs/cosmos/networks.md for verification.
+programs:
+  - env: mainnet
+    id: celestia-appd
+    source: { type: github, repo: celestiaorg/celestia-app }
+    artifacts:
+      - name: "celestia-app-linux-x86_64.tar.gz"   # multiplexer build, contains celestia-appd
+        nameAarch64: "celestia-app-linux-arm64.tar.gz"
+        urlTemplate: "https://github.com/celestiaorg/celestia-app/releases/download/{tag}/celestia-app_Linux_x86_64.tar.gz"
+        urlTemplateAarch64: "https://github.com/celestiaorg/celestia-app/releases/download/{tag}/celestia-app_Linux_arm64.tar.gz"
+    configs:
+      - name: genesis.json
+        urlTemplate: "https://raw.githubusercontent.com/celestiaorg/networks/master/celestia/genesis.json"
+    requirements: { logFile: logs/celestia.log }
+    ports:
+      - { role: http, port: 41240, label: "CometBFT RPC (/status)", config: required }
+      - { role: p2p, port: 41242, label: "CometBFT P2P", config: required }
+      - { role: metrics, port: 41244, label: "CometBFT Prometheus (127.0.0.1)", config: required }
+      - { role: api, port: 41245, label: "Cosmos REST (LCD)", config: required }
+      - { role: grpc, port: 41247, label: "Cosmos gRPC", config: required }
+      - { role: grpc_laddr, port: 41248, label: "CometBFT gRPC (--rpc.grpc_laddr, 127.0.0.1)", config: required }

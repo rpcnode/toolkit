@@ -1,0 +1,35 @@
+# sonicd (rpc mode). Genesis must already be imported (genesis-import.sh.tmpl). {{nat_flag}} = " --nat=extip:<public ip>" when the host IP is known, else " --nat=none".
+# IPC is disabled (it exposes every namespace). GOMEMLIMIT / GOTRACEBACK follow the starter service file in the Sonic hardening docs.
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=GOMEMLIMIT={{gomemlimit_gib}}GiB
+Environment=GOTRACEBACK=crash
+ExecStart={{bin}} \
+  --datadir={{datadir}} \
+  --cache={{cache_mb}} \
+  --port={{p2p_port}} \
+  --maxpeers=50 \
+  --http --http.addr=0.0.0.0 --http.port={{http_port}} \
+  --http.api=eth,net,web3,sonic \
+  --http.vhosts=* --http.corsdomain=* \
+  --ws --ws.addr=0.0.0.0 --ws.port={{ws_port}} \
+  --ws.api=eth,net,web3,sonic \
+  --ws.origins=* \
+  --rpc.batch-request-limit=1000 \
+  --ipcdisable \
+  --metrics --metrics.addr=127.0.0.1 --metrics.port={{metrics_port}}{{nat_flag}}
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=300
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE=934073
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

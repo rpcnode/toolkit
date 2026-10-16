@@ -1,0 +1,76 @@
+# NEAR Protocol RPC node (neard, tracked_shards_config AllShards). No snapshot: bootstrap = epoch sync + state sync from P2P
+# peers (the free nearcore snapshots were deprecated 2025-06-01; archival snapshots are request-based).
+label: NEAR
+diskRoles:
+  - id: state
+    label: neard home (hot DB, keys, config)
+    media: nvme
+diskNotes:
+  - "neard --home is the state role leaf: config.json, genesis.json, node_key.json and data/ (RocksDB) live there."
+  - "Official RPC hardware: 8 cores / 32 GB / 4 TB NVMe recommended (2.5 TB, 16 GB, 15k IOPS minimum). Size grows with gc_num_epochs_to_keep (5 default, 3 minimum)."
+  - "First Start runs `neard init --download-genesis --download-config rpc`; every Start replaces config.json network.boot_nodes with live block-producer peers from the public network_info (an empty boot_nodes leaves the node at 0 peers) and re-applies the two keys below. Every other key of config.json is yours."
+  - "The debug RPC (rpc.enable_debug_rpc) is forced off: the testnet rpc profile ships it on. node_key.json is the node's identity - keep the home 0700."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: NEAR Mainnet
+    diskHintGiB: 4096
+    fullNodeGiB: 2560
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc.mainnet.near.org
+        - https://rpc.mainnet.fastnear.com
+        - https://near.drpc.org
+  - id: testnet
+    label: NEAR Testnet
+    diskHintGiB: 1024
+    fullNodeGiB: 1024
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc.testnet.near.org
+        - https://rpc.testnet.fastnear.com
+        - https://near-testnet.drpc.org
+
+# `neard --home <state> run ...` flags + the config.json keys Start applies (NearUnitBodies / NearConfigPatch). format: flags.
+# Literals equal NearSettings and the unit LimitNOFILE (NearCatalogTest).
+clientConfig:
+  program: neard
+  format: flags
+  bindings:
+    - key: home
+      source: disk_role_dir
+      role: state
+      description: neard --home (Disks state role)
+    - key: rpc-addr
+      source: catalog_port
+      role: http
+      description: "JSON-RPC port, `neard run --rpc-addr 0.0.0.0:<port>`; also GET /status"
+    - key: network-addr
+      source: catalog_port
+      role: p2p
+      description: "P2P port, `neard run --network-addr 0.0.0.0:<port>`"
+    - key: rpc-prometheus-addr
+      source: catalog_port
+      role: metrics
+      description: "Prometheus port, `neard run --rpc-prometheus-addr 127.0.0.1:<port>` (loopback)"
+    - key: rpc.enable_debug_rpc
+      source: literal
+      value: "false"
+      description: config.json - debug RPC off (the testnet rpc profile ships it on)
+    - key: view_client_threads
+      source: literal
+      value: "16"
+      description: config.json - RPC read threads (vendor default 4; judgement value for a public node on 8+ cores)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for neard
+
+diagnostics:
+  - id: path_mtu

@@ -1,0 +1,26 @@
+[Unit]
+Description={{description}}
+After=network-online.target postgresql.service {{node_unit}} {{prepare_unit}}
+Wants={{prepare_unit}}
+PartOf={{node_unit}}
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+ExecStart={{exec_start}}
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+KillMode=mixed
+NoNewPrivileges=yes
+PrivateTmp=yes
+# @subsquid/graphql-server has no bind-address option: it listens on all interfaces, which is what the operator wants (the API is
+# reached from the network, like the node RPC). It serves the GraphiQL console on GET and has no authentication or rate limit:
+# put a rate-limiting proxy (POST /graphql only) in front, or firewall the port.
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE={{nofile}}
+
+[Install]
+WantedBy=multi-user.target

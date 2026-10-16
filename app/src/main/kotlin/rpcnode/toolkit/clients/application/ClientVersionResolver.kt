@@ -60,6 +60,7 @@ suspend fun resolveClientRelease(
     githubReleaseClient: GitHubReleaseClient,
     clientReleaseResolvers: Map<NetworkId, ClientReleaseResolver>,
     installedVersion: String = "",
+    installedTag: String = "",
 ): ResolvedVersion
 {
     val release = clientReleaseResolvers[spec.network]?.resolve(spec.env)
@@ -75,6 +76,12 @@ suspend fun resolveClientRelease(
                 }
             }
             is ClientVersionSource.Pinned -> Unit
+        }
+        // The newest release is older than what is installed (a pre-release such as bsc 1.8.0-alpha, or a hand-installed
+        // build): "latest" is the installed one, so probe shows no update and Update never installs the older build.
+        if (installedVersion.isNotBlank() && isOlderClientVersion(release.version, installedVersion))
+        {
+            return ResolvedVersion(version = installedVersion, tag = installedTag, sourceLabel = release.sourceLabel)
         }
         return ResolvedVersion(version = release.version, tag = release.tag, sourceLabel = release.sourceLabel)
     }

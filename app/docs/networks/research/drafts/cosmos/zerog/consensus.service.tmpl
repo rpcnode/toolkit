@@ -1,0 +1,21 @@
+[Unit]
+Description={{description}}
+After=network-online.target {{reth_unit}}
+Wants=network-online.target
+Requires={{reth_unit}}
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+ExecStart={{exec_start}}
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=120
+KillMode=control-group
+KillSignal=SIGTERM
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE={{nofile}}
+
+[Install]
+WantedBy=multi-user.target

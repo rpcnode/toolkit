@@ -1,6 +1,8 @@
 package rpcnode.toolkit.clients.application
 
 import rpcnode.toolkit.clients.domain.model.ClientVersionPin
+import rpcnode.toolkit.clients.domain.model.compareClientVersions
+import rpcnode.toolkit.clients.domain.model.isNewerClientRelease
 
 /**
  * Multi-program client version strings (ethereum geth + lighthouse).
@@ -134,7 +136,8 @@ fun namedClientVersion(raw: String, program: String): String
 
 /**
  * True when [local] is behind [latest] for any named program, or when both are bare
- * and differ (loose `v` prefix). Never compares geth's version to lighthouse's.
+ * and [latest] is a newer release (loose `v` prefix; an installed build ahead of latest is not an update).
+ * Never compares geth's version to lighthouse's.
  */
 fun clientProgramsUpdateAvailable(local: String, latest: String): Boolean
 {
@@ -146,12 +149,12 @@ fun clientProgramsUpdateAvailable(local: String, latest: String): Boolean
         return names.any { name ->
             val left = localParts[name].orEmpty().ifEmpty { namedClientVersion(local, name) }
             val right = latestParts[name].orEmpty().ifEmpty { namedClientVersion(latest, name) }
-            left.isNotEmpty() && right.isNotEmpty() && !looseVersionEqual(left, right)
+            left.isNotEmpty() && right.isNotEmpty() && isNewerClientRelease(right, left)
         }
     }
     val a = local.trim()
     val b = latest.trim()
-    return a.isNotEmpty() && b.isNotEmpty() && !looseVersionEqual(a, b)
+    return a.isNotEmpty() && b.isNotEmpty() && isNewerClientRelease(b, a)
 }
 
 /**
@@ -197,7 +200,7 @@ fun pinsUpdateAvailable(
             }
             else -> ""
         }
-        left.isNotEmpty() && !looseVersionEqual(left, latest)
+        left.isNotEmpty() && isNewerClientRelease(latest, left)
     }
 }
 
@@ -217,29 +220,11 @@ private fun looksLikeProgramId(name: String): Boolean
 }
 
 /**
- * True when [candidate] is a strictly older build than [installed]. Compares the numbers inside the strings
- * (`4.8.2.1`, `nile-v4.8.2.3-pq1-build1` -> 4,8,2,3,1,1), missing parts count as 0. Unparseable input is never "older".
+ * True when [candidate] is a strictly older build than [installed] (see [compareClientVersions]: part-by-part numbers,
+ * a pre-release is older than its release). Unparseable input is never "older".
  */
-fun isOlderClientVersion(candidate: String, installed: String): Boolean
-{
-    fun parts(s: String) = Regex("\\d+").findAll(s).mapNotNull { it.value.toIntOrNull() }.toList()
-    val a = parts(candidate)
-    val b = parts(installed)
-    if (a.isEmpty() || b.isEmpty())
-    {
-        return false
-    }
-    for (i in 0 until maxOf(a.size, b.size))
-    {
-        val x = a.getOrElse(i) { 0 }
-        val y = b.getOrElse(i) { 0 }
-        if (x != y)
-        {
-            return x < y
-        }
-    }
-    return false
-}
+fun isOlderClientVersion(candidate: String, installed: String): Boolean =
+    (compareClientVersions(candidate, installed) ?: 0) < 0
 
 private fun looseVersionEqual(a: String, b: String): Boolean
 {

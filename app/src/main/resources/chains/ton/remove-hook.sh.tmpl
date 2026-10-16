@@ -1,11 +1,16 @@
 #!/bin/bash
+# rpcnode-ton-hook-version: {{hook_version}}
 # Runs when the node is removed (stop first, then this, then the files). RPCNODE_REMOVE_WIPE=1 when the chain data is
 # wiped too. Two parts:
-#  1. the indexer: drops what rpcnode-ton-indexer.sh created in PostgreSQL — the database, its tablespace and the role —
-#     and the tablespace directory. The PostgreSQL server itself (existing or installed by the indexer) stays; other
-#     databases on it are not touched.
-#  2. MyTonCtrl: stops and removes its services (validator, mytoncore, ton_http_api), its programs and sources.
-#     Its user data (~/.local/share/mytoncore: wallet db) goes only with a wipe; the chain data stays unless wiped.
+#  1. the indexer: drops what rpcnode-ton-indexer.sh created in PostgreSQL. New layout (PG_MODE=cluster): the node's own cluster
+#     (stopped, deregistered, its data directory inside the indexer dir removed); the PostgreSQL packages stay. Old layout: the
+#     database, its tablespace and the role in the host's shared server, and the tablespace directory; the server stays and
+#     other databases on it are not touched.
+#  2. MyTonCtrl: stops and removes its services (validator, mytoncore, ton_http_api), its programs, sources, the ton_http_api
+#     virtualenv (/opt/virtualenv/ton_http_api), its tonlib key store (/tmp/tonlib_keystore) and its Python packages.
+#     Its user data (~/.local/share/mytoncore: wallet db) and the `validator` OS user go only with a wipe; the chain data
+#     stays unless wiped.
+#  The agent refreshes an older copy of this script (written at the node's Start by an older agent) just before it runs.
 set -uo pipefail
 PWDIR={{pw_dir}}
 IDX={{idx_dir}}
@@ -21,11 +26,23 @@ remove_mytonctrl() {
   done
   rm -f /etc/sysctl.d/99-rpcnode-ton.conf
   systemctl daemon-reload >/dev/null 2>&1 || true
+  # MyTonCtrl's Python packages are an editable install of /usr/src/mytonctrl: uninstall them while the sources are still there
+  if command -v pip3 >/dev/null 2>&1; then
+    pip3 uninstall -y mytoncore mytonctrl mytoninstaller >/dev/null 2>&1 \
+      || pip3 uninstall -y --break-system-packages mytoncore mytonctrl mytoninstaller >/dev/null 2>&1 || true
+  fi
+  # ton_http_api runs from its own virtualenv and keeps its tonlib key store in /tmp
+  rm -rf /opt/virtualenv/ton_http_api /tmp/tonlib_keystore
+  rmdir /opt/virtualenv >/dev/null 2>&1 || true
   rm -rf /usr/bin/ton /usr/src/ton /usr/src/mytonctrl /usr/local/bin/mytoncore /usr/local/bin/mytonctrl
   # only the link: the chain data it points to is wiped (or kept) by the panel, never here
   if [[ -L /var/ton-work ]]; then rm -f /var/ton-work; fi
-  if [[ "$WIPE" == 1 ]]; then rm -rf /root/.local/share/mytoncore /root/.local/share/mytonctrl; fi
-  echo "removed MyTonCtrl services and programs (validator, mytoncore, ton_http_api, /usr/bin/ton, /usr/src/ton, /usr/src/mytonctrl)"
+  if [[ "$WIPE" == 1 ]]; then
+    rm -rf /root/.local/share/mytoncore /root/.local/share/mytonctrl
+    # the OS user MyTonCtrl created owns the chain data that is being wiped; without a wipe it must stay (files keep their owner)
+    if id validator >/dev/null 2>&1; then userdel validator >/dev/null 2>&1 || true; fi
+  fi
+  echo "removed MyTonCtrl services and programs (validator, mytoncore, ton_http_api and its virtualenv, /usr/bin/ton, /usr/src/ton, /usr/src/mytonctrl)"
 }
 
 if [[ ! -f "$PWDIR/pg.env" ]]; then
@@ -35,6 +52,19 @@ if [[ ! -f "$PWDIR/pg.env" ]]; then
 fi
 # shellcheck disable=SC1091
 . "$PWDIR/pg.env"
+
+if [[ "${PG_MODE:-shared}" == cluster ]]; then
+  systemctl disable --now "postgresql@${PG_VERSION}-${PG_CLUSTER}.service" >/dev/null 2>&1 || true
+  if command -v pg_dropcluster >/dev/null 2>&1 && pg_lsclusters -h 2>/dev/null | awk -v v="$PG_VERSION" -v n="$PG_CLUSTER" '$1 == v && $2 == n { f = 1 } END { exit !f }'; then
+    pg_dropcluster --stop "$PG_VERSION" "$PG_CLUSTER" || { echo "could not drop the PostgreSQL cluster $PG_CLUSTER (pg_lsclusters)"; remove_mytonctrl; exit 1; }
+  fi
+  # the data directory is the indexer's own (inside its directory); keep anything that is not
+  if [[ -n "${PG_DATA:-}" && "$PG_DATA" == "$IDX"/* ]]; then rm -rf "$PG_DATA"; fi
+  rm -f "$PWDIR/pg.env" "$PWDIR/pgpass" "$PWDIR/postgres_password" "$PWDIR/pg-tuned"
+  echo "dropped the PostgreSQL cluster $PG_CLUSTER (port $PG_PORT, database $PG_DB, role $PG_ROLE)"
+  remove_mytonctrl
+  exit 0
+fi
 
 psql_su() { ( cd / && setpriv --reuid=postgres --regid=postgres --init-groups psql -p "$PG_PORT" -X -q -At -v ON_ERROR_STOP=1 "$@" ); }
 

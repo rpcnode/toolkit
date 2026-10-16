@@ -1,0 +1,91 @@
+# Japan Open Chain (JOC): Clique PoA EVM chain, Nethermind-only (built-in configs joc-mainnet / joc-testnet, chain ids 81 (0x51) / 10081 (0x2761)).
+# No consensus client, no Engine API (Merge.Enabled=false in the shipped config). Snapshot never — Nethermind snap sync is on in the shipped config.
+# Disk/CPU figures are INFERRED (no vendor sizing published); chain tip 26.8M blocks at 5 s/block.
+label: Japan Open Chain
+diskRoles:
+  - id: execution
+    label: Execution Client DB
+    media: nvme
+diskNotes:
+  - "Nethermind app (configs/, chainspec/, dlls) lives in <execution>/bin; --data-dir is <execution>/data (DB under data/nethermind_db/joc-<env>)."
+  - "Clique (PoA, 5 s period): the node follows the chain, it is not a signer. Bootnodes are in the shipped chainspec."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: JOC Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 512
+    archiveGiB: 2048
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc-1.japanopenchain.org:8545
+        - https://rpc-2.japanopenchain.org:8545
+  - id: testnet
+    label: JOC Testnet
+    diskHintGiB: 512
+    fullNodeGiB: 256
+    archiveGiB: 1024
+    cpuCores: 4
+    memoryGiB: 8
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc-1.testnet.japanopenchain.org:8545
+        - https://rpc-2.testnet.japanopenchain.org:8545
+
+clientConfig:
+  program: nethermind
+  format: flags
+  bindings:
+    - key: node
+      source: install_option
+      option: node
+      default: "full"
+      description: Nethermind config — full (joc-mainnet / joc-testnet) or archive (…_archive)
+    - key: data-dir
+      source: disk_role_dir
+      role: execution
+      relative: data
+      description: Nethermind --data-dir (Disks execution role)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: JSON-RPC WebSocket port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: P2P + discovery port
+    - key: metrics-port
+      source: catalog_port
+      role: metrics
+      description: Prometheus port, 127.0.0.1
+    - key: json-rpc-modules
+      source: literal
+      value: "Eth,Net,Web3,Subscribe,Rpc"
+      description: Public namespaces
+    - key: json-rpc-max-batch-size
+      source: literal
+      value: "1000"
+      description: JsonRpc.MaxBatchSize
+    - key: json-rpc-request-queue-limit
+      source: literal
+      value: "500"
+      description: JsonRpc.RequestQueueLimit
+    - key: max-active-peers
+      source: literal
+      value: "50"
+      description: Network.MaxActivePeers
+    - key: limit-nofile
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE
+
+diagnostics:
+  - id: path_mtu

@@ -1,0 +1,23 @@
+#!/bin/bash
+# One-shot beacond bootstrap (mirrors berachain/guides setup-beacond.sh; runs from the starter when <home>/config/priv_validator_key.json is missing).
+set -euo pipefail
+BEACOND='{{beacond}}'; HOME_DIR='{{home}}'; CFG="$HOME_DIR/config"; SEED='{{seed_dir}}'   # SEED = downloaded configs (genesis.json, kzg-trusted-setup.json, app.toml, config.toml)
+SPEC='{{chain_spec}}'          # mainnet | testnet   (beacond --beacon-kit.chain-spec; bepolia = testnet)
+MONIKER='{{moniker}}'; JWT='{{jwt_path}}'; ENGINE_PORT='{{engine_port}}'; EXT_IP='{{external_ip}}'
+RPC='{{cl_rpc_port}}'; P2P='{{cl_p2p_port}}'; PROXY='{{cl_proxy_port}}'; PROM='{{cl_metrics_port}}'
+mkdir -p "$HOME_DIR"
+if [ ! -f "$CFG/priv_validator_key.json" ]; then
+  "$BEACOND" init "$MONIKER" --beacon-kit.chain-spec "$SPEC" --home "$HOME_DIR" >/dev/null
+fi
+cp "$SEED/genesis.json" "$SEED/kzg-trusted-setup.json" "$SEED/app.toml" "$SEED/config.toml" "$CFG/"
+cp -f "$JWT" "$CFG/jwt.hex" 2>/dev/null || true
+sed -i "s|^rpc-dial-url = .*|rpc-dial-url = \"http://127.0.0.1:${ENGINE_PORT}\"|"      "$CFG/app.toml"
+sed -i "s|^jwt-secret-path = .*|jwt-secret-path = \"${JWT}\"|"                       "$CFG/app.toml"
+sed -i "s|^trusted-setup-path = .*|trusted-setup-path = \"${CFG}/kzg-trusted-setup.json\"|" "$CFG/app.toml"
+sed -i "s|^moniker = .*|moniker = \"${MONIKER}\"|"                                    "$CFG/config.toml"
+sed -i "s|^laddr = \".*26657\"|laddr = \"tcp://127.0.0.1:${RPC}\"|"                   "$CFG/config.toml"
+sed -i "s|^laddr = \".*26656\"|laddr = \"tcp://0.0.0.0:${P2P}\"|"                     "$CFG/config.toml"
+sed -i "s|^proxy_app = \".*26658\"|proxy_app = \"tcp://127.0.0.1:${PROXY}\"|"         "$CFG/config.toml"
+sed -i "s|^prometheus_listen_addr = .*|prometheus_listen_addr = \"127.0.0.1:${PROM}\"|" "$CFG/config.toml"
+[ -n "$EXT_IP" ] && sed -i "s|^external_address = .*|external_address = \"${EXT_IP}:${P2P}\"|" "$CFG/config.toml"
+"$BEACOND" genesis validator-root "$CFG/genesis.json"   # mainnet must print 0xdf609e3b062842c6425ff716aec2d2092c46455d… (docs); bepolia 0x3cbcf75b…c5615e

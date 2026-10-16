@@ -1,0 +1,33 @@
+#!/bin/bash
+# One-shot Sonic DB priming (runs as the snapshot job, like chains/bsc/snapshot-heal.sh.tmpl). Idempotent: marker file = done.
+set -euo pipefail
+export LC_ALL=C
+UNIT='{{unit}}'
+TOOL='{{sonictool}}'
+DATA='{{datadir}}'
+SCRATCH='{{scratch}}'
+URL='{{genesis_url}}'          # https://genesis.soniclabs.com/latest-{sonic|testnet}-{pruned|archive}.g (302 -> dated object)
+MD5URL='{{genesis_md5_url}}'   # same name + .md5
+MARKER='{{marker}}'
+STATE='{{state}}'
+LOG='{{log}}'
+CACHE='{{cache_mb}}'
+export GOMEMLIMIT='{{gomemlimit_gib}}GiB'
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+st() { echo "{\"phase\":\"$1\",\"pct\":$2,\"detail\":\"$3\",\"updated_at\":\"$(now)\"}" >"$STATE"; }
+mkdir -p "$DATA" "$SCRATCH" "$(dirname "$LOG")"
+[ -f "$MARKER" ] && { st done 100 "genesis already imported"; exit 0; }
+systemctl stop "$UNIT" 2>/dev/null || true
+FILE="$SCRATCH/genesis.g"
+st download 0 "downloading $URL"
+curl -fL --retry 8 --retry-delay 5 --retry-all-errors -C - -o "$FILE" "$URL" 2>&1 | tr '\r' '\n' | tee -a "$LOG" >/dev/null
+EXPECT="$(curl -fsSL "$MD5URL" | awk '{print $1}')"
+GOT="$(md5sum "$FILE" | awk '{print $1}')"
+[ "$EXPECT" = "$GOT" ] || { st error 0 "md5 mismatch ($GOT != $EXPECT)"; exit 1; }
+st import 50 "sonictool genesis (state validation at the end can take hours)"
+rm -rf "$DATA"/*   # a half-imported DB is unusable: restart the import from scratch
+"$TOOL" --datadir "$DATA" --cache "$CACHE" genesis "$FILE" 2>&1 | tee -a "$LOG"
+grep -q 'stateRoot matches' "$LOG" || { st error 0 "state root check line missing in log"; exit 1; }
+rm -f "$FILE"
+now >"$MARKER"
+st done 100 "Sonic genesis imported"

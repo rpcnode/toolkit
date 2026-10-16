@@ -1,0 +1,125 @@
+# Sonic (Sonic Labs, EVM L1, chain ids 146 mainnet / 14601 testnet). Client 0xsoniclabs/sonic (`sonicd` + `sonictool`).
+# Snapshot required — Sonic nodes are primed from a genesis file (`sonictool genesis`), there is no sync from block 0:
+#   pruned  genesis  6.5 GB (mainnet, 2026-10-13) / 368 MB (testnet)    archive genesis 181 GB (mainnet) / 15.3 GB (testnet)  [VERIFIED by HEAD]
+# Directory name is the network id. Ports live in clients.yml beside this file.
+# Hardware VERIFIED in docs.soniclabs.com (archive node page): min 4 vCPU / 32 GB, recommended 8 vCPU / 64 GB, ~3 TB local NVMe for archive.
+# Resulting DB sizes after genesis expansion are INFERRED (no figure published for the pruned flavour).
+label: Sonic
+diskRoles:
+  - id: state
+    label: Sonic DB
+    media: nvme
+diskNotes:
+  - "sonicd --datadir is <state>/data (chaindata/ + carmen/). sonictool genesis writes the whole DB there before the first start (hours; GOMEMLIMIT ~75 % of RAM while importing, docs: 50 GiB on a 64 GB host)."
+  - "The .g genesis file is downloaded to <state>/.toolkit/genesis.g (181 GB for the archive flavour: keep that much free next to the DB) and deleted after a successful import."
+  - "Local NVMe is mandatory: Sonic docs say network block devices (EBS) do not meet its IOPS/latency needs."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Sonic Mainnet
+    diskHintGiB: 4096
+    fullNodeGiB: 1024
+    archiveGiB: 3584
+    cpuCores: 8
+    memoryGiB: 64
+    snapshot: required
+    tipLagBlocks: 10
+    publicTip:
+      urls:
+        - https://rpc.soniclabs.com
+        - https://sonic-rpc.publicnode.com
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: Pruned genesis
+        hint: "latest-sonic-pruned.g (6.5 GB download). History starts at the genesis epoch; pre-genesis blocks return errors. Default."
+        diskGiB: 1024
+        default: true
+      - id: archive
+        kind: archive
+        label: Archive genesis
+        hint: "latest-sonic-archive.g (181 GB download, ~3 TB DB). Full history; needs ~4 TB free."
+        diskGiB: 3584
+  - id: testnet
+    label: Sonic Testnet
+    diskHintGiB: 512
+    fullNodeGiB: 128
+    archiveGiB: 512
+    cpuCores: 4
+    memoryGiB: 32
+    snapshot: required
+    tipLagBlocks: 10
+    publicTip:
+      urls:
+        - https://rpc.testnet.soniclabs.com
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: Pruned genesis
+        hint: "latest-testnet-pruned.g (368 MB download). Default."
+        diskGiB: 128
+        default: true
+      - id: archive
+        kind: archive
+        label: Archive genesis
+        hint: "latest-testnet-archive.g (15.3 GB download)."
+        diskGiB: 512
+
+# CLI flags live in the systemd unit (chains/evmfamily SonicProfile); EvmCatalogTest compares the literals with the rendered unit. Flags VERIFIED at v2.2.5.
+clientConfig:
+  program: sonicd
+  format: flags
+  bindings:
+    - key: snapshot
+      source: install_option
+      option: snapshot
+      default: "pruned"
+      description: Genesis flavour — pruned or archive (decides which .g file is imported)
+    - key: datadir
+      source: disk_role_dir
+      role: state
+      relative: data
+      description: sonicd --datadir (Disks state role)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: JSON-RPC WebSocket port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: P2P port (tcp + udp)
+    - key: metrics-port
+      source: catalog_port
+      role: metrics
+      description: Prometheus (--metrics.port), 127.0.0.1
+    - key: http-api
+      source: literal
+      value: "eth,net,web3,sonic"
+      description: "--http.api / --ws.api (no debug, trace, admin, personal, ftm)"
+    - key: cache-mb
+      source: literal
+      value: "12000"
+      description: "--cache (MB), docs: ~12 GB. sonicd refuses anything below 6144 and caps it at 60 % of RAM"
+    - key: gomemlimit
+      source: literal
+      value: "90%"
+      description: GOMEMLIMIT = 90 % of host RAM (docs), rendered in GiB into the unit at Start
+    - key: maxpeers
+      source: literal
+      value: "50"
+      description: "--maxpeers"
+    - key: rpc-batch-request-limit
+      source: literal
+      value: "1000"
+      description: "--rpc.batch-request-limit"
+    - key: limit-nofile
+      source: literal
+      value: "934073"
+      description: systemd LimitNOFILE (value from the Sonic starter service file)
+
+diagnostics:
+  - id: path_mtu

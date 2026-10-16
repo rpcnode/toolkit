@@ -1,0 +1,42 @@
+# gravity_node as a Public Full Node. Flags = reth_config_pfn_prune.json.tpl of Galxe/gravity-sdk cluster/templates (keys became flags), hardened:
+# authrpc + metrics on 127.0.0.1 (upstream template binds 0.0.0.0), --rpc.max-connections 3000 (upstream 20000), --http.api eth,net,web3.
+# {{genesis}} = <node_dir>/genesis.json, {{config_yaml}} = <node_dir>/.toolkit/config/public_full_node.yaml (public_full_node.yaml.tmpl).
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=RUST_BACKTRACE=1
+Environment=BATCH_INSERT_TIME=20
+ExecStart={{bin}} node \
+  --chain={{genesis}} \
+  --full \
+  --prune.transactionlookup.distance=10064 \
+  --datadir={{storage_dir}}/reth \
+  --datadir.static-files={{storage_dir}}/reth \
+  --gravity_node_config={{config_yaml}} \
+  --http --http.addr=0.0.0.0 --http.port={{http_port}} --http.api=eth,net,web3 --http.corsdomain=* \
+  --ws --ws.addr=0.0.0.0 --ws.port={{ws_port}} --ws.api=eth,net,web3 --ws.origins=* \
+  --port={{p2p_port}} \
+  --authrpc.addr=127.0.0.1 --authrpc.port={{authrpc_port}} \
+  --metrics=127.0.0.1:{{metrics_port}} \
+  --log.file.filter=info --log.stdout.filter=error --log.file.directory={{log_dir}}/execution_logs/ \
+  --rpc.max-subscriptions-per-connection=20000 --rpc.max-connections=3000 \
+  --txpool.max-new-pending-txs-notifications=1000000 --txpool.max-pending-txns=1000000 \
+  --txpool.pending-max-count=200000 --txpool.pending-max-size=512 \
+  --txpool.basefee-max-count=200000 --txpool.basefee-max-size=512 \
+  --txpool.queued-max-count=100000 --txpool.queued-max-size=256 \
+  --txpool.max-account-slots=64 \
+  --ipcdisable
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=300
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE=1048576
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

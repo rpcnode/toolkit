@@ -1,0 +1,98 @@
+# Lisk — OP Stack. Lisk L2 (Superchain Registry `lisk`): op-reth v2.6.0 + op-node v1.19.9 — exactly the pins of LiskHQ/lisk-node. Mainnet only: the Sepolia RPC is dead and its op-node needs a patch.
+# Snapshots are restored by the node's own run script on the first start (chains/opstack/run.sh.tmpl); the toolkit snapshot machinery is not used (snapshot: never), like chains/optimism.
+label: Lisk
+diskRoles:
+  - id: execution
+    label: Execution DB (op-reth)
+    media: nvme
+  - id: consensus
+    label: Consensus (op-node keys, peerstore)
+    media: ssd
+  - id: snapshots
+    label: Snapshot download workspace
+    media: ssd
+diskNotes:
+  - "op-reth and op-node run as two supervised processes from one script. op-reth / op-node publish no release binaries: the panel compiles the pinned tags once per CPU architecture on a build host (Clients → Sync) and a host without the prebuilt compiles them itself (Rust + Go, a long first start). op-geth is end-of-support."
+  - "Full (default) prunes state/receipts to ~30 days (block bodies are kept); archive never prunes. Published snapshots are archive-style datadirs: a Full node restores one and prunes while running, so plan archive-size disk first."
+  - "The snapshot archive is downloaded into the snapshots role and deleted after extraction (streamed instead, not resumable, when it does not fit) — plan for archive + extracted size."
+  - "Public JSON-RPC / WebSocket serve eth,net,web3 only; the Engine API, both metrics ports and the op-node RPC are bound to 127.0.0.1. Disk and hardware sizes are estimates from the snapshot sizes — re-measure after the first install."
+  - "Lisk Mainnet snapshot: OFFICIAL (snapshots.lisk.com → Gelato ChainSnap): full ~41 GB, archival ~61 GB, .tar.lz4 with a published .sha256 (verified on download)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Lisk Mainnet
+    diskHintGiB: 512
+    fullNodeGiB: 128
+    archiveGiB: 192
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc.api.lisk.com
+        - https://lisk.drpc.org
+    l1Parent:
+      rpc: https://ethereum-rpc.publicnode.com
+      beacon: https://ethereum-beacon-api.publicnode.com
+      pickHelp: |
+        Lisk Mainnet derives from Ethereum mainnet. Click Public for the default publicnode L1, or an active
+        Ethereum mainnet node from this panel (same-host uses 127.0.0.1).
+
+# Flags of op-reth / op-node (chains/opstack run script). format: flags — no conf patch.
+# Literals mirror OpstackUnitBodies / OpstackNetworks (a test compares them) and the unit LimitNOFILE.
+clientConfig:
+  program: op-reth
+  format: flags
+  bindings:
+    - { key: node, source: install_option, option: node, default: "full", description: "Node type — full (pruned to ~30 days) or archive (no pruning)" }
+    - { key: restore, source: install_option, option: restore, default: "snapshot", description: "snapshot = download the official Gelato ChainSnap datadir (sha256-checked) on the first start; none = derive from L1" }
+    - { key: snapshot-url, source: install_option, option: snapshot_url, default: "", description: "Optional datadir archive URL (.tar / .tar.gz / .tar.lz4 / .tar.zst); overrides the official source" }
+    - { key: datadir, source: disk_role_dir, role: execution, description: "op-reth --datadir (Disks execution role)" }
+    - { key: consensus-dir, source: disk_role_dir, role: consensus, description: "op-node p2p keys / peerstore dir (Disks consensus role)" }
+    - { key: snapshots, source: disk_role_dir, role: snapshots, description: "Snapshot archive workspace (SSD)" }
+    - { key: http.port, source: catalog_port, role: http, description: "op-reth JSON-RPC port" }
+    - { key: ws.port, source: catalog_port, role: ws, description: "op-reth WebSocket port" }
+    - { key: authrpc.port, source: catalog_port, role: engine, description: "op-reth Engine API port (127.0.0.1)" }
+    - { key: metrics, source: catalog_port, role: metrics, description: "op-reth Prometheus port (127.0.0.1)" }
+    - { key: port, source: catalog_port, role: p2p, description: "op-reth P2P port (TCP + UDP)" }
+    - { key: discovery.v5.port, source: catalog_port, role: discv5, description: "op-reth discv5 UDP port (the default 9200 is shared by every reth on a host)" }
+    - { key: rpc.port, source: catalog_port, role: cl_rpc, description: "op-node RPC port (127.0.0.1)" }
+    - { key: metrics.port, source: catalog_port, role: cl_metrics, description: "op-node Prometheus port (127.0.0.1)" }
+    - { key: p2p.listen, source: catalog_port, role: cl_p2p, description: "op-node P2P port (TCP + UDP)" }
+    - { key: http.addr, source: literal, value: "0.0.0.0", description: "JSON-RPC / WebSocket bind address (the only public listeners)" }
+    - { key: http.api, source: literal, value: "eth,net,web3", description: "Public RPC namespaces — debug / trace / txpool / admin are not served" }
+    - { key: authrpc.addr, source: literal, value: "127.0.0.1", description: "Engine API bind address (JWT-guarded, never public)" }
+    - { key: metrics.addr, source: literal, value: "127.0.0.1", description: "Prometheus bind address of op-reth and op-node" }
+    - { key: rpc.addr, source: literal, value: "127.0.0.1", description: "op-node RPC bind address" }
+    - { key: ipcdisable, source: literal, value: "true", description: "No IPC socket (the default /tmp/reth.ipc is shared by every reth on a host)" }
+    - { key: rollup.disable-tx-pool-gossip, source: literal, value: "true", description: "Forward-only to the sequencer; no tx gossip" }
+    - { key: prune.distance, source: literal, value: "1296000", description: "Full mode only — blocks of state/receipts kept (~30 days at 2 s); block bodies are never pruned" }
+    - { key: syncmode, source: literal, value: "consensus-layer", description: "op-node --syncmode (consensus-layer: derive from L1 + gossip; robust without EL peers)" }
+    - { key: verifier.l1-confs, source: literal, value: "4", description: "op-node L1 confirmations before deriving (op-node default is 0)" }
+    - { key: LimitNOFILE, source: literal, value: "1048576", description: "systemd LimitNOFILE for the node" }
+    - key: l1-rpc
+      source: install_option
+      option: l1_rpc
+      default: ""
+      description: Ethereum L1 execution RPC for op-node (public default; override with your own or local eth)
+      testConnect:
+        kind: eth_rpc
+        label: Test connect
+        help: |
+          Panel POSTs eth_blockNumber to this URL. Expect JSON-RPC result with a hex block height.
+          op-node needs a reachable Ethereum L1 execution RPC (mainnet for Lisk).
+    - key: l1-beacon
+      source: install_option
+      option: l1_beacon
+      default: ""
+      description: Ethereum L1 beacon / blob API for op-node (public default)
+      testConnect:
+        kind: beacon_genesis
+        label: Test connect
+        help: |
+          Panel GETs {url}/eth/v1/beacon/genesis. Expect JSON with data.genesis_time.
+          The beacon / blob API is required since Ecotone.
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

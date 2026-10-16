@@ -1,6 +1,10 @@
-# Disk plan, host sizing. Snapshot never — IBD / community snapshots later.
+# Disk plan, host sizing. Snapshot REQUIRED: Heimdall v2 cannot sync from its genesis (public peers keep ~3 weeks of blocks) and Bor from
+# block 0 takes days — both are restored from the community snapshots of PublicNode (chains/polygon PolygonSnapshot).
 # Filename is the network id. Ports live in clients/polygon.yml.
 label: Polygon
+hostPackages:
+  - lz4
+  - curl
 diskRoles:
   - id: bor
     label: Bor DB
@@ -12,6 +16,7 @@ diskNotes:
   - "Bor binary + .deb live in the bor role leaf; datadir is <bor>/datadir."
   - "Heimdall home on SSD (consensus). Both units must run for a full PoS node."
   - "Heimdall needs an Ethereum L1 JSON-RPC URL (default publicnode)."
+  - "Snapshot step: the newest PUBLIC snapshots of PublicNode (publicnode.com/snapshots, no checksum is published) are downloaded (resumable) and unpacked: Heimdall (pruned) into its home, Bor (base + part, the chain history) into <bor>/datadir/data. Amoy about 8 + 102 GB compressed, mainnet about 6.5 GB + 6.1 TB. Heimdall must catch up before Bor can sync. The PublicNode pruned Bor archive is not used: Bor refuses it."
 oneEnvPerHost: false
 envs:
   - id: mainnet
@@ -21,10 +26,17 @@ envs:
     archiveGiB: 16384
     cpuCores: 16
     memoryGiB: 64
-    snapshot: never
+    snapshot: required
     publicTip:
       urls:
         - https://polygon-bor-rpc.publicnode.com
+    snapshotTypes:
+      - id: full
+        kind: full
+        label: PublicNode (Heimdall pruned + Bor base/part)
+        hint: "Newest snapshots of publicnode.com/snapshots: Heimdall ~6.5 GB + Bor base ~2.7 TB + part ~3.4 TB compressed (2026-10-16), unpacked into the Heimdall home and <bor>/datadir/data; about 8 TB unpacked plus 3.5 TB of scratch for the largest archive. The pruned Bor archive (90 GB) is not startable by Bor (empty chain freezer). Heimdall must catch up before Bor syncs. Not verified on a host for mainnet."
+        diskGiB: 12000
+        default: true
   - id: amoy
     label: Polygon Amoy
     diskHintGiB: 2048
@@ -32,10 +44,17 @@ envs:
     archiveGiB: 2048
     cpuCores: 8
     memoryGiB: 16
-    snapshot: never
+    snapshot: required
     publicTip:
       urls:
         - https://polygon-amoy-bor-rpc.publicnode.com
+    snapshotTypes:
+      - id: full
+        kind: full
+        label: PublicNode (Heimdall pruned + Bor base/part)
+        hint: "Newest snapshots of publicnode.com/snapshots: Heimdall ~8 GB + Bor base 21 GB + part 81 GB compressed (2026-10-16), unpacked into the Heimdall home and <bor>/datadir/data (about 140 GB, 90 GB scratch). The pruned Bor archive (3 GB) is not startable by Bor (empty chain freezer). Heimdall must catch up before Bor syncs. Heimdall cannot sync amoy from genesis (peers keep ~3 weeks of blocks). Bor opened this data on a test host (2.10.3)."
+        diskGiB: 250
+        default: true
 
 # CLI / profile configs live in chains/polygon systemd + extracted debs. No conf patch on Start.
 clientConfig:

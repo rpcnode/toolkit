@@ -1,0 +1,28 @@
+# avalanchego (P/X/C chains, C-Chain EVM embedded) from ava-labs/avalanchego GitHub releases (no Docker).
+# mainnet follows the latest stable tag; fuji also takes the `-fuji` pre-releases (AvalancheClientReleaseResolver).
+# Ports: 965x = HTTP API + C-Chain RPC (/ext/bc/C/rpc) and staking P2P (TCP); fuji = 966x.
+programs:
+  - env: mainnet
+    id: avalanchego
+    source: { type: github, repo: ava-labs/avalanchego }
+    artifacts:
+      - name: "avalanchego-linux-amd64.tar.gz"
+        nameAarch64: "avalanchego-linux-arm64.tar.gz"
+        urlTemplate: "https://github.com/ava-labs/avalanchego/releases/download/{tag}/avalanchego-linux-amd64-{tag}.tar.gz"
+        urlTemplateAarch64: "https://github.com/ava-labs/avalanchego/releases/download/{tag}/avalanchego-linux-arm64-{tag}.tar.gz"
+    requirements: { logFile: logs/avalanche.log }
+    ports:
+      - { role: http, port: 9650, label: "HTTP API / C-Chain RPC", config: required }
+      - { role: p2p, port: 9651, label: "Staking P2P", config: required }
+  - env: fuji
+    id: avalanchego
+    source: { type: github, repo: ava-labs/avalanchego }
+    artifacts:
+      - name: "avalanchego-linux-amd64.tar.gz"
+        nameAarch64: "avalanchego-linux-arm64.tar.gz"
+        urlTemplate: "https://github.com/ava-labs/avalanchego/releases/download/{tag}/avalanchego-linux-amd64-{tag}.tar.gz"
+        urlTemplateAarch64: "https://github.com/ava-labs/avalanchego/releases/download/{tag}/avalanchego-linux-arm64-{tag}.tar.gz"
+    requirements: { logFile: logs/avalanche.log }
+    ports:
+      - { role: http, port: 9660, label: "HTTP API / C-Chain RPC", config: required }
+      - { role: p2p, port: 9661, label: "Staking P2P", config: required }

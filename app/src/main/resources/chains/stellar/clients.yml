@@ -1,0 +1,44 @@
+# stellar-rpc + stellar-core from the SDF apt repository (https://apt.stellar.org), downloaded as plain .deb files
+# and unpacked with `dpkg-deb -x` under node_dir (no apt source is added to the host, no Docker). Neither
+# stellar/stellar-rpc nor stellar/stellar-core GitHub releases carry any asset, so GitHub is only the fallback version feed.
+# The .deb file names carry an apt build number (stellar-rpc_29.0.1-213_amd64.deb, stellar-core_29.0.0-3589.<hash>.noble_amd64.deb),
+# so they cannot be a urlTemplate: StellarArtifactUrlResolver reads dists/noble/stable/binary-amd64/Packages.gz and the
+# `stellar-apt:<package>[:<suite>]` markers below pick the newest stable .deb. Version source = StellarClientReleaseResolver
+# (newest stellar-rpc in the stable index) — the pin tracks stellar-rpc; stellar-core is the newest stable core of that index.
+# amd64 only (SDF publishes no arm64 package). The core .deb is built per Ubuntu release: the noble build is used.
+# Ports: central plan (stellar block 42560): env0 mainnet 42560-42569, env1 testnet 42570-42579.
+programs:
+  - env: mainnet
+    id: stellar-rpc
+    source: { type: github, repo: stellar/stellar-rpc }
+    artifacts:
+      - name: "stellar-rpc-amd64.deb"
+        urlTemplate: "stellar-apt:stellar-rpc"
+      - name: "stellar-core-noble-amd64.deb"
+        urlTemplate: "stellar-apt:stellar-core:noble"
+    configs:
+      - name: "captive-core-pubnet.cfg"
+        urlTemplate: "https://raw.githubusercontent.com/stellar/go-stellar-sdk/master/ingest/ledgerbackend/configs/captive-core-pubnet.cfg"
+    requirements: { logFile: logs/stellar-rpc.log }
+    ports:
+      - { role: http, port: 42560, label: "Stellar RPC (JSON-RPC)", config: required }
+      - { role: p2p, port: 42562, label: "Captive core overlay P2P", config: required }
+      - { role: core_query, port: 42563, label: "Captive core query (local)", config: required }
+      - { role: admin, port: 42564, label: "Admin / metrics (local)", config: required }
+  - env: testnet
+    id: stellar-rpc
+    source: { type: github, repo: stellar/stellar-rpc }
+    artifacts:
+      - name: "stellar-rpc-amd64.deb"
+        urlTemplate: "stellar-apt:stellar-rpc"
+      - name: "stellar-core-noble-amd64.deb"
+        urlTemplate: "stellar-apt:stellar-core:noble"
+    configs:
+      - name: "captive-core-testnet.cfg"
+        urlTemplate: "https://raw.githubusercontent.com/stellar/go-stellar-sdk/master/ingest/ledgerbackend/configs/captive-core-testnet.cfg"
+    requirements: { logFile: logs/stellar-rpc.log }
+    ports:
+      - { role: http, port: 42570, label: "Stellar RPC (JSON-RPC)", config: required }
+      - { role: p2p, port: 42572, label: "Captive core overlay P2P", config: required }
+      - { role: core_query, port: 42573, label: "Captive core query (local)", config: required }
+      - { role: admin, port: 42574, label: "Admin / metrics (local)", config: required }

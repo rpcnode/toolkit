@@ -1,0 +1,459 @@
+# Polkadot relay chain (+ Paseo, Westend testnets) - one `polkadot` binary, chain selected with --chain.
+# Snapshot optional: warp sync (default) reaches the tip in hours on a ~25 GB pruned DB; the official Parity snapshot service
+# (snapshots.polkadot.io, a files.txt manifest) is the fast path and the only path for an archive node.
+# Optional companions (install option `indexer`): the stateless REST API `polkadot-rest-api` (rest-api) or the PostgreSQL history indexer
+# - a Subsquid squid + GraphQL API on a pinned Node.js, needs the archive node (history). See docs/networks/polkadot-intake.md.
+label: Polkadot
+diskRoles:
+  - id: state
+    label: Chain DB (paritydb / rocksdb)
+    media: nvme
+  - id: indexer
+    label: Indexer (history PostgreSQL tablespace, Node.js, project)
+    media: nvme
+diskNotes:
+  - "base-path is the state role leaf; the DB is <base>/chains/<chain-id>/paritydb/full (pruned, default) or <base>/chains/<chain-id>/db/full (archive, rocksdb). chain-id: polkadot, paseo, westend2."
+  - "Pruned (state+blocks 256, paritydb) is ~22 GB at the Parity snapshot, growing slowly; archive is ~4.2 TB on Polkadot (rocksdb) and grows ~1 TB/yr."
+  - "Pruning mode is fixed on the first start of a DB: switching pruned <-> archive means wiping the DB and re-syncing (Start refuses it)."
+  - "polkadot, polkadot-prepare-worker and polkadot-execute-worker live together in node_dir/bin (same version, same directory)."
+  - "A pruned node answers state queries for the last 256 blocks only (~25 min): run archive for history. Since the Asset Hub migration the relay chain holds no user balances; they live on Asset Hub."
+  - "History indexer (install option indexer=history, Archive node only): blocks, extrinsics, events and balance transfers of THIS node are written to a separate role + database + tablespace of the host's PostgreSQL (an existing server is only added to; without one it is installed from apt) by a Subsquid processor, and served as GraphQL. Node.js 24 is downloaded (sha256-pinned) and the project is built with npm ci from a lock file, all under the indexer disk role (else node_dir/indexer); nothing is installed system-wide. Put the indexer role on its own NVMe: the database lives there. Removing the node drops the database, tablespace and role again."
+  - "History indexer sizing (MEASURED on 530 recent Polkadot blocks: 1.7 MB with indexes, ~3 KB per block with events 'relevant' = everything except ParaInclusion; with all events it is 144 KB per block, because ParaInclusion is 96% of the relay chain's events). Extrapolated to ~33 million blocks that is on the order of 100 GB plus the balance transfers (INFERRED, not measured at that size): plan 200 GB on the indexer disk. A genesis backfill goes through the node's RPC and takes as long as the node answers - upstream gives no estimate; a start block (or 'head') indexes recent history only."
+  - "History indexer ports: +6 GraphQL API, +7 processor Prometheus. The processor unit is confined to 127.0.0.1 by systemd; the GraphQL API listens on ALL interfaces (the server has no bind option, the operator asked for it): it has no authentication or rate limit, so rate-limit and cache it with a proxy (POST /graphql only) or firewall the port."
+  - "The optional REST API is built from source on the host (Rust, a long first start) into node_dir/indexer; it has no database. It listens on the indexer port on 0.0.0.0 like the node RPC: put a rate-limiting proxy in front of both."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Polkadot
+    diskHintGiB: 300
+    fullNodeGiB: 300
+    archiveGiB: 6144
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: optional
+    publicTip:
+      urls:
+        - https://rpc.polkadot.io
+        - https://polkadot.api.onfinality.io/public
+        - https://polkadot-rpc.n.dwellir.com
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: Pruned - Parity snapshots
+        hint: paritydb, state+blocks pruned to 256 (~22 GB) from snapshots.polkadot.io
+        diskGiB: 300
+        default: true
+      - id: archive
+        kind: archive
+        label: Archive - Parity snapshots
+        hint: rocksdb archive (~4.2 TB) from snapshots.polkadot.io
+        diskGiB: 6144
+  - id: paseo
+    label: Paseo Testnet
+    diskHintGiB: 120
+    fullNodeGiB: 120
+    archiveGiB: 512
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: optional
+    publicTip:
+      urls:
+        - https://pas-rpc.stakeworld.io
+        - https://paseo-rpc.n.dwellir.com
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: Pruned - Parity snapshots
+        hint: paritydb, pruned 256 (~20 GB)
+        diskGiB: 120
+        default: true
+      - id: archive
+        kind: archive
+        label: Archive - Parity snapshots
+        hint: rocksdb archive (~92 GB)
+        diskGiB: 512
+  - id: westend
+    label: Westend Testnet
+    diskHintGiB: 300
+    fullNodeGiB: 300
+    archiveGiB: 2048
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: optional
+    publicTip:
+      urls:
+        - https://westend-rpc.polkadot.io
+        - https://westend.api.onfinality.io/public
+        - https://westend-rpc.n.dwellir.com
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: Pruned - Parity snapshots
+        hint: paritydb pruned 1000 (~131 GB; warp sync is usually faster)
+        diskGiB: 300
+        default: true
+      - id: archive
+        kind: archive
+        label: Archive - Parity snapshots
+        hint: paritydb archive (~1.1 TB)
+        diskGiB: 2048
+
+# Flags of `polkadot` written by chains/substrate (SubstrateFlags) into the systemd unit. format: flags - no conf patch.
+# Literals equal SubstrateSettings and the unit LimitNOFILE (SubstrateCatalogTest). The node type is the wizard's Snapshot type
+# (pruned | archive): the database / sync / pruning rows follow it. Per-env rows use onlyEnv.
+clientConfig:
+  program: polkadot
+  format: flags
+  bindings:
+    - key: chain
+      source: literal
+      value: "polkadot"
+      onlyEnv: [mainnet]
+      description: Built-in chain spec
+    - key: chain
+      source: literal
+      value: "paseo"
+      onlyEnv: [paseo]
+      description: Built-in chain spec
+    - key: chain
+      source: literal
+      value: "westend"
+      onlyEnv: [westend]
+      description: Built-in chain spec
+    - key: base-path
+      source: disk_role_dir
+      role: state
+      description: --base-path (Disks state role)
+    - key: name
+      source: literal
+      value: "rpcnode-mainnet"
+      onlyEnv: [mainnet]
+      description: Node name (telemetry is off)
+    - key: name
+      source: literal
+      value: "rpcnode-paseo"
+      onlyEnv: [paseo]
+      description: Node name (telemetry is off)
+    - key: name
+      source: literal
+      value: "rpcnode-westend"
+      onlyEnv: [westend]
+      description: Node name (telemetry is off)
+    - key: no-telemetry
+      source: literal
+      value: "true"
+      description: Telemetry off
+    - key: database
+      source: snapshot_kind
+      map: { full: paritydb, archive: rocksdb }
+      default: paritydb
+      onlyEnv: [mainnet, paseo]
+      description: Database backend - paritydb for pruned, rocksdb for archive (Parity publishes no paritydb archive of Polkadot / Paseo)
+    - key: database
+      source: snapshot_kind
+      map: { full: paritydb, archive: paritydb }
+      default: paritydb
+      onlyEnv: [westend]
+      description: Database backend - paritydb (Westend archive snapshot is paritydb)
+    - key: sync
+      source: snapshot_kind
+      map: { full: warp, archive: full }
+      default: warp
+      description: Sync mode - warp for pruned, full for archive
+    - key: state-pruning
+      source: snapshot_kind
+      map: { full: "256", archive: archive }
+      default: "256"
+      description: State pruning (fixed on the first start of a DB)
+    - key: blocks-pruning
+      source: snapshot_kind
+      map: { full: "256", archive: archive }
+      default: "256"
+      description: Blocks pruning
+    - key: rpc-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC port (HTTP and WebSocket share it)
+    - key: port
+      source: catalog_port
+      role: p2p
+      description: P2P port (TCP; litep2p listens udp/webrtc-direct on the same number)
+    - key: prometheus-port
+      source: catalog_port
+      role: metrics
+      description: Prometheus port (127.0.0.1 - --prometheus-external is never passed)
+    - key: rpc-external
+      source: literal
+      value: "true"
+      description: Listen on all interfaces (with the safe method set below)
+    - key: rpc-methods
+      source: literal
+      value: "safe"
+      description: Only safe RPC methods (no author_rotateKeys / system_addReservedPeer ...) on the public port; never unsafe
+    - key: rpc-cors
+      source: literal
+      value: "all"
+      description: CORS origins
+    - key: rpc-max-connections
+      source: literal
+      value: "1000"
+      description: Max concurrent RPC connections (vendor default 100; docs.polkadot.com's RPC recipe runs 1000; also caps the RPC blocking-thread pool)
+    - key: rpc-max-request-size
+      source: literal
+      value: "15"
+      description: Max request body, MB (vendor default)
+    - key: rpc-max-response-size
+      source: literal
+      value: "15"
+      description: Max response body, MB (vendor default)
+    - key: rpc-max-subscriptions-per-connection
+      source: literal
+      value: "1024"
+      description: Max WS subscriptions per connection (vendor default)
+    - key: rpc-message-buffer-capacity-per-connection
+      source: literal
+      value: "64"
+      description: Per-connection subscription message buffer (vendor default; slow WS consumers are dropped when it fills)
+    - key: trie-cache-size
+      source: literal
+      value: "1073741824"
+      description: Trie cache bytes (vendor default 1 GiB; the prod preset raises it)
+    - key: in-peers
+      source: literal
+      value: "32"
+      description: Max inbound full-node peers (vendor default)
+    - key: out-peers
+      source: literal
+      value: "8"
+      description: Outbound peers to maintain (vendor default)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for polkadot (docs.polkadot.com uses 65536)
+    - key: indexer
+      source: install_option
+      option: indexer
+      default: "none"
+      description: Optional companion - none, rest-api (polkadot-rest-api, built from source, no database) or history (PostgreSQL history indexer, archive node only)
+    - key: SAS_EXPRESS_PORT
+      source: catalog_port
+      role: indexer
+      whenInstallOption: indexer
+      whenInstallOptionValue: rest-api
+      description: REST API port (also /v1/health)
+    - key: SAS_EXPRESS_BIND_HOST
+      source: literal
+      value: "0.0.0.0"
+      whenInstallOption: indexer
+      whenInstallOptionValue: rest-api
+      description: REST API bind address (public like the node RPC - rate-limit in front; it serves POST /v1/transaction)
+    - key: SAS_EXPRESS_REQUEST_LIMIT
+      source: literal
+      value: "512000"
+      whenInstallOption: indexer
+      whenInstallOptionValue: rest-api
+      description: Max request body, bytes (vendor default)
+    - key: SAS_EXPRESS_KEEP_ALIVE_TIMEOUT
+      source: literal
+      value: "5000"
+      whenInstallOption: indexer
+      whenInstallOptionValue: rest-api
+      description: TCP keep-alive, ms (vendor default)
+    - key: SAS_EXPRESS_BLOCK_FETCH_CONCURRENCY
+      source: literal
+      value: "10"
+      whenInstallOption: indexer
+      whenInstallOptionValue: rest-api
+      description: Concurrent block fetches per range query (vendor default; each is an RPC call to the node)
+    - key: SAS_LOG_LEVEL
+      source: literal
+      value: "info"
+      whenInstallOption: indexer
+      whenInstallOptionValue: rest-api
+      description: REST API log level
+    - key: SAS_LOG_STRIP_ANSI
+      source: literal
+      value: "true"
+      whenInstallOption: indexer
+      whenInstallOptionValue: rest-api
+      description: Plain log lines
+    - key: SAS_METRICS_ENABLED
+      source: literal
+      value: "false"
+      whenInstallOption: indexer
+      whenInstallOptionValue: rest-api
+      description: Metrics stay off - the REST API would publish /metrics on its public port
+
+    # --- history indexer (install option indexer=history): the processor environment (chains/polkadot/PolkadotHistory) ---
+    - key: START_BLOCK
+      source: install_option
+      option: indexer_start_block
+      default: "head"
+      onlyEnv: [mainnet, paseo]
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: First block of a FIRST run - head (the default, recent history only), genesis (everything, weeks of backfill) or a block number; a database that already holds blocks resumes where it stopped
+    - key: START_BLOCK
+      source: install_option
+      option: indexer_start_block
+      default: "head"
+      onlyEnv: [westend]
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: First block of a FIRST run - head or a block number >= 7752190 (Westend's older metadata has no types bundle, genesis is refused)
+    - key: SS58_PREFIX
+      source: literal
+      value: "0"
+      onlyEnv: [mainnet]
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: SS58 address prefix of the stored accounts (system_properties.ss58Format)
+    - key: SS58_PREFIX
+      source: literal
+      value: "42"
+      onlyEnv: [paseo, westend]
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: SS58 address prefix of the stored accounts (system_properties.ss58Format)
+    - key: RPC_CAPACITY
+      source: literal
+      value: "10"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: Concurrent requests of the processor to the node's RPC (a backfill competes with RPC clients - lower it on a loaded node)
+    - key: RPC_RATE_LIMIT
+      source: literal
+      value: "0"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: Requests per second the processor may send to the node, 0 = unlimited (capacity above still applies)
+    - key: RPC_BATCH_SIZE
+      source: literal
+      value: "50"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: JSON-RPC calls per batch (~3 per block; a recent Polkadot block is ~260 KB, the node answers at most 15 MB per response)
+    - key: RPC_REQUEST_TIMEOUT_MS
+      source: literal
+      value: "60000"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: Timeout of one RPC request, ms
+    - key: INDEX_EVENTS
+      source: literal
+      value: "relevant"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: Events stored - relevant (all except ParaInclusion, 96% of relay-chain events), all (about 144 KB per block more) or none; transfers are always extracted from Balances.Transfer
+    - key: INDEX_ARGS
+      source: literal
+      value: "signed"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: Extrinsic arguments stored - signed (user transactions; the ParaInherent inherent is large), all or none
+    - key: PROCESSOR_PROMETHEUS_PORT
+      source: catalog_port
+      role: history_metrics
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: Processor Prometheus port (the unit is confined to 127.0.0.1)
+    - key: processor-max-old-space-size
+      source: literal
+      value: "4096"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: Node.js heap limit of the processor, MB (NODE_OPTIONS)
+    # --- history indexer: the GraphQL API ---
+    - key: GQL_PORT
+      source: catalog_port
+      role: history_api
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: GraphQL API port (POST /graphql; all interfaces, no auth or rate limit - firewall it or put a proxy in front)
+    - key: GQL_DB_CONNECTION_POOL_SIZE
+      source: literal
+      value: "20"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: Connections of the API to PostgreSQL (vendor default 5); the database role may hold 60 in all
+    - key: api-max-old-space-size
+      source: literal
+      value: "2048"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: Node.js heap limit of the API, MB (NODE_OPTIONS)
+    - key: max-request-size
+      source: literal
+      value: "64"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: API max request size, KB (vendor default 256)
+    - key: max-root-fields
+      source: literal
+      value: "10"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: API max root fields per query (vendor default unlimited)
+    - key: max-response-size
+      source: literal
+      value: "10000"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: API max response size in nodes (rows x fields; vendor default unlimited) - a query without a limit is rejected
+    - key: sql-statement-timeout
+      source: literal
+      value: "10000"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: API SQL statement timeout, ms (vendor default none)
+    - key: validation-max-errors
+      source: literal
+      value: "5"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: API max validation errors per answer
+    - key: isolation-level
+      source: literal
+      value: "REPEATABLE READ"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: Transaction isolation of the read-only API transactions (vendor default SERIALIZABLE)
+    - key: dumb-cache
+      source: literal
+      value: "in-memory"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: API response cache (identical queries within the TTL are answered from memory)
+    - key: dumb-cache-ttl
+      source: literal
+      value: "3000"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: Cache entry TTL, ms (half a block time)
+    - key: dumb-cache-max-age
+      source: literal
+      value: "3000"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: Cache-Control max-age sent to clients and the reverse proxy, ms
+    - key: dumb-cache-size
+      source: literal
+      value: "128"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: In-memory cache size, MB (vendor default 50)
+    - key: pg-connection-limit
+      source: literal
+      value: "60"
+      whenInstallOption: indexer
+      whenInstallOptionValue: history
+      description: PostgreSQL role connection limit of this node's database (processor pool 10 + API pool + tools)
+
+diagnostics:
+  - id: path_mtu
+  # REST API installed / answering / head lag vs the node (only when install option indexer=rest-api).
+  - id: polkadot_indexer
+    port: indexer
+  # History indexer prepared / processor + API running / stored height vs the node's head (only when install option indexer=history).
+  - id: polkadot_history
+    port: history_api

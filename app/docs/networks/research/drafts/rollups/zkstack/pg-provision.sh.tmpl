@@ -1,0 +1,73 @@
+#!/bin/bash
+# RpcNode ZK Stack external node — PostgreSQL provisioning (ExecStartPre, idempotent). Pattern lifted from
+# chains/ton/indexer.sh.tmpl ("3. database"): use the host's PostgreSQL if one is running (only a separate role, database
+# and tablespace are created), otherwise `apt-get install postgresql`. The bulk data (the EN keeps its whole state in
+# Postgres) goes to a TABLESPACE under node_dir so it lands on the chosen disk role, never on /var/lib/postgresql.
+# Writes {{db_env_file}} (0600) with DATABASE_URL for the EN unit. Never touches other databases on a shared server.
+set -uo pipefail
+NET={{network}}; ENV_ID={{env}}
+PG_ROLE="rpcnode_${NET}_${ENV_ID}"; PG_DB="$PG_ROLE"; PG_TS="${PG_ROLE}_ts"
+TS_DIR={{pg_dir}}           # <postgres disk role>/pgdata
+STATE_DIR={{state_dir}}     # <node_dir>/.toolkit
+DB_ENV={{db_env_file}}
+LOG={{log_file}}
+mkdir -p "$STATE_DIR" "$TS_DIR"; chmod 700 "$STATE_DIR"
+exec >>"$LOG" 2>&1
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [pg] $*"; }
+
+PG_PORT=""; PG_BY_US=0
+psql_su() { ( cd / && setpriv --reuid=postgres --regid=postgres --init-groups psql -p "$PG_PORT" -X -q -At -v ON_ERROR_STOP=1 "$@" ); }
+detect_postgres() {
+  PG_PORT=""
+  if command -v pg_lsclusters >/dev/null 2>&1; then PG_PORT="$(pg_lsclusters -h 2>/dev/null | awk '$4 == "online" { print $3; exit }')"; fi
+  if [[ -z "$PG_PORT" ]] && command -v pg_isready >/dev/null 2>&1 && pg_isready -q -p 5432; then PG_PORT=5432; fi
+  [[ -n "$PG_PORT" ]]
+}
+if ! detect_postgres; then
+  log "no PostgreSQL on this host — installing from apt"
+  DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql || exit 1
+  systemctl enable --now postgresql >/dev/null 2>&1 || true
+  for _ in $(seq 1 60); do detect_postgres && break; sleep 2; done
+  [[ -n "$PG_PORT" ]] || { log "PostgreSQL did not start"; exit 1; }
+  PG_BY_US=1
+  # server tuning only for a server we installed (values: matter-labs compose + prod sizing)
+  conf_dir="$(dirname "$(psql_su -d postgres -c 'show config_file')")/conf.d"
+  ram_mb="$(awk '/MemTotal/ { printf "%d", $2 / 1024 }' /proc/meminfo)"; shared=$(( ram_mb / 4 )); (( shared > 32768 )) && shared=32768
+  if [[ -d "$conf_dir" ]]; then
+    cat >"$conf_dir/90-rpcnode-zkstack.conf" <<CONF
+max_connections = 200
+shared_buffers = ${shared}MB
+effective_cache_size = $(( ram_mb * 6 / 10 ))MB
+maintenance_work_mem = 1GB
+checkpoint_completion_target = 0.9
+random_page_cost = 1.1
+effective_io_concurrency = 200
+min_wal_size = 4GB
+max_wal_size = 16GB
+max_worker_processes = 16
+checkpoint_timeout = 1800
+log_error_verbosity = terse
+CONF
+    systemctl restart postgresql >/dev/null 2>&1 || true
+    for _ in $(seq 1 60); do pg_isready -q -p "$PG_PORT" && break; sleep 2; done
+  fi
+fi
+PW_FILE="$STATE_DIR/pg_password"
+[[ -s "$PW_FILE" ]] || od -An -tx1 -N16 /dev/urandom | tr -d ' \n' >"$PW_FILE"; chmod 600 "$PW_FILE"
+PW="$(cat "$PW_FILE")"
+chown postgres:postgres "$TS_DIR"; chmod 700 "$TS_DIR"
+if psql_su -d postgres -c "select 1 from pg_roles where rolname = '$PG_ROLE'" | grep -q 1; then
+  psql_su -d postgres -c "alter role $PG_ROLE login password '$PW'" || exit 1
+else
+  psql_su -d postgres -c "create role $PG_ROLE login password '$PW'" || exit 1
+fi
+psql_su -d postgres -c "select 1 from pg_tablespace where spcname = '$PG_TS'" | grep -q 1 \
+  || psql_su -d postgres -c "create tablespace $PG_TS owner $PG_ROLE location '$TS_DIR'" || exit 1
+psql_su -d postgres -c "select 1 from pg_database where datname = '$PG_DB'" | grep -q 1 \
+  || psql_su -d postgres -c "create database $PG_DB owner $PG_ROLE tablespace $PG_TS" || exit 1
+# the EN (sqlx migrations) needs to create extensions/tables only in its own database
+umask 077
+printf 'DATABASE_URL=postgres://%s:%s@127.0.0.1:%s/%s\n' "$PG_ROLE" "$PW" "$PG_PORT" "$PG_DB" >"$DB_ENV"
+# what the node-removal hook needs to drop role / database / tablespace again
+printf 'PG_PORT=%s\nPG_ROLE=%s\nPG_DB=%s\nPG_TS=%s\nPG_TS_DIR=%s\nPG_INSTALLED_BY_US=%s\n' "$PG_PORT" "$PG_ROLE" "$PG_DB" "$PG_TS" "$TS_DIR" "$PG_BY_US" >"$STATE_DIR/pg.env"
+log "ready: role/db/tablespace $PG_ROLE on port $PG_PORT"

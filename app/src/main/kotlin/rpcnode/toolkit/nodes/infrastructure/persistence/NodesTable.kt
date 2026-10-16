@@ -28,6 +28,8 @@ object NodesTable : Table("nodes")
     val liveTestStatus = varchar("live_test_status", 32).default("")
     val liveTestAt = varchar("live_test_at", 64).default("")
     val liveTestError = text("live_test_error").default("")
+    val installStartedAt = text("install_started_at").default("")
+    val syncedAt = text("synced_at").default("")
     val createdAt = varchar("created_at", 64)
     val updatedAt = varchar("updated_at", 64)
 

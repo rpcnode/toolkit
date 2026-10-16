@@ -1,0 +1,75 @@
+# Immutable zkEVM (Immutable Chain): immutable-geth (Go geth fork), Clique PoA, parent Ethereum but NO L1 dependency for a node.
+# Container-only upstream (ghcr.io/immutable/immutable-geth/immutable-geth, linux/amd64 only; GitHub releases carry no assets).
+# Public node = bootstrap once, then run with the shipped *-public.toml (static peers = Immutable's partner-public sentries).
+label: Immutable zkEVM
+dataRoot: immutable
+diskRoles:
+  - id: chaindata
+    label: geth datadir
+    media: nvme
+diskNotes:
+  - "First start runs `geth immutable bootstrap rpc --zkevm <net> --datadir <dir>` once (writes genesis + node key); the unit then runs geth with --config <env>-public.toml."
+  - "Public node: forwards transactions to Immutable's RPC (--rpcproxy) and does not gossip the txpool (--gossipdefault --disabletxpoolgossip). A private node needs allowlisting by Immutable."
+  - "No public snapshot: full sync from genesis (SyncMode full, NoPruning). README minimum 1 TB for mainnet; docs say 100 GB minimum for testnet-style setups."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Immutable zkEVM Mainnet
+    diskHintGiB: 2048
+    fullNodeGiB: 1024
+    archiveGiB: 1024
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc.immutable.com
+  - id: testnet
+    label: Immutable zkEVM Testnet
+    diskHintGiB: 512
+    fullNodeGiB: 256
+    archiveGiB: 256
+    cpuCores: 4
+    memoryGiB: 8
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc.testnet.immutable.com
+clientConfig:
+  program: geth
+  format: flags
+  bindings:
+    - key: datadir
+      source: disk_role_dir
+      role: chaindata
+      description: geth --datadir
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: --http.port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: --ws.port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: --port (Immutable default 30300)
+    - key: metrics-port
+      source: catalog_port
+      role: metrics
+      description: --metrics.port (127.0.0.1)
+    - key: http-api
+      source: literal
+      value: "eth,net,web3"
+      description: --http.api / --ws.api
+    - key: maxpeers
+      source: literal
+      value: "100"
+      description: Node.P2P.MaxPeers from the shipped public toml (flag --maxpeers overrides)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd open-file limit
+diagnostics:
+  - id: path_mtu

@@ -1,0 +1,75 @@
+# Vana L1: execution = geth, consensus = Prysm. All VERIFIED 2026-10-13 against vana-com/vana (docker-compose.yml, .env.*.example, networks/<env>/).
+#  mainnet  geth  : PATCHED v1.16.8 (state override @ block 9228152) — release `geth-v1.16.8-vana9228152` of vana-com/vana; the asset is a raw static
+#                   linux/amd64 ELF named exactly like the tag (+ .sha256). No arm64 build (aarch64 unsupported on mainnet).
+#           prysm  : vana-com/prysm release v7.1.8-vega.1 — beacon-chain-<tag>-linux-{amd64,arm64} raw binaries (+ .sha256). Upstream Prysm refuses the mainnet config (retired deposit contract).
+#  moksha   geth  : stock go-ethereum v1.16.8 (same `gethstore` resolver as chains/ethereum)    prysm : upstream OffchainLabs v5.1.0 (the testnet .env pins PRYSM_VERSION=v5.1.0)
+# Chain files (genesis.json, genesis.ssz, config.yml) come from raw.githubusercontent.com/vana-com/vana/<ref>/networks/<env>/ — pin <ref> to a vana-com/vana release tag (v2.4.0 on 2026-09-24) in the starter, `main` is moving.
+# Ports come from specs/PORTS.md (vana base 42650): mainnet 42650-42659, moksha 42660-42669.
+programs:
+  - env: mainnet
+    id: geth
+    source: { type: github, repo: vana-com/vana, tagPrefix: "geth-v" }
+    artifacts:
+      - name: "geth"
+        urlTemplate: "https://github.com/vana-com/vana/releases/download/{tag}/{tag}"
+    configs:
+      - name: "genesis.json"
+        urlTemplate: "https://raw.githubusercontent.com/vana-com/vana/v2.4.0/networks/mainnet/genesis.json"
+      - name: "genesis.ssz"
+        urlTemplate: "https://raw.githubusercontent.com/vana-com/vana/v2.4.0/networks/mainnet/genesis.ssz"
+      - name: "config.yml"
+        urlTemplate: "https://raw.githubusercontent.com/vana-com/vana/v2.4.0/networks/mainnet/config.yml"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 42650, label: "HTTP RPC", config: required }
+      - { role: ws, port: 42651, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 42652, label: "P2P", config: required, protocol: both }
+      - { role: engine, port: 42653, label: "Engine API", config: required }
+      - { role: metrics, port: 42654, label: "Metrics", config: required }
+      - { role: beacon, port: 42655, label: "Beacon REST (gRPC gateway)", config: required }
+      - { role: consensus_p2p, port: 42656, label: "Consensus P2P (tcp)", config: required }
+      - { role: consensus_udp, port: 42657, label: "Consensus P2P (udp)", config: required, protocol: udp }
+      - { role: consensus_rpc, port: 42658, label: "Prysm gRPC", config: required }
+  - env: mainnet
+    id: prysm-beacon
+    source: { type: github, repo: vana-com/prysm }
+    artifacts:
+      - name: "beacon-chain"
+        nameAarch64: "beacon-chain"
+        urlTemplate: "https://github.com/vana-com/prysm/releases/download/{tag}/beacon-chain-{tag}-linux-amd64"
+        urlTemplateAarch64: "https://github.com/vana-com/prysm/releases/download/{tag}/beacon-chain-{tag}-linux-arm64"
+  - env: moksha
+    id: geth
+    source: { type: github, repo: ethereum/go-ethereum }
+    artifacts:
+      - name: "geth-linux-amd64.tar.gz"
+        nameAarch64: "geth-linux-arm64.tar.gz"
+        urlTemplate: "gethstore"
+        urlTemplateAarch64: "gethstore"
+    configs:
+      - name: "genesis.json"
+        urlTemplate: "https://raw.githubusercontent.com/vana-com/vana/v2.4.0/networks/moksha/genesis.json"
+      - name: "genesis.ssz"
+        urlTemplate: "https://raw.githubusercontent.com/vana-com/vana/v2.4.0/networks/moksha/genesis.ssz"
+      - name: "config.yml"
+        urlTemplate: "https://raw.githubusercontent.com/vana-com/vana/v2.4.0/networks/moksha/config.yml"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 42660, label: "HTTP RPC", config: required }
+      - { role: ws, port: 42661, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 42662, label: "P2P", config: required, protocol: both }
+      - { role: engine, port: 42663, label: "Engine API", config: required }
+      - { role: metrics, port: 42664, label: "Metrics", config: required }
+      - { role: beacon, port: 42665, label: "Beacon REST (gRPC gateway)", config: required }
+      - { role: consensus_p2p, port: 42666, label: "Consensus P2P (tcp)", config: required }
+      - { role: consensus_udp, port: 42667, label: "Consensus P2P (udp)", config: required, protocol: udp }
+      - { role: consensus_rpc, port: 42668, label: "Prysm gRPC", config: required }
+  - env: moksha
+    id: prysm-beacon
+    # Upstream Prysm v5.1.0 — pinned: the testnet compose file pins it; "latest" upstream would break the retired-contract handling.
+    source: { type: pinned, version: "5.1.0", tag: "v5.1.0", label: "OffchainLabs/prysm (moksha pin)" }
+    artifacts:
+      - name: "beacon-chain"
+        nameAarch64: "beacon-chain"
+        urlTemplate: "https://github.com/OffchainLabs/prysm/releases/download/{tag}/beacon-chain-{tag}-linux-amd64"
+        urlTemplateAarch64: "https://github.com/OffchainLabs/prysm/releases/download/{tag}/beacon-chain-{tag}-linux-arm64"

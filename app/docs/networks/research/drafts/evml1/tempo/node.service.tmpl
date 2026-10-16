@@ -1,0 +1,29 @@
+# tempo RPC node in follow mode ({{chain}} = mainnet | moderato). The snapshot (`tempo download --chain {{chain}} --<profile> --datadir {{datadir}}`) must be restored first.
+# Flags VERIFIED in tempo.xyz/developers/docs/cli/node: --follow, --chain, --datadir, --http, --http.addr, --http.port, --http.api, --metrics <PORT>.
+# --ws/--ws.* / --port / --discovery.port / --rpc.max-connections are standard reth flags (INFERRED to be present in the tempo CLI: check `tempo node --help`).
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={{bin}} node \
+  --follow \
+  --chain {{chain}} \
+  --datadir {{datadir}} \
+  --http --http.addr 0.0.0.0 --http.port {{http_port}} --http.api eth,net,web3 \
+  --ws --ws.addr 0.0.0.0 --ws.port {{ws_port}} --ws.api eth,net,web3 \
+  --port {{p2p_port}} --discovery.port {{p2p_port}} \
+  --rpc.max-connections 3000 \
+  --metrics {{metrics_port}}
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=300
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE=1048576
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,30 @@
+# story-geth. {{network_flag}} = --story (mainnet) | --aeneid (testnet). Flags from the story-geth README example, RPC namespaces reduced to the public set.
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={{bin}} {{network_flag}} \
+  --datadir {{datadir}} \
+  --syncmode full \
+  --verbosity 3 \
+  --port {{p2p_port}} \
+  --maxpeers 50 \
+  --http --http.addr 0.0.0.0 --http.port {{http_port}} --http.api eth,net,web3 --http.vhosts * --http.corsdomain * \
+  --ws --ws.addr 0.0.0.0 --ws.port {{ws_port}} --ws.api eth,net,web3 --ws.origins * \
+  --rpc.batch-request-limit 1000 \
+  --authrpc.addr 127.0.0.1 --authrpc.port {{engine_port}} --authrpc.jwtsecret {{jwt_path}} --authrpc.vhosts localhost \
+  --metrics --metrics.addr 127.0.0.1 --metrics.port {{metrics_port}} \
+  --ipcdisable
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=600
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE=1048576
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

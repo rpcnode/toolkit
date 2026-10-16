@@ -14,6 +14,7 @@ import rpcnode.toolkit.catalog.domain.EnvId
 import rpcnode.toolkit.catalog.domain.NetworkId
 import rpcnode.toolkit.nodes.domain.model.Node
 import rpcnode.toolkit.nodes.domain.model.NodeId
+import rpcnode.toolkit.nodes.domain.model.NodeLifecycleStamps
 import rpcnode.toolkit.nodes.domain.model.NodeStatus
 import rpcnode.toolkit.nodes.domain.repository.NodeInsertResult
 import rpcnode.toolkit.nodes.domain.repository.NodeRepository
@@ -143,8 +144,13 @@ class SqliteNodeRepository(
     override suspend fun updateStatus(id: NodeId, status: NodeStatus, updatedAt: String): Boolean =
         withContext(Dispatchers.IO) {
             transaction(db.database) {
+                val before = NodesTable.selectAll().where { NodesTable.id eq id.value }.singleOrNull()
+                val install = NodeLifecycleStamps.installStarted(before?.get(NodesTable.installStartedAt).orEmpty(), status, updatedAt)
+                val synced = NodeLifecycleStamps.synced(before?.get(NodesTable.syncedAt).orEmpty(), status, updatedAt)
                 NodesTable.update({ NodesTable.id eq id.value }) {
                     it[NodesTable.status] = status.value
+                    it[NodesTable.installStartedAt] = install
+                    it[NodesTable.syncedAt] = synced
                     it[NodesTable.updatedAt] = updatedAt
                 }
             } > 0
@@ -247,6 +253,8 @@ class SqliteNodeRepository(
         liveTestStatus = this[NodesTable.liveTestStatus],
         liveTestAt = this[NodesTable.liveTestAt],
         liveTestError = this[NodesTable.liveTestError],
+        installStartedAt = this[NodesTable.installStartedAt],
+        syncedAt = this[NodesTable.syncedAt],
         createdAt = this[NodesTable.createdAt],
         updatedAt = this[NodesTable.updatedAt],
     )

@@ -1,0 +1,41 @@
+# peaq-node (Substrate/Cumulus parachain 3338 on Polkadot; EVM via Frontier on the same RPC port).
+# NO upstream binary exists: peaqnetwork/peaq-network-node releases carry 0 assets (peaq-v0.0.112 / v0.0.111 / v0.0.110),
+# only the runtime wasm override files; the official run path is the Docker image peaq/parachain:<tag> (Docker Hub, tags
+# peaq-v0.0.113 …). Docker is not an install path, so — same as op-reth / xrpld — the panel compiles the pinned tag once per
+# CPU arch (`build:`, peaq.Dockerfile) and syncs `peaq-node-<arch>`; the chain spec comes from the repo at the same tag.
+# The pin is manual: tag peaq-v0.0.113 exists (docker image + git tag) but has NO GitHub release object, so a releases-API
+# resolver would still answer peaq-v0.0.112. Bump version+tag together after checking the Docker Hub tag list.
+# Testnet agung uses its OWN tag family (peaq-dev-v0.0.109) and two chain specs (parachain + private relay chain).
+programs:
+  - env: mainnet
+    id: peaq-node
+    source: { type: pinned, version: "0.0.113", tag: "peaq-v0.0.113", label: "peaqnetwork/peaq-network-node" }
+    build: { dockerfile: peaq.Dockerfile, outputs: [peaq-node], platforms: [linux/amd64, linux/arm64] }
+    artifacts: []
+    configs:
+      - name: peaq-raw.json
+        urlTemplate: "https://raw.githubusercontent.com/peaqnetwork/peaq-network-node/{tag}/node/src/chain-specs/peaq-raw.json"
+    requirements: { logFile: logs/peaq.log }
+    ports:
+      - { role: http, port: 42140, label: "Substrate + Ethereum JSON-RPC (HTTP + WS)", config: required }
+      - { role: p2p, port: 42142, label: "Parachain P2P", config: required }
+      - { role: metrics, port: 42144, label: "Prometheus (127.0.0.1)", config: required }
+      - { role: cl_rpc, port: 42145, label: "Embedded relay-chain RPC (127.0.0.1)", config: required }
+      - { role: cl_p2p, port: 42146, label: "Embedded relay-chain P2P", config: required }
+  - env: agung
+    id: peaq-node
+    source: { type: pinned, version: "0.0.109", tag: "peaq-dev-v0.0.109", label: "peaqnetwork/peaq-network-node" }
+    build: { dockerfile: peaq.Dockerfile, outputs: [peaq-node], platforms: [linux/amd64, linux/arm64] }
+    artifacts: []
+    configs:
+      - name: async-agung-parachain-specs.json
+        urlTemplate: "https://github.com/peaqnetwork/async-agung-chain-specs/releases/download/async-agung-chain-specs-01-2025/async-agung-parachain-specs.json"
+      - name: async-agung-relaychain-specs.json
+        urlTemplate: "https://github.com/peaqnetwork/async-agung-chain-specs/releases/download/async-agung-chain-specs-01-2025/async-agung-relaychain-specs.json"
+    requirements: { logFile: logs/peaq.log }
+    ports:
+      - { role: http, port: 42150, label: "Substrate + Ethereum JSON-RPC (HTTP + WS)", config: required }
+      - { role: p2p, port: 42152, label: "Parachain P2P", config: required }
+      - { role: metrics, port: 42154, label: "Prometheus (127.0.0.1)", config: required }
+      - { role: cl_rpc, port: 42155, label: "Embedded relay-chain RPC (127.0.0.1)", config: required }
+      - { role: cl_p2p, port: 42156, label: "Embedded relay-chain P2P", config: required }

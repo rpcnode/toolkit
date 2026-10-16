@@ -1,0 +1,51 @@
+# Soneium: Soneium (Sony/Startale OP Stack, Superchain Registry `soneium` + `soneium-minato`): op-reth + op-node. No official operator docs exist; Alchemy publishes the reth datadir.
+# op-reth + op-node: pinned tags of ethereum-optimism/optimism, compiled by the panel build hosts (`build:`, Dockerfiles beside this file) and
+# synced as `<name>-<arch>`; a host without the prebuilt binary compiles them itself (chains/opstack/run.sh.tmpl).
+# The pins MUST equal OpstackToolchain.RETH_TAG / NODE_TAG (a test keeps them equal).
+programs:
+  - env: mainnet
+    id: op-reth
+    source: { type: pinned, version: "2.6.0", tag: "op-reth/v2.6.0", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-reth.Dockerfile, outputs: [op-reth], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/soneium.log }
+    artifacts: []
+    ports:
+      - { role: http, port: 42410, label: "EL JSON-RPC", config: required }
+      - { role: ws, port: 42411, label: "EL WebSocket", config: required }
+      - { role: engine, port: 42413, label: "EL Engine API (127.0.0.1)", config: required }
+      - { role: metrics, port: 42414, label: "EL metrics (127.0.0.1)", config: required }
+      - { role: p2p, port: 42412, label: "EL P2P", config: required, protocol: both }
+      - { role: discv5, port: 42418, label: "EL discv5 (UDP)", config: required, protocol: udp }
+  - env: mainnet
+    id: op-node
+    source: { type: pinned, version: "1.19.9", tag: "op-node/v1.19.9", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-node.Dockerfile, outputs: [op-node], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/soneium.log }
+    artifacts: []
+    ports:
+      - { role: cl_rpc, port: 42415, label: "op-node RPC (127.0.0.1)", config: required }
+      - { role: cl_metrics, port: 42417, label: "op-node metrics (127.0.0.1)", config: required }
+      - { role: cl_p2p, port: 42416, label: "op-node P2P", config: required, protocol: both }
+  - env: sepolia
+    id: op-reth
+    source: { type: pinned, version: "2.6.0", tag: "op-reth/v2.6.0", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-reth.Dockerfile, outputs: [op-reth], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/soneium.log }
+    artifacts: []
+    ports:
+      - { role: http, port: 42420, label: "EL JSON-RPC", config: required }
+      - { role: ws, port: 42421, label: "EL WebSocket", config: required }
+      - { role: engine, port: 42423, label: "EL Engine API (127.0.0.1)", config: required }
+      - { role: metrics, port: 42424, label: "EL metrics (127.0.0.1)", config: required }
+      - { role: p2p, port: 42422, label: "EL P2P", config: required, protocol: both }
+      - { role: discv5, port: 42428, label: "EL discv5 (UDP)", config: required, protocol: udp }
+  - env: sepolia
+    id: op-node
+    source: { type: pinned, version: "1.19.9", tag: "op-node/v1.19.9", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-node.Dockerfile, outputs: [op-node], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/soneium.log }
+    artifacts: []
+    ports:
+      - { role: cl_rpc, port: 42425, label: "op-node RPC (127.0.0.1)", config: required }
+      - { role: cl_metrics, port: 42427, label: "op-node metrics (127.0.0.1)", config: required }
+      - { role: cl_p2p, port: 42426, label: "op-node P2P", config: required, protocol: both }

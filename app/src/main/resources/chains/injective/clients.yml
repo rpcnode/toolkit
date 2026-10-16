@@ -1,0 +1,20 @@
+# Injective: injectived from upstream GitHub releases (no Docker). Draft, see specs/cosmos/networks.md for verification.
+programs:
+  - env: mainnet
+    id: injectived
+    source: { type: github, repo: InjectiveFoundation/injective-core }
+    artifacts:
+      - name: "linux-amd64.zip"   # injectived + peggo + libwasmvm.x86_64.so; extractArchiveGlob linux-amd64.zip
+        urlTemplate: "https://github.com/InjectiveFoundation/injective-core/releases/download/{tag}/linux-amd64.zip"
+    configs:
+      - name: genesis.json
+        urlTemplate: "http://injective-mainnet-snapshots.s3-website.gra.io.cloud.ovh.net/genesis.json"
+    requirements: { logFile: logs/injective.log }
+    ports:
+      - { role: http, port: 41720, label: "EVM JSON-RPC", config: required }
+      - { role: ws, port: 41721, label: "EVM WebSocket", config: required }
+      - { role: p2p, port: 41722, label: "CometBFT P2P", config: required }
+      - { role: metrics, port: 41724, label: "CometBFT Prometheus (127.0.0.1)", config: required }
+      - { role: cl_rpc, port: 41725, label: "CometBFT RPC (/status)", config: required }
+      - { role: grpc, port: 41727, label: "Cosmos gRPC", config: required }
+      - { role: api, port: 41728, label: "Cosmos REST (LCD)", config: required }

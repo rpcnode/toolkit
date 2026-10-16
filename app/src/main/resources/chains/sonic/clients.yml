@@ -1,0 +1,35 @@
+# Sonic from 0xsoniclabs/sonic GitHub releases (no Docker). VERIFIED 2026-10-13: v2.2.5 (2026-10-07) is the latest stable; release assets are
+# the two raw static executables `sonicd` (73 MB) and `sonictool` (72 MB), linux x86_64 ELF only (no arm64 build, no tarball, no version in the file name).
+# They are stored as sonicd-linux-amd64 / sonictool-linux-amd64 so the install plan carries the arch and an aarch64 host gets "no files for arch" instead of an x86 ELF.
+# Do NOT use Fantom-foundation/Sonic — that is the legacy Fantom Opera client (see `fantom` in networks.md).
+# Genesis files come from https://genesis.soniclabs.com (latest-sonic-{pruned,archive}.g and latest-testnet-{pruned,archive}.g answer 307 to the dated object).
+# Ports come from specs/PORTS.md (sonic base 42440): mainnet 42440-42449, testnet 42450-42459.
+programs:
+  - env: mainnet
+    id: sonicd
+    source: { type: github, repo: 0xsoniclabs/sonic }
+    artifacts:
+      - name: "sonicd-linux-amd64"
+        urlTemplate: "https://github.com/0xsoniclabs/sonic/releases/download/{tag}/sonicd"
+      - name: "sonictool-linux-amd64"
+        urlTemplate: "https://github.com/0xsoniclabs/sonic/releases/download/{tag}/sonictool"
+    requirements: { logFile: logs/sonic.log }
+    ports:
+      - { role: http, port: 42440, label: "HTTP RPC", config: required }
+      - { role: ws, port: 42441, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 42442, label: "P2P", config: required, protocol: both }
+      - { role: metrics, port: 42444, label: "Metrics", config: required }
+  - env: testnet
+    id: sonicd
+    source: { type: github, repo: 0xsoniclabs/sonic }
+    artifacts:
+      - name: "sonicd-linux-amd64"
+        urlTemplate: "https://github.com/0xsoniclabs/sonic/releases/download/{tag}/sonicd"
+      - name: "sonictool-linux-amd64"
+        urlTemplate: "https://github.com/0xsoniclabs/sonic/releases/download/{tag}/sonictool"
+    requirements: { logFile: logs/sonic.log }
+    ports:
+      - { role: http, port: 42450, label: "HTTP RPC", config: required }
+      - { role: ws, port: 42451, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 42452, label: "P2P", config: required, protocol: both }
+      - { role: metrics, port: 42454, label: "Metrics", config: required }

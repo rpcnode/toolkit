@@ -1,0 +1,40 @@
+# stacks-node from stacks-network/stacks-core release zips (no Docker). VERIFIED 2026-10-14 (4.0.5): linux-glibc-x64.zip (218 MB) and
+# linux-glibc-arm64.zip; the zip holds stacks-node, stacks-signer, stacks-cli, ... (Start takes stacks-node). Release rule
+# (StacksClientReleaseResolver): highest final numeric tag (4.0.5, 3.4.0.0.4) with the glibc x64 zip; `signer-*` tags are not node releases.
+# The follower config is the tag's sample/conf/<env>-follower-conf.toml (VERIFIED at 4.0.5), synced as a config file; Start writes
+# stacks.toml (0600) from it. Testnet = `krypton`, a Hiro-hosted Bitcoin regtest: nothing local. Mainnet needs a Bitcoin Core node: the
+# `burnchain_*` install options (host / RPC port / P2P port / user / password); the Bitcoin chain of this toolkit is not modified.
+programs:
+  - env: mainnet
+    id: stacks-node
+    source: { type: github, repo: stacks-network/stacks-core }
+    artifacts:
+      - name: "stacks-core-linux-x86_64.zip"
+        nameAarch64: "stacks-core-linux-aarch64.zip"
+        urlTemplate: "https://github.com/stacks-network/stacks-core/releases/download/{tag}/linux-glibc-x64.zip"
+        urlTemplateAarch64: "https://github.com/stacks-network/stacks-core/releases/download/{tag}/linux-glibc-arm64.zip"
+    configs:
+      - name: mainnet-follower-conf.toml
+        urlTemplate: "https://raw.githubusercontent.com/stacks-network/stacks-core/{tag}/sample/conf/mainnet-follower-conf.toml"
+    requirements: { logFile: logs/stacks.log }
+    ports:
+      - { role: http, port: 42500, label: "stacks-node RPC (/v2/info)", config: required }
+      - { role: p2p, port: 42502, label: "P2P (tcp)", config: required }
+      - { role: metrics, port: 42504, label: "Prometheus (127.0.0.1)", config: required }
+  - env: testnet
+    id: stacks-node
+    source: { type: github, repo: stacks-network/stacks-core }
+    artifacts:
+      - name: "stacks-core-linux-x86_64.zip"
+        nameAarch64: "stacks-core-linux-aarch64.zip"
+        urlTemplate: "https://github.com/stacks-network/stacks-core/releases/download/{tag}/linux-glibc-x64.zip"
+        urlTemplateAarch64: "https://github.com/stacks-network/stacks-core/releases/download/{tag}/linux-glibc-arm64.zip"
+    configs:
+      - name: testnet-follower-conf.toml
+        urlTemplate: "https://raw.githubusercontent.com/stacks-network/stacks-core/{tag}/sample/conf/testnet-follower-conf.toml"
+    requirements: { logFile: logs/stacks.log }
+    ports:
+      - { role: http, port: 42510, label: "stacks-node RPC (/v2/info)", config: required }
+      - { role: p2p, port: 42512, label: "P2P (tcp)", config: required }
+      - { role: metrics, port: 42514, label: "Prometheus (127.0.0.1)", config: required }
+# Snapshot: Hiro's chainstate archive (archive.hiro.so, .tar.zst) - SnapshotResolver in StacksSnapshotResolver, stream-unpacked with zstd.

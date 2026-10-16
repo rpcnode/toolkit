@@ -1,0 +1,93 @@
+# Aleo client node (snarkos start --client): serves the REST API, keeps the full public ledger.
+# No snapshot: snarkOS prefetches blocks from the Provable CDN (cdn.provable.com) itself; plan for hours-to-days first sync.
+label: Aleo
+diskRoles:
+  - id: ledger
+    label: Ledger (RocksDB)
+    media: nvme
+  - id: nodedata
+    label: Node data (keys, JWT, peer cache)
+    media: ssd
+diskNotes:
+  - "--ledger-storage is the ledger role leaf; --node-data-storage holds the private key file, the REST JWT and peer caches (never share it)."
+  - "Official client minimum per the snarkOS README: 24 cores (32+ preferred), 128 GiB RAM (192+ preferred), 2 TB disk (4+ preferred), 250 Mbps up/down."
+  - "The REST port is per-IP rate limited (default 10 RPS, burst 10): the production value is raised on Start (rest-rps below)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Aleo Mainnet
+    diskHintGiB: 2048
+    fullNodeGiB: 2048
+    cpuCores: 24
+    memoryGiB: 128
+    snapshot: never
+    publicTip:
+      urls:
+        - https://api.explorer.provable.com/v1/mainnet/block/height/latest
+  - id: testnet
+    label: Aleo Testnet
+    diskHintGiB: 1024
+    fullNodeGiB: 1024
+    cpuCores: 16
+    memoryGiB: 64
+    snapshot: never
+    publicTip:
+      urls:
+        - https://api.explorer.provable.com/v1/testnet/block/height/latest
+
+# Flags of `snarkos start` in the systemd unit (chains/aleo, AleoUnitBodies). format: flags — no conf patch.
+clientConfig:
+  program: snarkos
+  format: flags
+  bindings:
+    - key: network
+      source: literal
+      value: "0"
+      description: Network id — 0 mainnet, 1 testnet (set per env by the chain package)
+    - key: client
+      source: literal
+      value: "true"
+      description: Client node type (no consensus, no proving)
+    - key: ledger-storage
+      source: disk_role_dir
+      role: ledger
+      description: --ledger-storage (Disks ledger role)
+    - key: node-data-storage
+      source: disk_role_dir
+      role: nodedata
+      description: --node-data-storage (Disks node data role)
+    - key: rest (port)
+      source: catalog_port
+      role: http
+      description: REST port, --rest 0.0.0.0:<port>; also the local height source
+    - key: node (port)
+      source: catalog_port
+      role: p2p
+      description: P2P port, --node 0.0.0.0:<port>
+    - key: metrics-ip (port)
+      source: catalog_port
+      role: metrics
+      description: Prometheus, --metrics --metrics-ip 127.0.0.1:<port>
+    - key: rest-rps
+      source: literal
+      value: "10"
+      description: REST requests/second per IP (vendor default 10 — the prod preset raises it; behind a proxy every request shares the proxy IP)
+    - key: nodisplay
+      source: literal
+      value: "true"
+      description: No terminal UI (systemd)
+    - key: verbosity
+      source: literal
+      value: "1"
+      description: Log verbosity
+    - key: logfile
+      source: literal
+      value: "logs/snarkos.log"
+      description: --logfile under node_dir (the unit's own stdout goes to logs/snarkos.stdout so the two never write one file)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for snarkos
+
+diagnostics:
+  - id: path_mtu

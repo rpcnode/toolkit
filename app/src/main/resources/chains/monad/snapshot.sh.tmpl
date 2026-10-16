@@ -1,0 +1,68 @@
+# Monad TrieDB restore = the "hard reset" of docs.monad.xyz/node-ops/node-recovery/hard-reset, done under node_dir:
+#  1. latest snapshot of the Monad Foundation bucket (latest.txt -> <name>.tar.zst + <name>.checksum), sha256 checked
+#  2. extract into <state>/snapshots (the top-level folder name is the block id)
+#  3. monad-mpt: (first time) --create, then --truncate + --create-empty on the TrieDB device  <-- ERASES THE DEVICE
+#  4. monad-cli --load_binary_snapshot into the device
+#  5. node state reset (ledger, wal, sockets, peers) and a fresh forkpoint.toml + validators.toml
+# The device was checked by the panel side before this script was written (block device, not mounted, 512-byte sectors,
+# no foreign filesystem / partition-table signature, or already initialised by this node).
+MPT='{{mpt}}'
+CLI='{{cli}}'
+LIBS='{{libs}}'
+DEV='{{device}}'
+DEVMARK='{{device_marker}}'
+STATE_DIR='{{state_dir}}'
+SNAP='{{snap_dir}}'
+HOST='{{host}}'
+FORKPOINT_URL='{{forkpoint_url}}'
+VALIDATORS_URL='{{validators_url}}'
+IMPORT_CPU='{{import_cpu}}'
+export LD_LIBRARY_PATH="$LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+[ -x "$MPT" ] && [ -x "$CLI" ] || fail "monad-mpt / monad-cli missing - sync the Monad clients first"
+[ -b "$DEV" ] || fail "TrieDB device $DEV is not a block device"
+command -v zstd >/dev/null 2>&1 || fail "zstd is missing - run the Host deps step"
+command -v sha256sum >/dev/null 2>&1 || fail "sha256sum is missing"
+
+state download 0 "looking up the latest snapshot"
+LATEST=$(curl -fsSL --retry 5 --max-time 30 "$HOST/latest.txt" | tr -d '\r\n ')
+[ -n "$LATEST" ] || fail "cannot read $HOST/latest.txt"
+BASE="${LATEST%.tar.zst}"
+echo "snapshot $BASE" >>"$LOG"
+rm -rf "$SNAP"
+mkdir -p "$SNAP"
+download "$HOST/$BASE.tar.zst" "$SNAP/$BASE.tar.zst" "snapshot $BASE"
+download "$HOST/$BASE.checksum" "$SNAP/$BASE.checksum" "checksum"
+
+state verify 100 "sha256 of the snapshot"
+( cd "$SNAP" && sha256sum -c "$BASE.checksum" ) >>"$LOG" 2>&1 || fail "snapshot checksum mismatch (see $LOG)"
+
+state extract 0 "unpacking the snapshot"
+zstd -dc "$SNAP/$BASE.tar.zst" | tar -xf - -C "$SNAP" >>"$LOG" 2>&1
+[ "${PIPESTATUS[0]}" -eq 0 ] && [ "${PIPESTATUS[1]}" -eq 0 ] || fail "snapshot extract failed (see $LOG)"
+rm -f "$SNAP/$BASE.tar.zst"
+# the block id is the highest integer-named top-level entry of the archive
+BLOCK=$(ls -1 "$SNAP" | grep -E '^[0-9]+$' | sort -n | tail -1)
+[ -n "$BLOCK" ] || fail "no block id folder in the snapshot"
+
+state import 10 "monad-mpt: creating the TrieDB on $DEV"
+if [ ! -f "$DEVMARK" ]; then
+  "$MPT" --storage "$DEV" --create >>"$LOG" 2>&1 || fail "monad-mpt --create failed (see $LOG)"
+fi
+"$MPT" --storage "$DEV" --state-machine monad --yes --truncate >>"$LOG" 2>&1 || fail "monad-mpt --truncate failed (see $LOG)"
+"$MPT" --storage "$DEV" --state-machine monad --yes --create-empty >>"$LOG" 2>&1 || fail "monad-mpt --create-empty failed (see $LOG)"
+mkdir -p "$(dirname "$DEVMARK")"
+readlink -f "$DEV" >"$DEVMARK"
+
+state import 30 "monad-cli: importing block $BLOCK into the TrieDB"
+"$CLI" --db "$DEV" --load_binary_snapshot "$SNAP" --version "$BLOCK" --sq_thread_cpu "$IMPORT_CPU" >>"$LOG" 2>&1 || fail "monad-cli snapshot import failed (see $LOG)"
+
+state finish 90 "resetting the node state"
+rm -rf "$STATE_DIR/ledger" "$STATE_DIR/snapshots-old"
+rm -f "$STATE_DIR"/wal_* "$STATE_DIR/mempool.sock" "$STATE_DIR/controlpanel.sock" "$STATE_DIR/statesync.sock" "$STATE_DIR/config/peers.toml"
+mkdir -p "$STATE_DIR/ledger" "$STATE_DIR/config/forkpoint" "$STATE_DIR/config/validators"
+touch "$STATE_DIR/ledger/wal"
+curl -fsSL --retry 5 --max-time 60 -o "$STATE_DIR/config/forkpoint/forkpoint.toml" "$FORKPOINT_URL" || fail "cannot download $FORKPOINT_URL"
+curl -fsSL --retry 5 --max-time 60 -o "$STATE_DIR/config/validators/validators.toml" "$VALIDATORS_URL" || fail "cannot download $VALIDATORS_URL"
+rm -rf "$SNAP"
+touch "$MARKER"
+state done 100 "Monad TrieDB restored at block $BLOCK"

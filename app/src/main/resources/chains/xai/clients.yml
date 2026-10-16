@@ -1,0 +1,18 @@
+# Xai = Arbitrum Orbit AnyTrust chain on stock Nitro (parent chain: Arbitrum One). Nitro comes from the Docker Hub registry
+# (HTTP layers, no Docker daemon) exactly like arb / robinhood (docker://offchainlabs/nitro-node:{tag}; tag resolved from the
+# newest OffchainLabs/nitro release). The chain-info file has no public CDN copy: it ships as a classpath resource
+# (resources/chains/xai/xai-chain-info.json) and XaiNodeProcessStarter writes it to <node_dir>/.toolkit/xai-chain-info.json
+# before the unit is rendered. No snapshot exists for Xai: Nitro syncs from genesis through the Arbitrum One inbox + the DAS.
+programs:
+  - env: mainnet
+    id: nitro
+    source: { type: github, repo: OffchainLabs/nitro }
+    artifacts:
+      - name: "nitro-x86_64-linux.tar.gz"
+        nameAarch64: "nitro-aarch64-linux.tar.gz"
+        urlTemplate: "docker://offchainlabs/nitro-node:{tag}"
+        urlTemplateAarch64: "docker://offchainlabs/nitro-node:{tag}"
+    ports:
+      - { role: http, port: 42710, label: "HTTP RPC", config: required }
+      - { role: ws, port: 42711, label: "WebSocket RPC", config: required }
+      - { role: metrics, port: 42714, label: "Nitro metrics (127.0.0.1)", config: required }

@@ -1,0 +1,177 @@
+# Polkadot relay chain (+ Paseo, Westend testnets) — one `polkadot` binary, chain selected with --chain.
+# Snapshot optional: warp sync (default) reaches the tip in hours on a ~25 GB pruned DB; the official Parity snapshot service
+# (snapshots.polkadot.io, rclone-style file manifest) is the fast path and the only path for an archive node.
+label: Polkadot
+diskRoles:
+  - id: state
+    label: Chain DB (paritydb / rocksdb)
+    media: nvme
+diskNotes:
+  - "base-path is the state role leaf; the DB is <base>/chains/<chain-id>/paritydb (pruned, default) or /db (archive, rocksdb). chain-id: polkadot, paseo, westend2."
+  - "Pruned (state+blocks 256, paritydb) is ~25 GB at the Parity snapshot, growing slowly; archive (rocksdb) is ~4.2 TB on Polkadot and grows ~1 TB/yr."
+  - "Pruning mode is fixed on the first start of a DB: switching pruned <-> archive means wiping the DB and re-syncing."
+  - "polkadot, polkadot-prepare-worker and polkadot-execute-worker live together in node_dir/bin (same version, same directory)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Polkadot
+    diskHintGiB: 300
+    fullNodeGiB: 300
+    archiveGiB: 6144
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: optional
+    publicTip:
+      urls:
+        - https://rpc.polkadot.io
+        - https://polkadot.api.onfinality.io/public
+        - https://polkadot-rpc.n.dwellir.com
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: Pruned · Parity snapshots
+        hint: paritydb, state+blocks pruned to 256 (~22 GB) from snapshots.polkadot.io
+        diskGiB: 300
+        default: true
+      - id: archive
+        kind: archive
+        label: Archive · Parity snapshots
+        hint: rocksdb archive (~4.2 TB) from snapshots.polkadot.io
+        diskGiB: 6144
+  - id: paseo
+    label: Paseo Testnet
+    diskHintGiB: 120
+    fullNodeGiB: 120
+    archiveGiB: 512
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: optional
+    publicTip:
+      urls:
+        - https://pas-rpc.stakeworld.io
+        - https://paseo-rpc.n.dwellir.com
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: Pruned · Parity snapshots
+        hint: paritydb, pruned 256 (~20 GB)
+        diskGiB: 120
+        default: true
+      - id: archive
+        kind: archive
+        label: Archive · Parity snapshots
+        hint: rocksdb archive (~92 GB)
+        diskGiB: 512
+  - id: westend
+    label: Westend Testnet
+    diskHintGiB: 300
+    fullNodeGiB: 300
+    archiveGiB: 2048
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: optional
+    publicTip:
+      urls:
+        - https://westend-rpc.polkadot.io
+        - https://westend.api.onfinality.io/public
+        - https://westend-rpc.n.dwellir.com
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: Pruned · Parity snapshots
+        hint: paritydb pruned 1000 (~131 GB; warp sync is usually faster)
+        diskGiB: 300
+        default: true
+      - id: archive
+        kind: archive
+        label: Archive · Parity snapshots
+        hint: paritydb archive (~1.1 TB)
+        diskGiB: 2048
+
+# Flags of `polkadot` written by chains/polkadot (PolkadotUnitBodies) into the systemd unit. format: flags — no conf patch.
+# Vendor-default capacity values are written explicitly (VERIFIED defaults, polkadot-stable2609 sc-cli): the Substrate prod
+# preset raises them. Literals must equal PolkadotUnitBodies and the unit LimitNOFILE.
+clientConfig:
+  program: polkadot
+  format: flags
+  bindings:
+    - key: mode
+      source: install_option
+      option: mode
+      default: "pruned"
+      description: Node type — pruned (paritydb, state+blocks 256, warp sync) or archive (rocksdb, archive pruning, full sync)
+    - key: chain
+      source: literal
+      value: "polkadot"
+      description: Built-in chain spec (polkadot | paseo | westend) — set per env by the chain package
+    - key: base-path
+      source: disk_role_dir
+      role: state
+      description: --base-path (Disks state role)
+    - key: rpc-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC port (HTTP and WebSocket share it)
+    - key: port
+      source: catalog_port
+      role: p2p
+      description: P2P port (TCP; litep2p listens udp/webrtc-direct on the same number)
+    - key: prometheus-port
+      source: catalog_port
+      role: metrics
+      description: Prometheus port (127.0.0.1)
+    - key: rpc-external
+      source: literal
+      value: "true"
+      description: Listen on all interfaces (safe method set below)
+    - key: rpc-methods
+      source: literal
+      value: "safe"
+      description: Only safe RPC methods (no author_*/system_addReservedPeer…) on the public port
+    - key: rpc-cors
+      source: literal
+      value: "all"
+      description: CORS origins
+    - key: rpc-max-connections
+      source: literal
+      value: "100"
+      description: Max concurrent RPC connections (vendor default; prod preset raises it; also caps the RPC blocking-thread pool)
+    - key: rpc-max-request-size
+      source: literal
+      value: "15"
+      description: Max request body, MB (vendor default)
+    - key: rpc-max-response-size
+      source: literal
+      value: "15"
+      description: Max response body, MB (vendor default)
+    - key: rpc-max-subscriptions-per-connection
+      source: literal
+      value: "1024"
+      description: Max WS subscriptions per connection (vendor default)
+    - key: rpc-message-buffer-capacity-per-connection
+      source: literal
+      value: "64"
+      description: Per-connection subscription message buffer (vendor default)
+    - key: trie-cache-size
+      source: literal
+      value: "1073741824"
+      description: Trie cache bytes (vendor default 1 GiB; prod preset raises it)
+    - key: in-peers
+      source: literal
+      value: "32"
+      description: Max inbound full-node peers (vendor default)
+    - key: out-peers
+      source: literal
+      value: "8"
+      description: Outbound peers to maintain (vendor default)
+    - key: no-telemetry
+      source: literal
+      value: "true"
+      description: Telemetry off
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for polkadot
+
+diagnostics:
+  - id: path_mtu

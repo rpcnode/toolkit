@@ -1,0 +1,142 @@
+# Berachain (mainnet chain id 80094) + Bepolia testnet (80069): bera-reth (execution) + beacond/BeaconKit (CometBFT consensus). Two units, like chains/ethereum.
+# Snapshot optional — official bundles on snapshots.berachain.com (index.csv): mainnet reth pruned 54 GB / reth archive 1.2 TB / beacon-kit pruned 30 MB / beacon-kit archive 336 GB (2026-10-13, VERIFIED).
+# Hardware VERIFIED in docs.berachain.com quickstart: 4 physical cores, 32 GB RAM, 1 TB local SSD (network volumes need >= 1000 IOPS).
+label: Berachain
+hostPackages:
+  - lz4
+diskRoles:
+  - id: data
+    label: Execution + consensus data
+    media: nvme
+diskNotes:
+  - "One disk role holds both clients: bera-reth --datadir is <data>/reth, beacond --home is <data>/beacond (config/ + data/). The official snapshot pair unpacks into exactly those two."
+  - "Snapshot restore keeps beacond's config/ (priv_validator_key.json, genesis, configs); it replaces <beacond>/data and the reth db / rocksdb / blobstore / static_files."
+  - "Bera-Reth and BeaconKit versions must match docs.berachain.com/nodes/architecture/evm-execution (mainnet beacon-kit v1.4.1, Bepolia v1.4.2-rc.0 pinned, bera-reth v1.4.4)."
+  - "beacond proxy_app, CometBFT RPC, Prometheus and the Engine API listen on 127.0.0.1 only."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Berachain Mainnet
+    diskHintGiB: 2048
+    fullNodeGiB: 600
+    archiveGiB: 1700
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: optional
+    tipLagBlocks: 5
+    publicTip:
+      urls:
+        - https://rpc.berachain.com
+        - https://berachain-rpc.publicnode.com
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: Pruned (reth --full + beacon pruned)
+        hint: "Official bundle pair at the same block: reth-pruned ~54 GB + beacon-kit-pruned ~30 MB (index.csv, updated daily). Default."
+        diskGiB: 600
+        default: true
+      - id: archive
+        kind: archive
+        label: Archive (reth archive + beacon archive)
+        hint: "reth-archive ~1.2 TB + beacon-kit-archive ~336 GB (download sizes; lz4 tarballs)."
+        diskGiB: 2700
+  - id: bepolia
+    label: Berachain Bepolia Testnet
+    diskHintGiB: 1024
+    fullNodeGiB: 300
+    archiveGiB: 800
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    tipLagBlocks: 5
+    publicTip:
+      urls:
+        - https://bepolia.rpc.berachain.com
+
+# CLI flags live in the systemd units (chains/evmfamily BerachainProfile). EvmCatalogTest compares the literals with the rendered unit.
+clientConfig:
+  program: bera-reth
+  format: flags
+  bindings:
+    - key: snapshot
+      source: install_option
+      option: snapshot
+      default: "pruned"
+      description: Official snapshot pair - pruned (bera-reth --full) or archive (no --full)
+    - key: datadir
+      source: disk_role_dir
+      role: data
+      relative: reth
+      description: bera-reth --datadir (Disks data role, subfolder reth)
+    - key: beacond-home
+      source: disk_role_dir
+      role: data
+      relative: beacond
+      description: beacond --home (Disks data role, subfolder beacond)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: JSON-RPC WebSocket port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: Execution P2P port (tcp + udp)
+    - key: engine-port
+      source: catalog_port
+      role: engine
+      description: Engine API (JWT) port, 127.0.0.1
+    - key: metrics-port
+      source: catalog_port
+      role: metrics
+      description: bera-reth Prometheus port, 127.0.0.1
+    - key: cl-rpc-port
+      source: catalog_port
+      role: cl_rpc
+      description: beacond CometBFT RPC port, 127.0.0.1
+    - key: cl-p2p-port
+      source: catalog_port
+      role: consensus_p2p
+      description: beacond P2P port (tcp)
+    - key: cl-metrics-port
+      source: catalog_port
+      role: cl_metrics
+      description: beacond Prometheus port, 127.0.0.1
+    - key: cl-proxy-port
+      source: catalog_port
+      role: cl_proxy
+      description: beacond proxy_app (ABCI) port, 127.0.0.1
+    - key: http-api
+      source: literal
+      value: "eth,net,web3,rpc"
+      description: "--http.api / --ws.api (no debug / trace / txpool)"
+    - key: rpc-max-connections
+      source: literal
+      value: "3000"
+      description: "--rpc.max-connections (reth default 500)"
+    - key: rpc-max-response-size
+      source: literal
+      value: "64"
+      description: "--rpc.max-response-size (MB)"
+    - key: rpc-max-blocks-per-filter
+      source: literal
+      value: "50000"
+      description: "--rpc.max-blocks-per-filter"
+    - key: engine-persistence-threshold
+      source: literal
+      value: "0"
+      description: "--engine.persistence-threshold (official run-reth.sh)"
+    - key: engine-memory-block-buffer-target
+      source: literal
+      value: "0"
+      description: "--engine.memory-block-buffer-target (official run-reth.sh)"
+    - key: limit-nofile
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE of every unit
+
+diagnostics:
+  - id: path_mtu

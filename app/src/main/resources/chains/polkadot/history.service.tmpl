@@ -1,0 +1,29 @@
+[Unit]
+Description={{description}}
+After=network-online.target postgresql.service {{node_unit}} {{prepare_unit}}
+Wants={{prepare_unit}}
+PartOf={{node_unit}}
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+ExecStart={{exec_start}}
+Restart=on-failure
+RestartSec=30
+# a SIGTERM ends the process between two batches: every batch is one database transaction, so a stop cannot leave half a block
+TimeoutStopSec=60
+KillMode=mixed
+NoNewPrivileges=yes
+PrivateTmp=yes
+# The processor serves Prometheus on ALL interfaces (no bind option in @subsquid/util-internal-prometheus-server) and needs only
+# PostgreSQL and the node's RPC, both on 127.0.0.1: the unit is confined to loopback, so the metrics port is not reachable
+# from outside.
+IPAddressDeny=any
+IPAddressAllow=localhost
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE={{nofile}}
+
+[Install]
+WantedBy=multi-user.target

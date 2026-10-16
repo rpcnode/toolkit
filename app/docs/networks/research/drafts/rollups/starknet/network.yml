@@ -1,0 +1,145 @@
+# Starknet (Nethermind Juno, standalone Go binary). Snapshot required in practice: genesis sync takes weeks, the official
+# juno-snapshots.nethermind.io tarballs (zstd) restore in hours. Directory name is the network id (starknet).
+# Ports live in clients.yml beside this file.
+label: Starknet
+dataRoot: starknet
+hostPackages:
+  - zstd
+  - unzip
+diskRoles:
+  - id: db
+    label: Juno DB
+    media: nvme
+  - id: snapshots
+    label: snapshots / additional
+    media: ssd
+diskNotes:
+  - "Juno --db-path is the db role leaf; the snapshot is streamed (wget | zstd -d | tar -x) straight into it, no temp archive needed."
+  - "Juno needs an Ethereum L1 WebSocket (--eth-node, wss://) to verify the chain against the Starknet core contract. Mainnet L1 for mainnet, Sepolia for the Starknet Sepolia env."
+  - "The snapshot file name carries the Juno version that wrote it (juno_mainnet_v0.16.8_<block>.tar.zst); run the same or a newer Juno."
+  - "Pruned snapshot + --prune-mode keeps only recent history (RPC fails below the retention floor). Pruning is irreversible."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Starknet Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 1024
+    archiveGiB: 1024
+    cpuCores: 8
+    memoryGiB: 16
+    snapshot: required
+    publicTip:
+      urls:
+        - https://starknet-rpc.publicnode.com
+        - https://api.zan.top/public/starknet-mainnet
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: Pruned
+        hint: Official pruned snapshot (~102 GB on 2026-10-03). Latest blocks + state only. Default.
+        diskGiB: 256
+        default: true
+      - id: full
+        kind: archive
+        label: Full history
+        hint: Official full snapshot (~549 GB on 2026-10-12). Needs ~1.2 TB free while extracting a stream, grows over time.
+        diskGiB: 1024
+    l1Parent:
+      rpc: wss://ethereum-rpc.publicnode.com
+      beacon: ""
+      pickHelp: |
+        Juno verifies Starknet against the Ethereum core contract over a WebSocket. Use the public default or an active
+        Ethereum node from this panel (same-host: ws://127.0.0.1:<ws port>; the node must serve eth WebSocket).
+  - id: sepolia
+    label: Starknet Sepolia
+    diskHintGiB: 256
+    fullNodeGiB: 256
+    archiveGiB: 256
+    cpuCores: 4
+    memoryGiB: 8
+    snapshot: required
+    publicTip:
+      urls:
+        - https://starknet-sepolia-rpc.publicnode.com
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: Pruned
+        hint: Official pruned snapshot (~26 GB). Default.
+        diskGiB: 64
+        default: true
+      - id: full
+        kind: archive
+        label: Full history
+        hint: Official full snapshot (~100 GB).
+        diskGiB: 256
+    l1Parent:
+      rpc: wss://ethereum-sepolia-rpc.publicnode.com
+      beacon: ""
+      pickHelp: |
+        Starknet Sepolia settles on Ethereum Sepolia. Use the public default or an active Ethereum Sepolia node.
+
+# CLI flags live in systemd (chains/starknet). No conf patch on Start.
+clientConfig:
+  program: juno
+  format: flags
+  bindings:
+    - key: snapshot
+      source: install_option
+      option: snapshot
+      default: "pruned"
+      description: Snapshot flavor — pruned or full history
+    - key: datadir
+      source: disk_role_dir
+      role: db
+      description: Juno --db-path (Disks db role)
+    - key: snapshots
+      source: disk_role_dir
+      role: snapshots
+      description: Snapshot workspace (SSD)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port (--http-port)
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: JSON-RPC WebSocket port (--ws-port)
+    - key: metrics-port
+      source: catalog_port
+      role: metrics
+      description: Prometheus endpoint (127.0.0.1)
+    - key: db-cache-size
+      source: literal
+      value: "4096"
+      description: --db-cache-size MB (default 1024; docs suggest 2048-4096 on a RAM-rich RPC host)
+    - key: rpc-max-block-scan
+      source: literal
+      value: "10000"
+      description: --rpc-max-block-scan (default unlimited) — bounds one starknet_getEvents scan
+    - key: rpc-request-timeout
+      source: literal
+      value: "30s"
+      description: --rpc-request-timeout (default 1m)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd open-file limit for Juno
+    - key: prune-blocks
+      source: install_option
+      option: prune_blocks
+      default: ""
+      description: Retention window in blocks (--prune-mode=N); empty = keep everything. Pruning is irreversible.
+    - key: eth-node
+      source: install_option
+      option: l1_rpc
+      default: ""
+      description: Ethereum L1 WebSocket (--eth-node, wss://)
+      testConnect:
+        kind: eth_rpc
+        label: Test connect
+        help: |
+          Juno needs a WebSocket URL (ws:// or wss://). The panel probes the same host over http(s) with eth_blockNumber.
+
+diagnostics:
+  - id: path_mtu

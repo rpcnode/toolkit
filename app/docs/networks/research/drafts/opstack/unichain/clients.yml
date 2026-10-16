@@ -1,0 +1,51 @@
+# Unichain: Unichain (OP Stack, Superchain Registry `unichain`): op-reth + op-node from the ethereum-optimism monorepo, built on the host (same pins as chains/optimism).
+# op-reth + op-node: pinned tags of ethereum-optimism/optimism, compiled by the panel build hosts (`build:`) and synced as `<name>-<arch>`;
+# a host without the prebuilt binary compiles them itself (run.sh.tmpl). The pins MUST equal OpstackToolchain.RETH_TAG / NODE_TAG (a test keeps them equal).
+# Dockerfiles: copy shared/op-reth.Dockerfile + shared/op-node.Dockerfile beside this file (the loader rejects paths), or adopt the shared-dockerfile core change (FAMILY.md section 10).
+programs:
+  - env: mainnet
+    id: op-reth
+    source: { type: pinned, version: "2.6.0", tag: "op-reth/v2.6.0", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-reth.Dockerfile, outputs: [op-reth], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/unichain.log }
+    artifacts: []
+    ports:
+      - { role: http, port: 42620, label: "EL JSON-RPC", config: required }
+      - { role: ws, port: 42621, label: "EL WebSocket", config: required }
+      - { role: engine, port: 42623, label: "EL Engine API (127.0.0.1)", config: required }
+      - { role: metrics, port: 42624, label: "EL metrics", config: required }
+      - { role: p2p, port: 42622, label: "EL P2P", config: required, protocol: both }
+      - { role: discv5, port: 42628, label: "EL discv5 (UDP)", config: required, protocol: udp }
+  - env: mainnet
+    id: op-node
+    source: { type: pinned, version: "1.19.9", tag: "op-node/v1.19.9", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-node.Dockerfile, outputs: [op-node], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/unichain.log }
+    artifacts: []
+    ports:
+      - { role: cl_rpc, port: 42625, label: "op-node RPC", config: required }
+      - { role: cl_metrics, port: 42627, label: "op-node metrics", config: required }
+      - { role: cl_p2p, port: 42626, label: "op-node P2P", config: required, protocol: both }
+  - env: sepolia
+    id: op-reth
+    source: { type: pinned, version: "2.6.0", tag: "op-reth/v2.6.0", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-reth.Dockerfile, outputs: [op-reth], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/unichain.log }
+    artifacts: []
+    ports:
+      - { role: http, port: 42630, label: "EL JSON-RPC", config: required }
+      - { role: ws, port: 42631, label: "EL WebSocket", config: required }
+      - { role: engine, port: 42633, label: "EL Engine API (127.0.0.1)", config: required }
+      - { role: metrics, port: 42634, label: "EL metrics", config: required }
+      - { role: p2p, port: 42632, label: "EL P2P", config: required, protocol: both }
+      - { role: discv5, port: 42638, label: "EL discv5 (UDP)", config: required, protocol: udp }
+  - env: sepolia
+    id: op-node
+    source: { type: pinned, version: "1.19.9", tag: "op-node/v1.19.9", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-node.Dockerfile, outputs: [op-node], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/unichain.log }
+    artifacts: []
+    ports:
+      - { role: cl_rpc, port: 42635, label: "op-node RPC", config: required }
+      - { role: cl_metrics, port: 42637, label: "op-node metrics", config: required }
+      - { role: cl_p2p, port: 42636, label: "op-node P2P", config: required, protocol: both }

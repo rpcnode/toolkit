@@ -1,0 +1,120 @@
+# Polygon (Bor + Heimdall v2) snapshot restore from the community snapshots of PublicNode (Allnodes).
+#  Heimdall v2 cannot sync from its genesis (public peers keep only the last ~3 weeks of blocks) and Bor from block 0 takes days.
+#  1. read publicnode.com/snapshots: the newest Heimdall (pruned) file and the Bor files (base = old history, part = the rest + state)
+#  2. Heimdall: resumable download (the link redirects to a signed, expiring URL), unpack data/application.db/... into the home
+#  3. Bor: the same for base, then part, bor/chaindata/... into <datadir>/data  (stale chaindata and triedb journal are removed first)
+# The PublicNode "pruned" Bor archive is NOT used: its chain freezer is empty and Bor (2.10.2 and 2.10.3 checked) refuses it with
+# "ancient chain segments already extracted". base + part is the history Bor opens.
+# Units are stopped by the prelude. The Heimdall config/ and keys are never touched. No checksum is published for these files.
+PAGE='{{page_url}}'
+HEIM_PREFIX='{{heimdall_prefix}}'
+BOR_PREFIXES='{{bor_prefixes}}'
+HEIMDALL='{{heimdall_home}}'
+BORDATA='{{bor_data}}'
+STAGE='{{stage_dir}}'
+
+# newest link of one snapshot family on the page text: names end in -<height>.tar.lz4 or -<from>-<to>.tar.lz4; the last number orders them
+latest_link() {
+  grep -oE "https://snapshots\.publicnode\.com/$2-[0-9]+(-[0-9]+)?\.tar\.lz4" "$1" | sort -u \
+    | sed -E 's#.*-([0-9]+)\.tar\.lz4$#\1 &#' | sort -n | tail -1 | cut -d' ' -f2
+}
+
+# size of the file behind a (redirecting, signed) link: HEAD is refused, a one-byte range answers Content-Range
+total_size() {
+  curl -sSL --max-time 30 -r 0-0 -D - -o /dev/null "$1" | tr -d '\r' | awk 'tolower($1)=="content-range:" { split($3, a, "/"); v = a[2] } END { print v + 0 }'
+}
+
+# fetch URL DEST LABEL FROM_PCT TO_PCT: resumable; every retry asks the original link again and gets a fresh signed URL
+fetch() {
+  local url="$1" dest="$2" label="$3" lo="$4" hi="$5" total have pct cpid
+  total=$(total_size "$url")
+  mkdir -p "$(dirname "$dest")"
+  curl -fL --retry 8 --retry-delay 5 --retry-all-errors -C - -o "$dest" "$url" >>"$LOG" 2>&1 &
+  cpid=$!
+  while kill -0 "$cpid" 2>/dev/null; do
+    have=$(stat -c %s "$dest" 2>/dev/null || echo 0)
+    if [ "$total" -gt 0 ]; then pct=$(( lo + (hi - lo) * have / total )); else pct=$lo; fi
+    state download "$pct" "$label: $(( have / 1048576 )) of $(( total / 1048576 )) MiB"
+    sleep 5
+  done
+  wait "$cpid" || fail "$label download failed (see $LOG)"
+}
+
+# --- restore ---------------------------------------------------------------------------------------------------------
+for tool in curl lz4 tar; do
+  command -v "$tool" >/dev/null 2>&1 || fail "$tool is missing - run the Host deps step (apt install lz4)"
+done
+mkdir -p "$STAGE" "$HEIMDALL" "$BORDATA"
+
+state download 0 "looking up the newest snapshots on publicnode.com"
+curl -fsSL --retry 5 --max-time 60 "$PAGE" -o "$STAGE/publicnode.html" || fail "cannot read $PAGE"
+HEIM_URL=$(latest_link "$STAGE/publicnode.html" "$HEIM_PREFIX")
+[ -n "$HEIM_URL" ] || fail "no $HEIM_PREFIX snapshot is listed on $PAGE"
+echo "heimdall snapshot: $HEIM_URL" >>"$LOG"
+BOR_URLS=""
+for prefix in $BOR_PREFIXES; do
+  url=$(latest_link "$STAGE/publicnode.html" "$prefix")
+  [ -n "$url" ] || fail "no $prefix snapshot is listed on $PAGE"
+  echo "bor snapshot: $url" >>"$LOG"
+  BOR_URLS="$BOR_URLS $url"
+done
+
+# base is <0>-<B>, part is <B+1>-<tip>: files of different days do not line up and would leave a hole in the history
+prev_end=""
+for url in $BOR_URLS; do
+  nums=$(basename "$url" .tar.lz4 | grep -oE '[0-9]+-[0-9]+$' || true)
+  if [ -n "$nums" ]; then
+    from=${nums%-*}; to=${nums#*-}
+    if [ -n "$prev_end" ] && [ "$from" -ne $(( prev_end + 1 )) ]; then
+      fail "the Bor snapshots do not line up ($(basename "$url") starts at $from, the previous one ends at $prev_end) - the files are being republished, try again in a few minutes"
+    fi
+    prev_end=$to
+  fi
+done
+
+HEIM_SIZE=$(total_size "$HEIM_URL")
+[ "$HEIM_SIZE" -gt 0 ] || fail "cannot read the size of the Heimdall snapshot (the link did not answer)"
+BOR_TOTAL=0; BOR_MAX=0
+for url in $BOR_URLS; do
+  size=$(total_size "$url")
+  [ "$size" -gt 0 ] || fail "cannot read the size of $(basename "$url") (the link did not answer)"
+  BOR_TOTAL=$(( BOR_TOTAL + size ))
+  [ "$size" -le "$BOR_MAX" ] || BOR_MAX=$size
+done
+# the stage holds one archive at a time; the unpacked Bor data is about 1.3x the compressed total, the Heimdall data about 2x
+need_stage=$(( (HEIM_SIZE > BOR_MAX ? HEIM_SIZE : BOR_MAX) + 1073741824 ))
+for pair in "$STAGE:$need_stage" "$HEIMDALL:$(( HEIM_SIZE * 2 ))" "$BORDATA:$(( BOR_TOTAL * 3 / 2 ))"; do
+  dir="${pair%%:*}"; size="${pair##*:}"
+  avail=$(df -B1 --output=avail "$dir" | tail -1 | tr -d ' ')
+  [ "${avail:-0}" -gt "$size" ] || fail "not enough free space for $dir: $(( avail / 1073741824 )) GiB free, the snapshot needs about $(( size / 1073741824 )) GiB"
+done
+
+# Heimdall -----------------------------------------------------------------------------------------------------------
+fetch "$HEIM_URL" "$STAGE/heimdall.tar.lz4" "Heimdall $(basename "$HEIM_URL")" 1 35
+state extract 35 "Heimdall: unpacking into $HEIMDALL/data"
+rm -rf "$HEIMDALL/data"
+lz4 -dc "$STAGE/heimdall.tar.lz4" | tar -xf - -C "$HEIMDALL" >>"$LOG" 2>&1 || fail "Heimdall snapshot unpack failed (see $LOG)"
+[ -d "$HEIMDALL/data/application.db" ] || fail "the Heimdall snapshot has no data/application.db - unexpected archive layout"
+rm -f "$STAGE/heimdall.tar.lz4"
+
+# Bor ----------------------------------------------------------------------------------------------------------------
+rm -rf "$BORDATA/bor/chaindata" "$BORDATA/bor/triedb"
+n=0; for url in $BOR_URLS; do n=$((n + 1)); done
+i=0; done_bytes=0
+for url in $BOR_URLS; do
+  i=$((i + 1))
+  size=$(total_size "$url")
+  lo=$(( 45 + 40 * done_bytes / BOR_TOTAL )); hi=$(( 45 + 40 * (done_bytes + size) / BOR_TOTAL ))
+  fetch "$url" "$STAGE/bor.tar.lz4" "Bor $i/$n $(basename "$url")" "$lo" "$hi"
+  state extract "$hi" "Bor $i/$n: unpacking into $BORDATA/bor"
+  lz4 -dc "$STAGE/bor.tar.lz4" | tar -xf - -C "$BORDATA" >>"$LOG" 2>&1 || fail "Bor snapshot unpack failed: $(basename "$url") (see $LOG)"
+  rm -f "$STAGE/bor.tar.lz4"
+  done_bytes=$(( done_bytes + size ))
+done
+[ -d "$BORDATA/bor/chaindata" ] || fail "the Bor snapshot has no bor/chaindata - unexpected archive layout"
+[ -f "$BORDATA/bor/chaindata/ancient/chain/bodies.0000.cdat" ] && [ -s "$BORDATA/bor/chaindata/ancient/chain/bodies.0000.cdat" ] \
+  || fail "the Bor snapshot has no chain history (ancient/chain is empty) - Bor would refuse to start"
+rm -rf "$STAGE"
+
+touch "$MARKER"
+state done 100 "Polygon snapshots restored: $(basename "$HEIM_URL"), $n Bor archive(s)"

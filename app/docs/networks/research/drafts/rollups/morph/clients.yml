@@ -1,0 +1,101 @@
+# Morph: geth fork (ghcr.io/morph-l2/go-ethereum:{GETH_VERSION}) + morphnode (ghcr.io/morph-l2/node:{NODE_VERSION}). The two versions
+# are pinned TOGETHER from run-morph-node morph-node/docker-compose.yml (verified 2026-10-13: go-ethereum 2.2.6, node 0.6.3;
+# GitHub tags morph-v2.2.6 / v0.6.3 exist, no release assets). Binaries: /usr/local/bin/geth, /usr/local/bin/morphnode (+ tendermint, unused).
+# config.toml / genesis.json / static-nodes.json: raw GitHub of run-morph-node main (no releases/tags there).
+programs:
+  - env: mainnet
+    id: geth
+    source: { type: pinned, version: "2.2.6", tag: "2.2.6", label: "morph-l2/go-ethereum (run-morph-node compose)" }
+    artifacts:
+      - name: "morph-geth-x86_64-linux.tar.gz"
+        nameAarch64: "morph-geth-aarch64-linux.tar.gz"
+        urlTemplate: "docker://ghcr.io/morph-l2/go-ethereum:{tag}"
+        urlTemplateAarch64: "docker://ghcr.io/morph-l2/go-ethereum:{tag}"
+    configs:
+      - name: morph-mainnet-static-nodes.json
+        urlTemplate: "https://raw.githubusercontent.com/morph-l2/run-morph-node/main/mainnet/geth-data/static-nodes.json"
+    requirements: { logFile: logs/geth.log }
+    ports:
+      - { role: http, port: 42050, label: "geth HTTP JSON-RPC", config: required }
+      - { role: ws, port: 42051, label: "geth WebSocket", config: required }
+      - { role: p2p, port: 42052, label: "geth P2P", config: required, protocol: both }
+      - { role: engine, port: 42053, label: "geth authrpc (127.0.0.1)", config: required }
+      - { role: metrics, port: 42054, label: "geth metrics (127.0.0.1)", config: required }
+  - env: mainnet
+    id: morphnode
+    source: { type: pinned, version: "0.6.3", tag: "0.6.3", label: "morph-l2/morph (run-morph-node compose)" }
+    artifacts:
+      - name: "morphnode-x86_64-linux.tar.gz"
+        nameAarch64: "morphnode-aarch64-linux.tar.gz"
+        urlTemplate: "docker://ghcr.io/morph-l2/node:{tag}"
+        urlTemplateAarch64: "docker://ghcr.io/morph-l2/node:{tag}"
+    configs:
+      - name: morph-mainnet-config.toml
+        urlTemplate: "https://raw.githubusercontent.com/morph-l2/run-morph-node/main/mainnet/node-data/config/config.toml"
+      - name: morph-mainnet-genesis.json
+        urlTemplate: "https://raw.githubusercontent.com/morph-l2/run-morph-node/main/mainnet/node-data/config/genesis.json"
+    requirements: { logFile: logs/morphnode.log }
+    ports:
+      - { role: cl_rpc, port: 42055, label: "morphnode RPC (127.0.0.1)", config: required }
+      - { role: cl_p2p, port: 42056, label: "morphnode P2P", config: required, protocol: tcp }
+      - { role: cl_metrics, port: 42057, label: "morphnode metrics (127.0.0.1)", config: required }
+      - { role: cl_abci, port: 42058, label: "morphnode proxy_app (127.0.0.1)", config: required }
+  - env: hoodi
+    id: geth
+    source: { type: pinned, version: "2.2.6", tag: "2.2.6", label: "morph-l2/go-ethereum (run-morph-node compose)" }
+    artifacts:
+      - name: "morph-geth-x86_64-linux.tar.gz"
+        nameAarch64: "morph-geth-aarch64-linux.tar.gz"
+        urlTemplate: "docker://ghcr.io/morph-l2/go-ethereum:{tag}"
+        urlTemplateAarch64: "docker://ghcr.io/morph-l2/go-ethereum:{tag}"
+    configs:
+      - name: morph-hoodi-static-nodes.json
+        urlTemplate: "https://raw.githubusercontent.com/morph-l2/run-morph-node/main/hoodi/geth-data/static-nodes.json"
+    requirements: { logFile: logs/geth.log }
+    ports:
+      - { role: http, port: 42060, label: "geth HTTP JSON-RPC", config: required }
+      - { role: ws, port: 42061, label: "geth WebSocket", config: required }
+      - { role: p2p, port: 42062, label: "geth P2P", config: required, protocol: both }
+      - { role: engine, port: 42063, label: "geth authrpc (127.0.0.1)", config: required }
+      - { role: metrics, port: 42064, label: "geth metrics (127.0.0.1)", config: required }
+  - env: hoodi
+    id: morphnode
+    source: { type: pinned, version: "0.6.3", tag: "0.6.3", label: "morph-l2/morph (run-morph-node compose)" }
+    artifacts:
+      - name: "morphnode-x86_64-linux.tar.gz"
+        nameAarch64: "morphnode-aarch64-linux.tar.gz"
+        urlTemplate: "docker://ghcr.io/morph-l2/node:{tag}"
+        urlTemplateAarch64: "docker://ghcr.io/morph-l2/node:{tag}"
+    configs:
+      - name: morph-hoodi-config.toml
+        urlTemplate: "https://raw.githubusercontent.com/morph-l2/run-morph-node/main/hoodi/node-data/config/config.toml"
+      - name: morph-hoodi-genesis.json
+        urlTemplate: "https://raw.githubusercontent.com/morph-l2/run-morph-node/main/hoodi/node-data/config/genesis.json"
+    requirements: { logFile: logs/morphnode.log }
+    ports:
+      - { role: cl_rpc, port: 42065, label: "morphnode RPC (127.0.0.1)", config: required }
+      - { role: cl_p2p, port: 42066, label: "morphnode P2P", config: required, protocol: tcp }
+      - { role: cl_metrics, port: 42067, label: "morphnode metrics (127.0.0.1)", config: required }
+      - { role: cl_abci, port: 42068, label: "morphnode proxy_app (127.0.0.1)", config: required }
+
+# Snapshots: the NAME and its three derivation heights come from the run-morph-node README table (GitHub raw); the file from
+# snapshot.morph.network/<net>/<name>.tar.gz (+ .sha256). discover: readme_table (new) picks the newest row of the flavor.
+snapshots:
+  mainnet:
+    full:
+      mirror: "https://snapshot.morph.network/mainnet/"
+      filename: "snapshot-{date}-{n}.tar.gz"
+      discover: readme_table
+    archive:
+      mirror: "https://snapshot.morph.network/mainnet/"
+      filename: "snapshot-archive-{date}-{n}.tar.gz"
+      discover: readme_table
+  hoodi:
+    full:
+      mirror: "https://snapshot.morph.network/hoodi/"
+      filename: "snapshot-{date}-{n}.tar.gz"
+      discover: readme_table
+    archive:
+      mirror: "https://snapshot.morph.network/hoodi/"
+      filename: "snapshot-archive-{date}-{n}.tar.gz"
+      discover: readme_table

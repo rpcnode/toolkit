@@ -37,6 +37,15 @@ class RemoveNodeStepsUseCaseTest
     {
         val calls = mutableListOf<String>()
 
+        /** refresh and hook runs in order (kept apart from [calls], whose exact content other tests compare) */
+        val hookEvents = mutableListOf<String>()
+
+        override fun refreshRemoveHooks(network: String, dirs: List<Path>): Int
+        {
+            hookEvents += "refresh:$network"
+            return 0
+        }
+
         override fun unitActive(network: String, env: String) = active
         override fun units(network: String, env: String, nodeDir: Path?) =
             listOf("rpcnode-$network-$env.service", "lighthouse-$network-$env.service")
@@ -68,6 +77,7 @@ class RemoveNodeStepsUseCaseTest
 
         override fun runRemoveHooks(dirs: List<Path>, wipe: Boolean): HostNodeLaunchSupport.HookResult
         {
+            hookEvents += "hook"
             calls += "hook:wipe=$wipe"
             return hook
         }
@@ -153,6 +163,19 @@ class RemoveNodeStepsUseCaseTest
         val order = ops.calls.filter { it == "stop" || it.startsWith("hook") || it.startsWith("delete:") }
         assertEquals("stop", order.first())
         assertEquals("hook:wipe=true", order[1], "the hook is told the data is wiped too")
+    }
+
+    @Test
+    fun an_old_hook_is_refreshed_for_the_network_right_before_it_runs()
+    {
+        val ops = FakeOps(
+            existing = mutableSetOf(Path.of("/data/tron/nile/fullnode")),
+            hook = HostNodeLaunchSupport.HookResult.Done("removed MyTonCtrl"),
+        )
+        val uc = useCase(ops)
+        assertIs<StartRemovalResult.Started>(uc.start(command()))
+        uc.await()
+        assertEquals(listOf("refresh:tron", "hook"), ops.hookEvents, "refresh first, then the (now current) hook")
     }
 
     @Test

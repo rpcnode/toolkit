@@ -1,0 +1,16 @@
+#!/bin/bash
+# One-shot story bootstrap (runs from the starter when <home>/config/config.toml is missing). `story init` generates genesis/seeds for the named network.
+set -euo pipefail
+STORY='{{story}}'; HOME_DIR='{{home}}'; NETWORK='{{story_network}}'    # story | aeneid
+MONIKER='{{moniker}}'; EXT_IP='{{external_ip}}'
+RPC='{{cl_rpc_port}}'; P2P='{{cl_p2p_port}}'; PROM='{{cl_metrics_port}}'; PROXY='{{cl_proxy_port}}'
+mkdir -p "$HOME_DIR"
+INIT_ARGS=(init --network "$NETWORK" --home "$HOME_DIR" --moniker "$MONIKER" --rpc-laddr "tcp://127.0.0.1:${RPC}")
+[ -n "$EXT_IP" ] && INIT_ARGS+=(--external-address "${EXT_IP}:${P2P}")
+"$STORY" "${INIT_ARGS[@]}"
+CFG="$HOME_DIR/config/config.toml"
+# p2p listen + prometheus + ABCI proxy have no init flag: patch config.toml (CometBFT keys)
+sed -i "s|^laddr = \"tcp://0.0.0.0:26656\"|laddr = \"tcp://0.0.0.0:${P2P}\"|"             "$CFG"
+sed -i "s|^prometheus = .*|prometheus = true|"                                           "$CFG"
+sed -i "s|^prometheus_listen_addr = .*|prometheus_listen_addr = \"127.0.0.1:${PROM}\"|"   "$CFG"
+sed -i "s|^proxy_app = .*|proxy_app = \"tcp://127.0.0.1:${PROXY}\"|"                      "$CFG"

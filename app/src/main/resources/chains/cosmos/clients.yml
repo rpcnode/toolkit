@@ -1,0 +1,18 @@
+# Cosmos Hub: gaiad from upstream GitHub releases (no Docker). Draft, see specs/cosmos/networks.md for verification.
+programs:
+  - env: mainnet
+    id: gaiad
+    source: { type: github, repo: cosmos/gaia }
+    artifacts:
+      - name: "gaiad"
+        urlTemplate: "https://github.com/cosmos/gaia/releases/download/{tag}/gaiad-{tag}-linux-amd64"
+    configs:
+      - name: genesis.json
+        urlTemplate: "https://snapshots.polkachu.com/genesis/cosmos/genesis.json"
+    requirements: { logFile: logs/cosmos.log }
+    ports:
+      - { role: http, port: 41300, label: "CometBFT RPC (/status)", config: required }
+      - { role: p2p, port: 41302, label: "CometBFT P2P", config: required }
+      - { role: metrics, port: 41304, label: "CometBFT Prometheus (127.0.0.1)", config: required }
+      - { role: api, port: 41305, label: "Cosmos REST (LCD)", config: required }
+      - { role: grpc, port: 41307, label: "Cosmos gRPC", config: required }

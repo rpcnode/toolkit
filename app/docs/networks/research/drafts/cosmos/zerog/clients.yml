@@ -1,0 +1,41 @@
+# 0G Chain from the official release packages on GitHub (no Docker). One tarball per env carries reth + 0gchaind (+ geth, unused),
+# geth-genesis.json, kzg-trusted-setup.json and the default 0gchaind-home config. linux/amd64 ONLY (ELF x86-64 verified).
+# mainnet: 0gfoundation/0gchain-Aristotle (tags v1.0.7 … and 1.0.4 without "v"); testnet: 0gfoundation/0gchain-NG (tags v3.0.x).
+# Mainnet tarball layout: aristotle-v<ver>/{bin,0g-home,geth-genesis.json,kzg-trusted-setup.json}.
+# Testnet tarball layout: galileo-v<ver>/{bin, rpc/, validator/, seed/}  (use rpc/: rpc/0g-home, rpc/geth-genesis.json, rpc/kzg-trusted-setup.json).
+# Extract with normalizeDir "aristotle-*" / "galileo-*" (Kotlin ZerogNodeStart).
+programs:
+  - env: mainnet
+    id: 0g-chain
+    source: { type: github, repo: 0gfoundation/0gchain-Aristotle }
+    artifacts:
+      - name: "0g-chain.tar.gz"
+        urlTemplate: "https://github.com/0gfoundation/0gchain-Aristotle/releases/download/{tag}/aristotle-v{version}.tar.gz"
+    requirements: { logFile: logs/0g.log }
+    ports:
+      - { role: http, port: 42860, label: "reth JSON-RPC", config: required }
+      - { role: ws, port: 42861, label: "reth WebSocket", config: required }
+      - { role: p2p, port: 42862, label: "reth P2P", config: required, protocol: both }
+      - { role: engine, port: 42863, label: "reth Engine API (127.0.0.1)", config: required }
+      - { role: metrics, port: 42864, label: "reth metrics (127.0.0.1)", config: required }
+      - { role: cl_rpc, port: 42865, label: "0gchaind CometBFT RPC", config: required }
+      - { role: cl_p2p, port: 42866, label: "0gchaind P2P", config: required }
+      - { role: cl_metrics, port: 42867, label: "0gchaind Prometheus (127.0.0.1)", config: required }
+      - { role: node_api, port: 42868, label: "0gchaind node API (127.0.0.1)", config: required }
+  - env: testnet
+    id: 0g-chain
+    source: { type: github, repo: 0gfoundation/0gchain-NG }
+    artifacts:
+      - name: "0g-chain.tar.gz"
+        urlTemplate: "https://github.com/0gfoundation/0gchain-NG/releases/download/{tag}/galileo-v{version}.tar.gz"
+    requirements: { logFile: logs/0g.log }
+    ports:
+      - { role: http, port: 42870, label: "reth JSON-RPC", config: required }
+      - { role: ws, port: 42871, label: "reth WebSocket", config: required }
+      - { role: p2p, port: 42872, label: "reth P2P", config: required, protocol: both }
+      - { role: engine, port: 42873, label: "reth Engine API (127.0.0.1)", config: required }
+      - { role: metrics, port: 42874, label: "reth metrics (127.0.0.1)", config: required }
+      - { role: cl_rpc, port: 42875, label: "0gchaind CometBFT RPC", config: required }
+      - { role: cl_p2p, port: 42876, label: "0gchaind P2P", config: required }
+      - { role: cl_metrics, port: 42877, label: "0gchaind Prometheus (127.0.0.1)", config: required }
+      - { role: node_api, port: 42878, label: "0gchaind node API (127.0.0.1)", config: required }

@@ -135,3 +135,22 @@ Height/tip use **http** (TON HTTP API). P2P = validator listen.
 ## 12–13. Lifecycle / options
 
 sync → active on tip lag ≤ 3. Install option group `history` default `dump` (`archive` → `--archive`).
+
+---
+
+## Indexer database (changed 2026-10-15)
+
+The v3 indexer no longer shares a PostgreSQL server with the rest of the host. A new install creates a **PostgreSQL cluster of its own** for
+the node (`pg_createcluster`, no Docker): data **and WAL** in `<indexer dir>/pgcluster` (the indexer disk role), loopback-only on the
+catalog port `indexer_pg` (mainnet 15432, testnet 15433), tuned for the load, named `rpcnode-ton-<env>`
+(systemd `postgresql@<version>-rpcnode-ton-<env>`). The host's other servers are never touched; if PostgreSQL was not installed the packages
+are installed and the stock `main` cluster that the package creates is dropped again. Removing the node drops the cluster and its directory.
+
+Why: with the earlier layout (role + database + **tablespace** on the indexer disk in the host's shared server) only tables and indexes went
+to the indexer disk. The WAL stayed in the shared server's data directory (on `/`), so every commit's fsync and up to `max_wal_size = 16GB` of
+WAL landed on the system disk (measured on a production host: pg_wal 17 GB on a consumer SSD, ~56 ms write latency, 80 % utilisation).
+
+A node installed with the earlier layout (`ton-indexer/pg.env` contains `PG_TS=`) **keeps working unchanged**: it is not migrated. To get its
+WAL off the system disk without a migration use `scripts/move-postgres-wal.sh`. Not done: the same change for the Cardano db-sync and
+Polkadot history indexers, which still use `chains/default/postgres-functions.sh` (tablespace on the shared server).
+Tests: `TonIndexerScriptTest`, `TonIndexerClusterTest` (runs the real `provision_database` against stand-ins for `pg_createcluster`, `psql`, `apt-get`).

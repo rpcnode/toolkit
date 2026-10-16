@@ -1,0 +1,67 @@
+# Lens Chain (ZK Stack VALIDIUM, data availability on Avail). Same recipe as zksync + EN_L1_BATCH_COMMIT_DATA_GENERATOR_MODE=Validium
+# + the Avail DA client (EN_DA_*) + components core,api,da_fetcher,tree_fetcher (treeless: no local Merkle tree, no zks_getProof).
+label: Lens Chain
+dataRoot: lens
+hostPackages:
+  - postgresql
+  - libssl3
+diskRoles:
+  - id: rocksdb
+    label: State cache (RocksDB)
+    media: nvme
+  - id: postgres
+    label: PostgreSQL tablespace
+    media: nvme
+diskNotes:
+  - "Lens docs: ~16 cores, 64 GB RAM (+~1 TB RAM temporarily for a local Merkle tree), 2 TB storage. The toolkit runs treeless (tree_fetcher) so the 1 TB RAM step is not needed; zks_getProof is unavailable."
+  - "Snapshot recovery from the public GCS bucket raas-lens-mainnet-external-node-snapshots (~23 GB compressed). No pre-snapshot history."
+  - "Archive history only via the 99 GB pg_dump (lens-chain-db-dump.s3.us-east-1.amazonaws.com/endb.dump, last modified 2025-06-19 = stale)."
+  - "The Avail DA client needs a seed phrase only to initialise the verifier — it never signs/sends. Generate one per host (no funds)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Lens Mainnet
+    diskHintGiB: 2048
+    fullNodeGiB: 1024
+    archiveGiB: 4096
+    cpuCores: 16
+    memoryGiB: 64
+    snapshot: required
+    snapshotBootstrap: via_node
+    publicTip:
+      urls:
+        - https://rpc.lens.xyz
+    snapshotTypes:
+      - id: recovery
+        kind: full
+        label: Snapshot recovery
+        hint: Official GCS snapshot (~23 GB compressed). Default.
+        diskGiB: 1024
+        default: true
+    l1Parent:
+      rpc: https://ethereum-rpc.publicnode.com
+      beacon: ""
+      pickHelp: |
+        Lens settles on Ethereum mainnet. Click Public or pick an active Ethereum node.
+  - id: testnet
+    label: Lens Testnet (Sepolia)
+    diskHintGiB: 256
+    fullNodeGiB: 128
+    archiveGiB: 512
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc.testnet.lens.dev
+    l1Parent:
+      rpc: https://ethereum-sepolia-rpc.publicnode.com
+      beacon: ""
+      pickHelp: |
+        Lens Testnet settles on Ethereum Sepolia. No public testnet snapshot (lens-chain-node sets EN_SNAPSHOTS_RECOVERY_ENABLED=false).
+clientConfig:
+  program: zksync_external_node
+  format: flags   # en.env is generated on every Start (chains/zkstack) — no conf patch; the keys below are the EN_* variables
+  bindings: []   # = zksync bindings + da-app-id / da-api-node-url / da-bridge-api-url as literals per env (see Lens cluster in FAMILY.md)
+diagnostics:
+  - id: path_mtu

@@ -1,0 +1,31 @@
+# geth for Vana (patched on mainnet, stock on moksha). `geth --datadir D --state.scheme=path init genesis.json` runs once from the starter (like chains/bsc ensureDatadirInit).
+# {{nat_flag}} = " --nat=extip:<ip>" when known. Bootnodes from .env.<env>.example (EL_BOOTNODE_1/2) -> {{bootnodes}}.
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={{bin}} \
+  --networkid={{chain_id}} \
+  --datadir={{datadir}} \
+  --port={{p2p_port}} --discovery.port={{p2p_port}} \
+  --syncmode=full --state.scheme=path --gcmode=full \
+  --bootnodes={{bootnodes}} \
+  --http --http.addr=0.0.0.0 --http.port={{http_port}} --http.api=eth,net,web3 --http.vhosts=* \
+  --ws --ws.addr=0.0.0.0 --ws.port={{ws_port}} --ws.api=eth,net,web3 --ws.origins=* \
+  --rpc.batch-request-limit=5000 --rpc.batch-response-max-size=125000000 --rpc.evmtimeout=0 --rpc.txfeecap=1000 \
+  --authrpc.addr=127.0.0.1 --authrpc.port={{engine_port}} --authrpc.jwtsecret={{jwt_path}} --authrpc.vhosts=localhost \
+  --metrics --metrics.addr=127.0.0.1 --metrics.port={{metrics_port}} \
+  --ipcdisable{{nat_flag}}
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=600
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE=1048576
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

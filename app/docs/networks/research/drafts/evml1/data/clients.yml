@@ -1,0 +1,62 @@
+# DATA Network (ex-Story): story-geth (execution) + story (consensus), raw static binaries from piplabs GitHub releases (no Docker, no tarball).
+# VERIFIED 2026-10-13 (HTTP 200): piplabs/story-geth v1.2.3 -> geth-linux-{amd64,arm64}-v1.2.3 (82 / 79 MB) (v1.2.1 and older used a tag-less name `geth-linux-amd64`: pin the template to the new form);
+#                                  piplabs/story v1.8.0 -> story-linux-{amd64,arm64} (126 / 116 MB). Each asset has a .sha256 sibling.
+# The two clients version independently; compatibility is documented only in release notes -> keep both on "latest stable" and expose both pins.
+# Ports come from specs/PORTS.md (data base 41360): mainnet 41360-41369, aeneid 41370-41379. Upstream defaults (8545/8546/8551/30303/26656/26657/26658/26660/1317) are not used.
+programs:
+  - env: mainnet
+    id: story-geth
+    source: { type: github, repo: piplabs/story-geth }
+    artifacts:
+      - name: "story-geth"
+        nameAarch64: "story-geth"
+        urlTemplate: "https://github.com/piplabs/story-geth/releases/download/{tag}/geth-linux-amd64-{tag}"
+        urlTemplateAarch64: "https://github.com/piplabs/story-geth/releases/download/{tag}/geth-linux-arm64-{tag}"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 41360, label: "HTTP RPC", config: required }
+      - { role: ws, port: 41361, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 41362, label: "Execution P2P", config: required, protocol: both }
+      - { role: engine, port: 41363, label: "Engine API", config: required }
+      - { role: metrics, port: 41364, label: "Execution metrics", config: required }
+      - { role: cl_rpc, port: 41365, label: "Consensus RPC (CometBFT)", config: required }
+      - { role: consensus_p2p, port: 41366, label: "Consensus P2P", config: required }
+      - { role: cl_api, port: 41367, label: "Consensus REST api", config: required }
+      - { role: cl_metrics, port: 41368, label: "Consensus metrics", config: required }
+      - { role: cl_proxy, port: 41369, label: "Consensus proxy_app (ABCI)", config: required }
+  - env: mainnet
+    id: story
+    source: { type: github, repo: piplabs/story }
+    artifacts:
+      - name: "story"
+        nameAarch64: "story"
+        urlTemplate: "https://github.com/piplabs/story/releases/download/{tag}/story-linux-amd64"
+        urlTemplateAarch64: "https://github.com/piplabs/story/releases/download/{tag}/story-linux-arm64"
+  - env: aeneid
+    id: story-geth
+    source: { type: github, repo: piplabs/story-geth }
+    artifacts:
+      - name: "story-geth"
+        nameAarch64: "story-geth"
+        urlTemplate: "https://github.com/piplabs/story-geth/releases/download/{tag}/geth-linux-amd64-{tag}"
+        urlTemplateAarch64: "https://github.com/piplabs/story-geth/releases/download/{tag}/geth-linux-arm64-{tag}"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 41370, label: "HTTP RPC", config: required }
+      - { role: ws, port: 41371, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 41372, label: "Execution P2P", config: required, protocol: both }
+      - { role: engine, port: 41373, label: "Engine API", config: required }
+      - { role: metrics, port: 41374, label: "Execution metrics", config: required }
+      - { role: cl_rpc, port: 41375, label: "Consensus RPC (CometBFT)", config: required }
+      - { role: consensus_p2p, port: 41376, label: "Consensus P2P", config: required }
+      - { role: cl_api, port: 41377, label: "Consensus REST api", config: required }
+      - { role: cl_metrics, port: 41378, label: "Consensus metrics", config: required }
+      - { role: cl_proxy, port: 41379, label: "Consensus proxy_app (ABCI)", config: required }
+  - env: aeneid
+    id: story
+    source: { type: github, repo: piplabs/story }
+    artifacts:
+      - name: "story"
+        nameAarch64: "story"
+        urlTemplate: "https://github.com/piplabs/story/releases/download/{tag}/story-linux-amd64"
+        urlTemplateAarch64: "https://github.com/piplabs/story/releases/download/{tag}/story-linux-arm64"

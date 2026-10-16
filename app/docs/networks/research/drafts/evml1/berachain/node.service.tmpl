@@ -1,0 +1,31 @@
+# bera-reth. {{chain}} = mainnet | bepolia (`--chain mainnet|bepolia`, built in). {{archive_flag}} = " --full" (pruned) or "" (archive).
+# {{trusted_peers_flag}} = " --trusted-peers <enodes>" from el-peers.txt; {{nat_flag}} = " --nat extip:<ip>" when the host IP is known.
+# Flags follow the official run-reth.sh (berachain/guides apps/node-scripts); the capacity flags (--rpc.*) are the reth family prod preset.
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={{bin}} node \
+  --datadir {{datadir}} \
+  --chain {{chain}}{{archive_flag}}{{trusted_peers_flag}}{{nat_flag}} \
+  --authrpc.addr 127.0.0.1 --authrpc.port {{engine_port}} --authrpc.jwtsecret {{jwt_path}} \
+  --port {{p2p_port}} --discovery.port {{p2p_port}} \
+  --metrics 127.0.0.1:{{metrics_port}} \
+  --http --http.addr 0.0.0.0 --http.port {{http_port}} --http.api eth,net,web3,rpc --http.corsdomain "*" \
+  --ws --ws.addr 0.0.0.0 --ws.port {{ws_port}} --ws.api eth,net,web3,rpc --ws.origins "*" \
+  --rpc.max-connections 3000 --rpc.max-response-size 64 --rpc.max-blocks-per-filter 50000 \
+  --ipcdisable \
+  --engine.persistence-threshold 0 --engine.memory-block-buffer-target 0
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=300
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE=1048576
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

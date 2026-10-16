@@ -1,0 +1,54 @@
+# Starknet: Nethermind Juno, GitHub release zip (VERIFIED v0.16.8: juno-v0.16.8-linux-{amd64,arm64}.zip, each holds one static ELF
+# named juno-<tag>-linux-<arch> plus its .sha256). The on-disk artifact name is versionless; StarknetNodeProcessStarter unzips the
+# binary (in the JVM, no `unzip` needed), checks it against the .sha256 inside the zip and links it as bin/juno.
+# Snapshots: https://juno-snapshots.nethermind.io/files/<name>/latest answers 200 with the dated tar.zst (Content-Disposition
+# juno_<net>[_pruned]_v<juno version>_<block>.tar.zst, Accept-Ranges: bytes). It does not redirect and the dated file name is not
+# downloadable on its own, so the "latest" URL itself is the archive URL.
+programs:
+  - env: mainnet
+    id: juno
+    source: { type: github, repo: NethermindEth/juno }
+    artifacts:
+      - name: "juno-x86_64-linux.zip"
+        nameAarch64: "juno-aarch64-linux.zip"
+        urlTemplate: "https://github.com/NethermindEth/juno/releases/download/{tag}/juno-{tag}-linux-amd64.zip"
+        urlTemplateAarch64: "https://github.com/NethermindEth/juno/releases/download/{tag}/juno-{tag}-linux-arm64.zip"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 42530, label: "HTTP JSON-RPC", config: required }
+      - { role: ws, port: 42531, label: "WebSocket JSON-RPC", config: required }
+      - { role: metrics, port: 42534, label: "Metrics (127.0.0.1)", config: required }
+  - env: sepolia
+    id: juno
+    source: { type: github, repo: NethermindEth/juno }
+    artifacts:
+      - name: "juno-x86_64-linux.zip"
+        nameAarch64: "juno-aarch64-linux.zip"
+        urlTemplate: "https://github.com/NethermindEth/juno/releases/download/{tag}/juno-{tag}-linux-amd64.zip"
+        urlTemplateAarch64: "https://github.com/NethermindEth/juno/releases/download/{tag}/juno-{tag}-linux-arm64.zip"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 42540, label: "HTTP JSON-RPC", config: required }
+      - { role: ws, port: 42541, label: "WebSocket JSON-RPC", config: required }
+      - { role: metrics, port: 42544, label: "Metrics (127.0.0.1)", config: required }
+
+# Juno snapshot mirror. Keys match network.yml snapshotTypes[].id. `discover: latest` = the mirror URL is the archive URL.
+snapshots:
+  mainnet:
+    pruned:
+      mirror: "https://juno-snapshots.nethermind.io/files/mainnet-pruned/latest"
+      filename: juno_mainnet_pruned.tar.zst
+      discover: latest
+    full:
+      mirror: "https://juno-snapshots.nethermind.io/files/mainnet/latest"
+      filename: juno_mainnet.tar.zst
+      discover: latest
+  sepolia:
+    pruned:
+      mirror: "https://juno-snapshots.nethermind.io/files/sepolia-pruned/latest"
+      filename: juno_sepolia_pruned.tar.zst
+      discover: latest
+    full:
+      mirror: "https://juno-snapshots.nethermind.io/files/sepolia/latest"
+      filename: juno_sepolia.tar.zst
+      discover: latest

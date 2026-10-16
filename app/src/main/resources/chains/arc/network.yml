@@ -1,0 +1,133 @@
+# Circle Arc (stablecoin EVM L1: Reth execution + Malachite consensus). A node cannot sync from genesis: the wizard's Snapshot
+# step runs the node's own tool (arc-snapshots) and restores both layers; the run script repeats it only if the step was skipped.
+# Directory name is the network id. Ports live in clients.yml beside this file.
+label: Arc
+diskRoles:
+  - id: execution
+    label: Execution DB (Reth)
+    media: nvme
+diskNotes:
+  - "Under the execution role: bin/ logs/ .toolkit/ plus execution/ (Reth DB) and consensus/ (Malachite DB, node key)."
+  - "Snapshot step: arc-snapshots restores both layers (tens of GB, 10-15 min on 100 Mbit; extraction prints nothing)."
+  - "Full (default) is the pruned node of the Arc tutorial; archive restores the archive preset and never prunes."
+  - "The consensus layer key (node identity) is created once, after the snapshot, and survives restarts."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Arc Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 1024
+    archiveGiB: 4096
+    cpuCores: 8
+    memoryGiB: 64
+    snapshot: required
+    snapshotTypes:
+      - id: full
+        kind: full
+        label: Full · pruned
+        hint: Arc tutorial default (arc-snapshots default preset, --full)
+        diskGiB: 1024
+        default: true
+      - id: archive
+        kind: archive
+        label: Archive
+        hint: arc-snapshots --el-profile archive, no pruning
+        diskGiB: 4096
+    publicTip:
+      urls:
+        - https://rpc.mainnet.arc.io
+  - id: testnet
+    label: Arc Testnet
+    diskHintGiB: 512
+    fullNodeGiB: 512
+    archiveGiB: 2048
+    cpuCores: 8
+    memoryGiB: 64
+    snapshot: required
+    snapshotTypes:
+      - id: full
+        kind: full
+        label: Full · pruned
+        hint: Arc tutorial default (~68 GB + 16 GB compressed, ~103 GB + 36 GB extracted)
+        diskGiB: 512
+        default: true
+      - id: archive
+        kind: archive
+        label: Archive
+        hint: arc-snapshots --el-profile archive, no pruning
+        diskGiB: 2048
+    publicTip:
+      urls:
+        - https://rpc.testnet.arc.io
+        - https://rpc.drpc.testnet.arc.io
+        - https://rpc.blockdaemon.testnet.arc.io
+
+# Flags of arc-node-execution / arc-node-consensus (chains/arc run script). format: flags — no conf patch.
+# Literals mirror ArcUnitBodies and the unit LimitNOFILE.
+clientConfig:
+  program: arc-node
+  format: flags
+  bindings:
+    - key: snapshot
+      source: install_option
+      option: snapshot
+      default: "full"
+      description: Node type — full (pruned, Arc tutorial default) or archive (archive snapshot, no pruning)
+    - key: datadir
+      source: disk_role_dir
+      role: execution
+      relative: execution
+      description: Execution layer --datadir (under the Disks execution role)
+    - key: home
+      source: disk_role_dir
+      role: execution
+      relative: consensus
+      description: Consensus layer --home (under the Disks execution role; holds the node key)
+    - key: http.port
+      source: catalog_port
+      role: http
+      description: Execution layer JSON-RPC port
+    - key: ws.port
+      source: catalog_port
+      role: ws
+      description: Execution layer WebSocket RPC port (same bind address and namespaces as HTTP)
+    - key: metrics
+      source: catalog_port
+      role: el_metrics
+      description: Execution layer Prometheus port (0.0.0.0)
+    - key: rpc.addr
+      source: catalog_port
+      role: cl_rpc
+      description: Consensus layer RPC port (0.0.0.0)
+    - key: cl.metrics
+      source: catalog_port
+      role: cl_metrics
+      description: Consensus layer Prometheus port (0.0.0.0)
+    - key: http.addr
+      source: literal
+      value: "0.0.0.0"
+      description: JSON-RPC bind address
+    - key: http.api
+      source: literal
+      value: "eth,net,web3,txpool,trace,debug"
+      description: RPC namespaces
+    - key: rpc.max-connections
+      source: literal
+      value: "250"
+      description: Max concurrent RPC connections (Arc default; raise only on MaxConnections errors)
+    - key: rpc.max-subscriptions-per-connection
+      source: literal
+      value: "32"
+      description: Max subscriptions per WebSocket connection (Arc default)
+    - key: execution-persistence-backpressure-threshold
+      source: literal
+      value: "16"
+      description: Throttles execution to the disk-write speed (bounds EL memory)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for the node
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes relay connections time out.
+diagnostics:
+  - id: path_mtu

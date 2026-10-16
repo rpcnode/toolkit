@@ -1,0 +1,29 @@
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+# captive-core / SDK scratch files stay under the node dir
+Environment=TMPDIR={{node_dir}}/tmp
+# Self-heal before every (re)start: wipe the captive-core bucket dir when the last run failed with a known marker.
+# "-" = a failing heal script never blocks the start.
+ExecStartPre=-{{heal_script}}
+ExecStart={{exec_start}}
+Restart=on-failure
+RestartSec=10
+# stellar-rpc forks stellar-core: stop the whole control group, give the bucket DB time to close
+TimeoutStopSec=90
+KillMode=control-group
+KillSignal=SIGTERM
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+IPAccounting=yes
+CPUAccounting=yes
+MemoryAccounting=yes
+LimitNOFILE={{nofile}}
+
+[Install]
+WantedBy=multi-user.target

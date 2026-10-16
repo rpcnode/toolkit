@@ -1,0 +1,56 @@
+# World Chain: the project's own reth fork `world-chain` (GitHub release tarballs, x86_64 + aarch64, no build) + upstream op-node.
+# world-chain: the highest stable `vX.Y.Z` release of worldcoin/world-chain (the repo also tags `proofs/v…`). op-node: pinned, compiled by the
+# panel build hosts (`build:`, Dockerfile beside this file) or by the run script. The pin MUST equal OpstackToolchain.NODE_TAG (a test keeps them equal).
+programs:
+  - env: mainnet
+    id: world-chain
+    source: { type: github, repo: worldcoin/world-chain, tagPrefix: "v" }
+    requirements: { logFile: logs/worldchain.log }
+    artifacts:
+      - name: "world-chain-x86_64.tar.gz"
+        nameAarch64: "world-chain-aarch64.tar.gz"
+        urlTemplate: "https://github.com/worldcoin/world-chain/releases/download/{tag}/world-chain-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/worldcoin/world-chain/releases/download/{tag}/world-chain-{tag}-aarch64-unknown-linux-gnu.tar.gz"
+    ports:
+      - { role: http, port: 42680, label: "EL JSON-RPC", config: required }
+      - { role: ws, port: 42681, label: "EL WebSocket", config: required }
+      - { role: engine, port: 42683, label: "EL Engine API (127.0.0.1)", config: required }
+      - { role: metrics, port: 42684, label: "EL metrics (127.0.0.1)", config: required }
+      - { role: p2p, port: 42682, label: "EL P2P", config: required, protocol: both }
+      - { role: discv5, port: 42688, label: "EL discv5 (UDP)", config: required, protocol: udp }
+  - env: mainnet
+    id: op-node
+    source: { type: pinned, version: "1.19.9", tag: "op-node/v1.19.9", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-node.Dockerfile, outputs: [op-node], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/worldchain.log }
+    artifacts: []
+    ports:
+      - { role: cl_rpc, port: 42685, label: "op-node RPC (127.0.0.1)", config: required }
+      - { role: cl_metrics, port: 42687, label: "op-node metrics (127.0.0.1)", config: required }
+      - { role: cl_p2p, port: 42686, label: "op-node P2P", config: required, protocol: both }
+  - env: sepolia
+    id: world-chain
+    source: { type: github, repo: worldcoin/world-chain, tagPrefix: "v" }
+    requirements: { logFile: logs/worldchain.log }
+    artifacts:
+      - name: "world-chain-x86_64.tar.gz"
+        nameAarch64: "world-chain-aarch64.tar.gz"
+        urlTemplate: "https://github.com/worldcoin/world-chain/releases/download/{tag}/world-chain-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/worldcoin/world-chain/releases/download/{tag}/world-chain-{tag}-aarch64-unknown-linux-gnu.tar.gz"
+    ports:
+      - { role: http, port: 42690, label: "EL JSON-RPC", config: required }
+      - { role: ws, port: 42691, label: "EL WebSocket", config: required }
+      - { role: engine, port: 42693, label: "EL Engine API (127.0.0.1)", config: required }
+      - { role: metrics, port: 42694, label: "EL metrics (127.0.0.1)", config: required }
+      - { role: p2p, port: 42692, label: "EL P2P", config: required, protocol: both }
+      - { role: discv5, port: 42698, label: "EL discv5 (UDP)", config: required, protocol: udp }
+  - env: sepolia
+    id: op-node
+    source: { type: pinned, version: "1.19.9", tag: "op-node/v1.19.9", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-node.Dockerfile, outputs: [op-node], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/worldchain.log }
+    artifacts: []
+    ports:
+      - { role: cl_rpc, port: 42695, label: "op-node RPC (127.0.0.1)", config: required }
+      - { role: cl_metrics, port: 42697, label: "op-node metrics (127.0.0.1)", config: required }
+      - { role: cl_p2p, port: 42696, label: "op-node P2P", config: required, protocol: both }

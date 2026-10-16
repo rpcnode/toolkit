@@ -1,0 +1,25 @@
+#!/bin/bash
+# RpcNode Cardano db-sync — the unit's ExecStart. Waits until the prepare unit has set up PostgreSQL and the node has
+# created its socket, then replaces itself with cardano-db-sync (so systemd tracks and signals the real process).
+# No secret on the command line: the database password is read by db-sync from the 0600 file in PGPASSFILE.
+set -uo pipefail
+READY={{ready_marker}}
+SOCKET={{socket_path}}
+PGPASS={{pgpass_file}}
+
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [dbsync] $*"; }
+
+n=0
+until [[ -f "$READY" && -s "$PGPASS" && -S "$SOCKET" ]]; do
+  if (( n % 20 == 0 )); then
+    [[ -f "$READY" ]] || log "waiting for the PostgreSQL preparation (dbsync-prepare unit)"
+    [[ -S "$SOCKET" ]] || log "waiting for the node socket $SOCKET"
+  fi
+  n=$((n + 1)); sleep 15
+done
+
+export PGPASSFILE="$PGPASS"
+export CARDANO_NODE_SOCKET_PATH="$SOCKET"
+mkdir -p {{state_dir}}
+log "starting cardano-db-sync"
+exec {{exec_start}}

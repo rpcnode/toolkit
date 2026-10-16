@@ -1,0 +1,144 @@
+# Scroll (l2geth = scroll-tech/go-ethereum, zkEVM rollup). Container-only upstream: the binary is extracted from the Docker Hub
+# image scrolltech/l2geth (linux/amd64 only; arm64 needs the Go build fallback, see FAMILY.md). One process, no CL client.
+# Snapshot optional: the only official one is a 2.4 TB archive tar (MPT) - extract needs ~2.5 TB + growth.
+label: Scroll
+dataRoot: scroll
+diskRoles:
+  - id: chaindata
+    label: l2geth datadir
+    media: nvme
+  - id: snapshots
+    label: snapshots / additional
+    media: ssd
+diskNotes:
+  - "l2geth --datadir is the chaindata role leaf. The official snapshot tar unpacks to data/geth/... : extract with --strip-components=1 into the datadir."
+  - "Mainnet needs an Ethereum L1 RPC AND a blob source: --da.blob.beaconnode (beacon API) and/or --da.blob.blobscan / --da.blob.awss3 (Scroll publishes S3 blob mirrors)."
+  - "The node API is unresponsive until the initial L1 message sync finishes (logs 'Syncing L1 messages')."
+  - "Use --scroll-mpt only with the MPT snapshot / fresh MPT sync (the official snapshot is MPT)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Scroll Mainnet
+    diskHintGiB: 4096
+    fullNodeGiB: 4096
+    archiveGiB: 4096
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: optional
+    publicTip:
+      urls:
+        - https://rpc.scroll.io
+        - https://scroll-rpc.publicnode.com
+    snapshotTypes:
+      - id: archive
+        kind: archive
+        label: Archive (MPT) · official
+        hint: https://snapshot.scroll.io/mpt/latest.tar (~2.47 TB tar, updated roughly every few months; last-modified 2026-06-09). Needs ~5 TB free if downloaded first; stream it.
+        diskGiB: 4096
+        default: true
+    l1Parent:
+      rpc: https://ethereum-rpc.publicnode.com
+      beacon: https://ethereum-beacon-api.publicnode.com
+      pickHelp: |
+        Scroll mainnet posts to Ethereum mainnet. Click Public for publicnode or pick an active Ethereum node
+        (same-host uses 127.0.0.1). The beacon URL feeds --da.blob.beaconnode.
+  - id: sepolia
+    label: Scroll Sepolia
+    diskHintGiB: 1024
+    fullNodeGiB: 1024
+    archiveGiB: 1024
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://sepolia-rpc.scroll.io
+    l1Parent:
+      rpc: https://ethereum-sepolia-rpc.publicnode.com
+      beacon: https://ethereum-sepolia-beacon-api.publicnode.com
+      pickHelp: |
+        Scroll Sepolia posts to Ethereum Sepolia.
+
+# CLI flags live in systemd (chains/scroll). No conf patch on Start.
+clientConfig:
+  program: l2geth
+  format: flags
+  bindings:
+    - key: snapshot
+      source: install_option
+      option: snapshot
+      default: ""
+      description: archive = restore the official MPT archive snapshot first; empty = sync from L1 / peers
+    - key: datadir
+      source: disk_role_dir
+      role: chaindata
+      description: l2geth --datadir
+    - key: snapshots
+      source: disk_role_dir
+      role: snapshots
+      description: Snapshot workspace
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: --http.port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: --ws.port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: --port (tcp+udp)
+    - key: metrics-port
+      source: catalog_port
+      role: metrics
+      description: --metrics.port (127.0.0.1)
+    - key: http-api
+      source: literal
+      value: "eth,net,web3,scroll"
+      description: --http.api / --ws.api (no debug on the public port)
+    - key: maxpeers
+      source: literal
+      value: "50"
+      description: --maxpeers
+    - key: cache
+      source: literal
+      value: "4096"
+      description: --cache (MB)
+    - key: rpc-gascap
+      source: literal
+      value: "25000000"
+      description: --rpc.gascap
+    - key: rpc-evmtimeout
+      source: literal
+      value: "3s"
+      description: --rpc.evmtimeout
+    - key: rpc-getlogs-maxrange
+      source: literal
+      value: "5000"
+      description: --rpc.getlogs.maxrange (Scroll-specific cap on eth_getLogs block range)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd open-file limit
+    - key: l1-rpc
+      source: install_option
+      option: l1_rpc
+      default: ""
+      description: Ethereum L1 execution RPC (--l1.endpoint)
+      testConnect:
+        kind: eth_rpc
+        label: Test connect
+        help: Panel POSTs eth_blockNumber. Needs a fully synced Ethereum node matching the Scroll env.
+    - key: l1-beacon
+      source: install_option
+      option: l1_beacon
+      default: ""
+      description: Ethereum beacon API (--da.blob.beaconnode)
+      testConnect:
+        kind: beacon_genesis
+        label: Test connect
+        help: Panel GETs {url}/eth/v1/beacon/genesis. Expect data.genesis_time.
+
+diagnostics:
+  - id: path_mtu

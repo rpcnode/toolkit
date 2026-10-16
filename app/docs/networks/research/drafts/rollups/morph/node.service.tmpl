@@ -1,0 +1,46 @@
+# geth (execution). morphnode.service.tmpl is the companion started AFTER this one (installCustomUnits companions, polygon heimdall pattern inverted).
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+ExecStart={{bin}} \
+  --{{morph_flag}} \
+  --morph-mpt \
+  --datadir={{datadir}} \
+  --verbosity=3 \
+  --http \
+  --http.addr=0.0.0.0 \
+  --http.port={{http_port}} \
+  --http.api={{http_api}} \
+  --http.vhosts=* \
+  --http.corsdomain=* \
+  --ws \
+  --ws.addr=0.0.0.0 \
+  --ws.port={{ws_port}} \
+  --ws.api={{http_api}} \
+  --ws.origins=* \
+  --port={{p2p_port}} \
+  --maxpeers={{maxpeers}} \
+  --authrpc.addr=127.0.0.1 \
+  --authrpc.port={{engine_port}} \
+  --authrpc.vhosts=* \
+  --authrpc.jwtsecret={{jwt_file}} \
+  --gcmode=archive \
+  --log.filename={{datadir}}/geth.log \
+  --metrics \
+  --metrics.addr=127.0.0.1 \
+  --metrics.port={{metrics_port}}
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=300
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE={{limit_nofile}}
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

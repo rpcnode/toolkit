@@ -1,0 +1,125 @@
+# cardano-node + mithril-client from GitHub release tarballs (no Docker). VERIFIED 2026-10-13:
+#   IntersectMBO/cardano-node 11.1.3 (bare tags, no "v"): cardano-node-{tag}-linux-{amd64,arm64}.tar.gz  (233 MB / 270 MB)
+#     layout: ./bin/{cardano-node,cardano-cli,...}  ./share/{mainnet,preprod,preview}/{config,topology,*-genesis,peer-snapshot,checkpoints}.json
+#     -> config + genesis files come FROM THE TARBALL (version-matched), so there is no `configs:` block here.
+#   IntersectMBO/mithril 2630.1-hotfix: mithril-{tag}-linux-{x64,arm64}.tar.gz (69 MB / 67 MB), flat layout, binary `mithril-client`.
+# Ports: PORTS.md block 41210 (mainnet) / 41220 (preprod) / 41230 (preview): +2 p2p, +4 metrics (Prometheus, bound to 127.0.0.1).
+# Upstream defaults (3001 p2p, 12798 metrics) are NOT used: 3001 is Hyperliquid, 12798 would clash across envs.
+# The node has no HTTP/RPC port. Optional indexer companions (install option `indexer`), VERIFIED 2026-10-14 (gh api releases, asset sizes, tarball/zip listings):
+#   CardanoSolutions/ogmios v7.0.0 (tag with "v"): ogmios-{tag}-{x86_64,aarch64}-linux.zip (45.6 MB / 53.7 MB), members bin/ogmios + share/ completions.
+#     tested upstream with cardano-node 11.0.1 (the node here is newer: node-to-client versions are negotiated, not verified on a live host).
+#   IntersectMBO/cardano-db-sync 13.7.2.1 (bare tag): cardano-db-sync-{tag}-linux.tar.gz (76.6 MB, STATIC musl x86_64 only — upstream ships no aarch64):
+#     ./bin/{cardano-db-sync,cardano-db-tool,cardano-smash-server,...} + ./schema/*.sql (migrations, passed as --schema-dir).
+#   Ports: +0 ogmios (127.0.0.1) and +7 dbsync_metrics (the product binds all interfaces; its unit is confined to loopback by systemd). Both `config: none`.
+#   All programs of an env are synced to every node of it (the clients dir is shared): ~120 MB of archives on a host that never enables the indexer.
+programs:
+  - env: mainnet
+    id: cardano-node
+    source: { type: github, repo: IntersectMBO/cardano-node }
+    artifacts:
+      - name: "cardano-node-linux-amd64.tar.gz"
+        nameAarch64: "cardano-node-linux-arm64.tar.gz"
+        urlTemplate: "https://github.com/IntersectMBO/cardano-node/releases/download/{tag}/cardano-node-{tag}-linux-amd64.tar.gz"
+        urlTemplateAarch64: "https://github.com/IntersectMBO/cardano-node/releases/download/{tag}/cardano-node-{tag}-linux-arm64.tar.gz"
+    requirements: { logFile: logs/cardano.log }
+    ports:
+      - { role: p2p, port: 41212, label: "P2P (node-to-node)", config: required }
+      - { role: metrics, port: 41214, label: "Prometheus metrics (127.0.0.1)", config: required }
+      - { role: ogmios, port: 41210, label: "Ogmios JSON-RPC / WebSocket (127.0.0.1, optional indexer)", config: none }
+      - { role: dbsync_metrics, port: 41217, label: "db-sync Prometheus (loopback-only unit, optional indexer)", config: none }
+  - env: mainnet
+    id: mithril-client
+    source: { type: github, repo: IntersectMBO/mithril }
+    artifacts:
+      - name: "mithril-linux-x64.tar.gz"
+        nameAarch64: "mithril-linux-arm64.tar.gz"
+        urlTemplate: "https://github.com/IntersectMBO/mithril/releases/download/{tag}/mithril-{tag}-linux-x64.tar.gz"
+        urlTemplateAarch64: "https://github.com/IntersectMBO/mithril/releases/download/{tag}/mithril-{tag}-linux-arm64.tar.gz"
+  - env: mainnet
+    id: ogmios
+    source: { type: github, repo: CardanoSolutions/ogmios }
+    artifacts:
+      - name: "ogmios-linux-x86_64.zip"
+        nameAarch64: "ogmios-linux-aarch64.zip"
+        urlTemplate: "https://github.com/CardanoSolutions/ogmios/releases/download/{tag}/ogmios-{tag}-x86_64-linux.zip"
+        urlTemplateAarch64: "https://github.com/CardanoSolutions/ogmios/releases/download/{tag}/ogmios-{tag}-aarch64-linux.zip"
+  - env: mainnet
+    id: cardano-db-sync
+    source: { type: github, repo: IntersectMBO/cardano-db-sync }
+    artifacts:
+      - name: "cardano-db-sync-linux-x86_64.tar.gz"
+        urlTemplate: "https://github.com/IntersectMBO/cardano-db-sync/releases/download/{tag}/cardano-db-sync-{tag}-linux.tar.gz"
+  - env: preprod
+    id: cardano-node
+    source: { type: github, repo: IntersectMBO/cardano-node }
+    artifacts:
+      - name: "cardano-node-linux-amd64.tar.gz"
+        nameAarch64: "cardano-node-linux-arm64.tar.gz"
+        urlTemplate: "https://github.com/IntersectMBO/cardano-node/releases/download/{tag}/cardano-node-{tag}-linux-amd64.tar.gz"
+        urlTemplateAarch64: "https://github.com/IntersectMBO/cardano-node/releases/download/{tag}/cardano-node-{tag}-linux-arm64.tar.gz"
+    requirements: { logFile: logs/cardano.log }
+    ports:
+      - { role: p2p, port: 41222, label: "P2P (node-to-node)", config: required }
+      - { role: metrics, port: 41224, label: "Prometheus metrics (127.0.0.1)", config: required }
+      - { role: ogmios, port: 41220, label: "Ogmios JSON-RPC / WebSocket (127.0.0.1, optional indexer)", config: none }
+      - { role: dbsync_metrics, port: 41227, label: "db-sync Prometheus (loopback-only unit, optional indexer)", config: none }
+  - env: preprod
+    id: mithril-client
+    source: { type: github, repo: IntersectMBO/mithril }
+    artifacts:
+      - name: "mithril-linux-x64.tar.gz"
+        nameAarch64: "mithril-linux-arm64.tar.gz"
+        urlTemplate: "https://github.com/IntersectMBO/mithril/releases/download/{tag}/mithril-{tag}-linux-x64.tar.gz"
+        urlTemplateAarch64: "https://github.com/IntersectMBO/mithril/releases/download/{tag}/mithril-{tag}-linux-arm64.tar.gz"
+  - env: preprod
+    id: ogmios
+    source: { type: github, repo: CardanoSolutions/ogmios }
+    artifacts:
+      - name: "ogmios-linux-x86_64.zip"
+        nameAarch64: "ogmios-linux-aarch64.zip"
+        urlTemplate: "https://github.com/CardanoSolutions/ogmios/releases/download/{tag}/ogmios-{tag}-x86_64-linux.zip"
+        urlTemplateAarch64: "https://github.com/CardanoSolutions/ogmios/releases/download/{tag}/ogmios-{tag}-aarch64-linux.zip"
+  - env: preprod
+    id: cardano-db-sync
+    source: { type: github, repo: IntersectMBO/cardano-db-sync }
+    artifacts:
+      - name: "cardano-db-sync-linux-x86_64.tar.gz"
+        urlTemplate: "https://github.com/IntersectMBO/cardano-db-sync/releases/download/{tag}/cardano-db-sync-{tag}-linux.tar.gz"
+  - env: preview
+    id: cardano-node
+    source: { type: github, repo: IntersectMBO/cardano-node }
+    artifacts:
+      - name: "cardano-node-linux-amd64.tar.gz"
+        nameAarch64: "cardano-node-linux-arm64.tar.gz"
+        urlTemplate: "https://github.com/IntersectMBO/cardano-node/releases/download/{tag}/cardano-node-{tag}-linux-amd64.tar.gz"
+        urlTemplateAarch64: "https://github.com/IntersectMBO/cardano-node/releases/download/{tag}/cardano-node-{tag}-linux-arm64.tar.gz"
+    requirements: { logFile: logs/cardano.log }
+    ports:
+      - { role: p2p, port: 41232, label: "P2P (node-to-node)", config: required }
+      - { role: metrics, port: 41234, label: "Prometheus metrics (127.0.0.1)", config: required }
+      - { role: ogmios, port: 41230, label: "Ogmios JSON-RPC / WebSocket (127.0.0.1, optional indexer)", config: none }
+      - { role: dbsync_metrics, port: 41237, label: "db-sync Prometheus (loopback-only unit, optional indexer)", config: none }
+  - env: preview
+    id: mithril-client
+    source: { type: github, repo: IntersectMBO/mithril }
+    artifacts:
+      - name: "mithril-linux-x64.tar.gz"
+        nameAarch64: "mithril-linux-arm64.tar.gz"
+        urlTemplate: "https://github.com/IntersectMBO/mithril/releases/download/{tag}/mithril-{tag}-linux-x64.tar.gz"
+        urlTemplateAarch64: "https://github.com/IntersectMBO/mithril/releases/download/{tag}/mithril-{tag}-linux-arm64.tar.gz"
+  - env: preview
+    id: ogmios
+    source: { type: github, repo: CardanoSolutions/ogmios }
+    artifacts:
+      - name: "ogmios-linux-x86_64.zip"
+        nameAarch64: "ogmios-linux-aarch64.zip"
+        urlTemplate: "https://github.com/CardanoSolutions/ogmios/releases/download/{tag}/ogmios-{tag}-x86_64-linux.zip"
+        urlTemplateAarch64: "https://github.com/CardanoSolutions/ogmios/releases/download/{tag}/ogmios-{tag}-aarch64-linux.zip"
+  - env: preview
+    id: cardano-db-sync
+    source: { type: github, repo: IntersectMBO/cardano-db-sync }
+    artifacts:
+      - name: "cardano-db-sync-linux-x86_64.tar.gz"
+        urlTemplate: "https://github.com/IntersectMBO/cardano-db-sync/releases/download/{tag}/cardano-db-sync-{tag}-linux.tar.gz"
+# No `snapshots:` block: Mithril snapshots are certified and verified CLIENT-side by mithril-client (the files come from
+# Google Cloud Storage per aggregator); a toolkit CDN mirror cannot carry them. See CardanoSnapshotResolver (mithril://{env}).

@@ -1,0 +1,32 @@
+# Berachain official snapshot pair of ONE block (https://snapshots.berachain.com/index.csv, picked by BerachainSnapshotResolver).
+# Docs restore: stop both clients; CL: reset data, `lz4 -d | tar x -C <beacond home>` (tar holds data/); EL: empty datadir,
+# `lz4 -d | tar x -C <reth datadir>` (tar holds db/ rocksdb/ blobstore/). config/ of the beacond home (keys, genesis) is kept.
+RETH='{{reth_dir}}'
+HOMEDIR='{{beacond_home}}'
+SCRATCH='{{scratch}}'
+EL_URL='{{el_url}}'
+EL_SHA='{{el_sha256}}'
+CL_URL='{{cl_url}}'
+CL_SHA='{{cl_sha256}}'
+BLOCK='{{block}}'
+command -v lz4 >/dev/null || fail "lz4 is missing on the host (install the lz4 package)"
+mkdir -p "$RETH" "$HOMEDIR" "$SCRATCH"
+CL_FILE="$SCRATCH/beacond-snapshot.tar.lz4"
+EL_FILE="$SCRATCH/reth-snapshot.tar.lz4"
+state download 1 "beacon-kit snapshot of block $BLOCK"
+download "$CL_URL" "$CL_FILE" "beacon-kit snapshot"
+[ "$(sha256sum "$CL_FILE" | awk '{print $1}')" = "$CL_SHA" ] || fail "beacon-kit snapshot sha256 mismatch"
+state extract 10 "unpacking the beacon-kit snapshot"
+rm -rf "$HOMEDIR/data"
+lz4 -dc "$CL_FILE" | tar -x -C "$HOMEDIR" || fail "beacon-kit snapshot extract failed"
+rm -f "$CL_FILE"
+state download 15 "reth snapshot of block $BLOCK (large)"
+download "$EL_URL" "$EL_FILE" "reth snapshot"
+[ "$(sha256sum "$EL_FILE" | awk '{print $1}')" = "$EL_SHA" ] || fail "reth snapshot sha256 mismatch"
+state extract 60 "unpacking the reth snapshot"
+rm -rf "$RETH/db" "$RETH/rocksdb" "$RETH/blobstore" "$RETH/static_files"
+lz4 -dc "$EL_FILE" | tar -x -C "$RETH" || fail "reth snapshot extract failed"
+rm -f "$EL_FILE"
+[ -d "$RETH/db" ] || fail "reth db/ missing after extract"
+touch "$MARKER"
+state done 100 "Berachain snapshot of block $BLOCK restored"

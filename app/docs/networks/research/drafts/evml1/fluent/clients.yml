@@ -1,0 +1,29 @@
+# Fluent node from fluentlabs-xyz/fluentbase GitHub releases (no Docker). VERIFIED 2026-10-13: v1.5.1 (2026-09-29) latest; asset
+# fluent-<tag>-x86_64-unknown-linux-gnu.tar.gz (39 MB) holds a single file `fluent` (ELF); the aarch64 URL returns 404 -> x86_64 only.
+# Other assets of the release: fluent-rwasm-* (alt runtime build), genesis-{mainnet-,}<tag>.json.gz (+ .asc), SBOM/provenance — not needed to run (built-in chain names fluent-mainnet / fluent-testnet).
+# Ports come from specs/PORTS.md (fluent base 41480): mainnet 41480-41489, testnet 41490-41499.
+programs:
+  - env: mainnet
+    id: fluent
+    source: { type: github, repo: fluentlabs-xyz/fluentbase }
+    artifacts:
+      - name: "fluent-linux-x86_64.tar.gz"
+        urlTemplate: "https://github.com/fluentlabs-xyz/fluentbase/releases/download/{tag}/fluent-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+    requirements: { logFile: logs/fluent.log }
+    ports:
+      - { role: http, port: 41480, label: "HTTP RPC", config: required }
+      - { role: ws, port: 41481, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 41482, label: "P2P", config: required, protocol: both }
+      - { role: metrics, port: 41484, label: "Metrics", config: required }
+  - env: testnet
+    id: fluent
+    source: { type: github, repo: fluentlabs-xyz/fluentbase }
+    artifacts:
+      - name: "fluent-linux-x86_64.tar.gz"
+        urlTemplate: "https://github.com/fluentlabs-xyz/fluentbase/releases/download/{tag}/fluent-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+    requirements: { logFile: logs/fluent.log }
+    ports:
+      - { role: http, port: 41490, label: "HTTP RPC", config: required }
+      - { role: ws, port: 41491, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 41492, label: "P2P", config: required, protocol: both }
+      - { role: metrics, port: 41494, label: "Metrics", config: required }

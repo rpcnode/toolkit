@@ -1,0 +1,272 @@
+#!/bin/bash
+# RpcNode OP Stack node (Optimism): uses the op-reth / op-node binaries the panel compiled for this CPU ($ROOT/op-reth-<arch>,
+# $ROOT/op-node-<arch>) and otherwise builds them from the monorepo once per pinned tag, restores the OP Labs
+# data-directory snapshot once (mandatory on OP Mainnet: the pre-Bedrock state import), then runs op-reth and op-node as
+# two supervised processes. The execution layer first: op-node talks to its Engine API.
+set -uo pipefail
+ENV_ID={{env}}
+MODE={{mode}}
+RETH_CHAIN={{reth_chain}}
+NODE_NETWORK={{node_network}}
+SEQUENCER={{sequencer}}
+SNAP_NET={{snapshot_net}}
+SNAP_REQUIRED={{snapshot_required}}
+SNAP_HOST={{snapshot_host}}
+ROOT={{node_dir}}
+EXEC={{exec_dir}}
+CONS={{cons_dir}}
+SNAPS={{snap_dir}}
+STATE={{state_dir}}
+LOG={{log_file}}
+L1_RPC={{l1_rpc}}
+L1_BEACON={{l1_beacon}}
+HTTP_ADDR={{http_addr}}
+LOOPBACK={{loopback}}
+V5_PORT={{discv5_port}}
+HTTP_PORT={{http_port}}
+WS_PORT={{ws_port}}
+ENGINE_PORT={{engine_port}}
+METRICS_PORT={{metrics_port}}
+P2P_PORT={{p2p_port}}
+CL_RPC={{cl_rpc}}
+CL_METRICS={{cl_metrics}}
+CL_P2P={{cl_p2p}}
+HTTP_API={{http_api}}
+PRUNE_DISTANCE={{prune_distance}}
+RETH_TAG="${RPCNODE_OP_RETH_TAG:-{{reth_tag}}}"
+NODE_TAG="${RPCNODE_OP_NODE_TAG:-{{node_tag}}}"
+GO_VERSION="${RPCNODE_OP_GO:-{{go_version}}}"
+BIN="$ROOT/bin"; SRC="$ROOT/src"; TOOLS="$ROOT/tools"; JWT="$STATE/jwt.hex"
+mkdir -p "$(dirname "$LOG")" "$STATE" "$EXEC" "$CONS" "$SNAPS" "$BIN" "$TOOLS"
+exec >>"$LOG" 2>&1
+
+# Operator flag overrides (Node config → Flag overrides): $ROOT/.toolkit/extra_flags, one key=value per line, already
+# validated by the panel host. A flag the array already has is replaced (clap rejects duplicates), a new one is appended.
+EXTRA_FLAGS_FILE="$ROOT/.toolkit/extra_flags"
+apply_extra_flags() {
+  local -n _arr=$1
+  [[ -s "$EXTRA_FLAGS_FILE" ]] || return 0
+  local _line _key _val _new _x _i
+  while IFS= read -r _line || [[ -n "$_line" ]]; do
+    [[ -z "$_line" || "$_line" == \#* ]] && continue
+    _key="${_line%%=*}"; _val=""
+    [[ "$_line" == *=* ]] && _val="${_line#*=}"
+    [[ "$_key" =~ ^[a-z][a-z0-9._-]*$ ]] || continue
+    _new=()
+    for ((_i = 0; _i < ${#_arr[@]}; _i++)); do
+      _x="${_arr[_i]}"
+      if [[ "$_x" == "--$_key" ]]; then
+        if ((_i + 1 < ${#_arr[@]})) && [[ "${_arr[_i + 1]}" != -* ]]; then ((_i++)); fi
+        continue
+      fi
+      [[ "$_x" == "--$_key="* ]] && continue
+      _new+=("$_x")
+    done
+    _arr=("${_new[@]}")
+    if [[ -n "$_val" ]]; then _arr+=("--$_key=$_val"); else _arr+=("--$_key"); fi
+  done <"$EXTRA_FLAGS_FILE"
+}
+
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [op] $*"; }
+RETH_PID=""; NODE_PID=""
+
+stop_all() {
+  log "stopping"
+  [[ -n "$NODE_PID" ]] && kill -TERM "$NODE_PID" 2>/dev/null
+  for _ in $(seq 1 60); do kill -0 "$NODE_PID" 2>/dev/null || break; sleep 1; done
+  [[ -n "$RETH_PID" ]] && kill -TERM "$RETH_PID" 2>/dev/null
+  for _ in $(seq 1 240); do kill -0 "$RETH_PID" 2>/dev/null || break; sleep 1; done
+  kill -KILL "$NODE_PID" "$RETH_PID" 2>/dev/null || true
+}
+trap 'stop_all; exit 0' TERM INT
+
+# --- 1. build (once per tag) ---------------------------------------------------------------------------------------------
+install_packages() {
+  [[ -f "$STATE/apt-v2.done" ]] && return 0
+  command -v apt-get >/dev/null 2>&1 || { log "apt-get not found — Debian/Ubuntu only"; return 1; }
+  log "installing build tools (Rust and Go toolchains come next)"
+  DEBIAN_FRONTEND=noninteractive apt-get update -y && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    build-essential clang libclang-dev pkg-config git curl ca-certificates openssl zstd aria2 xz-utils jq zip || return 1
+  touch "$STATE/apt-v2.done"
+}
+
+install_go() {
+  [[ -x "$TOOLS/go/bin/go" ]] && return 0
+  local arch
+  case "$(uname -m)" in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; *) log "unsupported CPU $(uname -m)"; return 1 ;; esac
+  log "installing Go $GO_VERSION"
+  curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${arch}.tar.gz" | tar -C "$TOOLS" -xz
+}
+
+# op-node embeds op-core/superchain/superchain-configs.zip, which the repository generates (sync-superchain.sh) from the
+# superchain-registry submodule with yq (mikefarah, the version of the repository's mise.toml), jq and zip.
+install_yq() {
+  [[ -x "$TOOLS/bin/yq" ]] && return 0
+  local arch
+  case "$(uname -m)" in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; *) log "unsupported CPU $(uname -m)"; return 1 ;; esac
+  log "installing yq 4.44.5"
+  mkdir -p "$TOOLS/bin"
+  curl -fsSL -o "$TOOLS/bin/yq.part" "https://github.com/mikefarah/yq/releases/download/v4.44.5/yq_linux_${arch}" \
+    && chmod 755 "$TOOLS/bin/yq.part" && mv "$TOOLS/bin/yq.part" "$TOOLS/bin/yq"
+}
+
+install_rust() {
+  export RUSTUP_HOME="$TOOLS/rustup" CARGO_HOME="$TOOLS/cargo"
+  [[ -x "$CARGO_HOME/bin/rustup" ]] && return 0
+  log "installing rustup (the toolchain version comes from the repository's rust-toolchain.toml)"
+  curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none --no-modify-path
+}
+
+clone_tag() { # $1 = tag, $2 = dir, $3 = optional submodule path to init (op-reth's chainspec build.rs needs superchain-registry)
+  if [[ ! -d "$2/.git" ]]; then
+    rm -rf "$2"
+    git clone --depth 1 --branch "$1" https://github.com/ethereum-optimism/optimism.git "$2" || { rm -rf "$2"; return 1; }
+  fi
+  # also runs on an existing checkout, so a clone made before submodules were fetched gets repaired on the next retry
+  [[ -n "${3:-}" ]] && { git -C "$2" submodule update --init --depth 1 "$3" || return 1; }
+  return 0
+}
+
+# Prebuilt by the panel's build hosts and synced with the client; used when it runs here (an older glibc would refuse it).
+use_prebuilt() { # $1 = op-reth | op-node
+  local src="$ROOT/$1-$(uname -m)"
+  [[ -f "$src" ]] || return 1
+  chmod 755 "$src" 2>/dev/null
+  "$src" --version >/dev/null 2>&1 || { log "prebuilt $(basename "$src") does not run on this host — building from source"; return 1; }
+  if ! cmp -s "$src" "$BIN/$1"; then
+    install -m 755 "$src" "$BIN/$1.new" && mv -f "$BIN/$1.new" "$BIN/$1" || return 1
+  fi
+  log "using the prebuilt $(basename "$src")"
+  return 0
+}
+
+build_reth() {
+  use_prebuilt op-reth && return 0
+  [[ -f "$STATE/built-op-reth-${RETH_TAG//\//_}" && -x "$BIN/op-reth" ]] && return 0
+  clone_tag "$RETH_TAG" "$SRC/op-reth" superchain-registry || return 1
+  [[ -e "$SRC/op-reth/superchain-registry/.git" ]] || { log "superchain-registry submodule missing after checkout"; return 1; }
+  local ram_gb jobs
+  ram_gb=$(awk '/MemTotal/ { printf "%d", $2 / 1048576 }' /proc/meminfo)
+  jobs=$(( ram_gb / 3 )); (( jobs < 1 )) && jobs=1; (( jobs > $(nproc) )) && jobs=$(nproc)
+  log "building op-reth $RETH_TAG with $jobs jobs (a long step)"
+  export RUSTUP_HOME="$TOOLS/rustup" CARGO_HOME="$TOOLS/cargo" PATH="$TOOLS/cargo/bin:$PATH"
+  ( cd "$SRC/op-reth/rust" && cargo build --release --bin op-reth -p op-reth -j "$jobs" ) || return 1
+  install -m 755 "$SRC/op-reth/rust/target/release/op-reth" "$BIN/op-reth" || return 1
+  touch "$STATE/built-op-reth-${RETH_TAG//\//_}"
+  rm -rf "$SRC/op-reth/rust/target"
+}
+
+build_node() {
+  use_prebuilt op-node && return 0
+  [[ -f "$STATE/built-op-node-${NODE_TAG//\//_}" && -x "$BIN/op-node" ]] && return 0
+  clone_tag "$NODE_TAG" "$SRC/op-node" superchain-registry || return 1
+  install_yq || return 1
+  log "building op-node $NODE_TAG"
+  ( cd "$SRC/op-node" && PATH="$TOOLS/bin:$PATH" bash op-core/superchain/sync-superchain.sh ) || return 1
+  ( cd "$SRC/op-node" && PATH="$TOOLS/go/bin:$PATH" GOPATH="$TOOLS/gopath" GOTOOLCHAIN=auto CGO_ENABLED=0 \
+      go build -o "$BIN/op-node" -ldflags "-X github.com/ethereum-optimism/optimism/op-node/version.Version=${NODE_TAG##*/}" ./op-node/cmd ) || return 1
+  touch "$STATE/built-op-node-${NODE_TAG//\//_}"
+}
+
+# The toolchains are only needed for a binary that has no prebuilt: skip installing them when both are there.
+need_toolchains() { ! { use_prebuilt op-reth && use_prebuilt op-node; }; }
+until install_packages && { ! need_toolchains || { install_go && install_rust; }; } && build_reth && build_node; do
+  log "install/build step failed — retrying in 10 min"
+  sleep 600
+done
+
+# --- 2. snapshot (once) ----------------------------------------------------------------------------------------------------
+kind=full; [[ "$MODE" == archive ]] && kind=archive
+SNAP_MARK="$STATE/snapshot-$kind.done"
+if [[ "$SNAP_REQUIRED" == 1 && ! -f "$SNAP_MARK" ]]; then
+  until
+    file="$(curl -fsSL "https://$SNAP_HOST/" | grep -oE "href=\"mainnet-op-${SNAP_NET}-reth-${kind}-storage-v2-[0-9]{4}-[0-9]{2}-[0-9]{2}\.tar\.zst\"" | sed 's/href="//; s/"//' | sort | tail -1)"
+    [[ -n "$file" ]]
+  do
+    log "no $kind snapshot listed for op-$SNAP_NET at $SNAP_HOST — retrying in 5 min"
+    sleep 300
+  done
+  log "restoring $file"
+  sha="$(curl -fsSL "https://$SNAP_HOST/$file.sha256sum" | awk '{print $1; exit}')"
+  [[ ${#sha} -eq 64 ]] || { log "bad checksum file for $file"; exit 1; }
+  until aria2c -c -x 16 -s 16 -k 64M --file-allocation=none --summary-interval=60 --console-log-level=warn \
+      --checksum="sha-256=$sha" -d "$SNAPS" -o "$file" "https://$SNAP_HOST/$file"; do
+    log "snapshot download failed — retrying in 60 s"
+    sleep 60
+  done
+  # keep a datadir wrapper directory out of the way: a datadir member name at the top means no wrapper
+  first="$(tar -I zstd -tf "$SNAPS/$file" 2>/dev/null | head -n 1)"
+  strip=1
+  case "${first%%/*}" in db|static_files|blobstore|rocksdb|reth.toml|jwt.hex|known-peers.json|discovery-secret|invalid_block_hooks) strip=0 ;; esac
+  log "extracting into $EXEC (strip $strip) — this prints nothing for a long time"
+  tar -I zstd -xf "$SNAPS/$file" -C "$EXEC" --strip-components="$strip" || { log "extraction failed"; exit 1; }
+  rm -f "$SNAPS/$file"
+  touch "$SNAP_MARK"
+  log "snapshot restored ($kind)"
+fi
+
+# --- 3. engine secret (once) -----------------------------------------------------------------------------------------------
+[[ -s "$JWT" ]] || { openssl rand -hex 32 | tr -d '\n' >"$JWT"; chmod 600 "$JWT"; }
+
+reth_args() {
+  local a=(node --chain="$RETH_CHAIN" --datadir="$EXEC"
+    --http --http.addr="$HTTP_ADDR" --http.port="$HTTP_PORT" --http.api="$HTTP_API"
+    --ws --ws.addr="$HTTP_ADDR" --ws.port="$WS_PORT" --ws.api="$HTTP_API"
+    --ipcdisable
+    --authrpc.addr="$LOOPBACK" --authrpc.port="$ENGINE_PORT" --authrpc.jwtsecret="$JWT"
+    --rollup.sequencer="$SEQUENCER" --metrics="$LOOPBACK:$METRICS_PORT"
+    --port="$P2P_PORT" --discovery.port="$P2P_PORT" --discovery.v5.port="$V5_PORT")
+  if [[ "$MODE" != archive ]]; then
+    a+=(--prune.minimum-distance="$PRUNE_DISTANCE" --prune.receipts.distance="$PRUNE_DISTANCE"
+        --prune.account-history.distance="$PRUNE_DISTANCE" --prune.storage-history.distance="$PRUNE_DISTANCE")
+  fi
+  apply_extra_flags a
+  printf '%s\0' "${a[@]}"
+}
+
+node_args() {
+  local a=(--l1="$L1_RPC" --l1.rpckind=basic --l1.beacon="$L1_BEACON"
+    --l2="ws://127.0.0.1:$ENGINE_PORT" --l2.jwt-secret="$JWT" --network="$NODE_NETWORK"
+    --syncmode=execution-layer --l2.enginekind=reth
+    --rpc.addr="$LOOPBACK" --rpc.port="$CL_RPC"
+    --metrics.enabled --metrics.addr="$LOOPBACK" --metrics.port="$CL_METRICS"
+    --p2p.listen.tcp="$CL_P2P" --p2p.listen.udp="$CL_P2P"
+    --p2p.priv.path="$CONS/p2p_priv.txt" --p2p.peerstore.path="$CONS/peerstore_db" --p2p.discovery.path="$CONS/discovery_db")
+  printf '%s\0' "${a[@]}"
+}
+
+start_reth() {
+  mapfile -d '' -t args < <(reth_args)
+  "$BIN/op-reth" "${args[@]}" &
+  RETH_PID=$!
+  log "op-reth started (pid $RETH_PID, mode $MODE)"
+}
+
+start_node() {
+  mapfile -d '' -t args < <(node_args)
+  "$BIN/op-node" "${args[@]}" &
+  NODE_PID=$!
+  log "op-node started (pid $NODE_PID)"
+}
+
+# --- 4. supervise ----------------------------------------------------------------------------------------------------------
+log "Optimism $ENV_ID starting (op-reth $RETH_TAG, op-node $NODE_TAG, $MODE)"
+start_reth
+for _ in $(seq 1 120); do (echo >"/dev/tcp/127.0.0.1/$ENGINE_PORT") 2>/dev/null && break; sleep 1; done
+start_node
+while true; do
+  if ! kill -0 "$RETH_PID" 2>/dev/null; then
+    log "op-reth exited — restarting both in 10 s"
+    kill -TERM "$NODE_PID" 2>/dev/null; wait "$NODE_PID" 2>/dev/null
+    sleep 10
+    start_reth
+    for _ in $(seq 1 120); do (echo >"/dev/tcp/127.0.0.1/$ENGINE_PORT") 2>/dev/null && break; sleep 1; done
+    start_node
+  elif ! kill -0 "$NODE_PID" 2>/dev/null; then
+    log "op-node exited — restarting in 10 s"
+    sleep 10
+    start_node
+  fi
+  sleep 5 &
+  wait $!
+done

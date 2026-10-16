@@ -1,0 +1,57 @@
+# polkadot + prepare/execute workers from paritytech/polkadot-sdk GitHub releases (bare binaries, no archive, no Docker).
+# VERIFIED 2026-10-13: release polkadot-stable2609 ships `polkadot`, `polkadot-prepare-worker`, `polkadot-execute-worker`
+# (HTTP 200, 124.6 MB / 22.6 MB / 20.6 MB). The three MUST be the same version and sit in the SAME directory (bin/): the
+# node resolves the workers next to its own executable and refuses to start on a version mismatch
+# (polkadot/node/service/src/workers.rs). Parity publishes NO linux-aarch64 binary (only aarch64-apple-darwin): an aarch64
+# host has no install route until a `build:` is added (see risks.md) — so no urlTemplateAarch64 here.
+# Tag rule: polkadot-stable<YYMM>[-<patch>]. Resolve by (YYMM, patch) NOT by publish date, and only releases that carry all
+# three assets (polkadot-stable2603-7 has only 2 assets). One chain-spec set is built in: --chain polkadot|paseo|westend.
+# One binary serves all three envs.
+programs:
+  - env: mainnet
+    id: polkadot
+    source: { type: github, repo: paritytech/polkadot-sdk, tagPrefix: "polkadot-stable" }
+    artifacts:
+      - name: "polkadot"
+        urlTemplate: "https://github.com/paritytech/polkadot-sdk/releases/download/{tag}/polkadot"
+      - name: "polkadot-prepare-worker"
+        urlTemplate: "https://github.com/paritytech/polkadot-sdk/releases/download/{tag}/polkadot-prepare-worker"
+      - name: "polkadot-execute-worker"
+        urlTemplate: "https://github.com/paritytech/polkadot-sdk/releases/download/{tag}/polkadot-execute-worker"
+    requirements: { logFile: logs/polkadot.log }
+    ports:
+      - { role: http, port: 42200, label: "JSON-RPC (HTTP + WS)", config: required }
+      - { role: p2p, port: 42202, label: "P2P (tcp; litep2p also udp/webrtc-direct)", config: required, protocol: both }
+      - { role: metrics, port: 42204, label: "Prometheus (127.0.0.1)", config: required }
+  - env: paseo
+    id: polkadot
+    source: { type: github, repo: paritytech/polkadot-sdk, tagPrefix: "polkadot-stable" }
+    artifacts:
+      - name: "polkadot"
+        urlTemplate: "https://github.com/paritytech/polkadot-sdk/releases/download/{tag}/polkadot"
+      - name: "polkadot-prepare-worker"
+        urlTemplate: "https://github.com/paritytech/polkadot-sdk/releases/download/{tag}/polkadot-prepare-worker"
+      - name: "polkadot-execute-worker"
+        urlTemplate: "https://github.com/paritytech/polkadot-sdk/releases/download/{tag}/polkadot-execute-worker"
+    requirements: { logFile: logs/polkadot.log }
+    ports:
+      - { role: http, port: 42210, label: "JSON-RPC (HTTP + WS)", config: required }
+      - { role: p2p, port: 42212, label: "P2P (tcp; litep2p also udp/webrtc-direct)", config: required, protocol: both }
+      - { role: metrics, port: 42214, label: "Prometheus (127.0.0.1)", config: required }
+  - env: westend
+    id: polkadot
+    source: { type: github, repo: paritytech/polkadot-sdk, tagPrefix: "polkadot-stable" }
+    artifacts:
+      - name: "polkadot"
+        urlTemplate: "https://github.com/paritytech/polkadot-sdk/releases/download/{tag}/polkadot"
+      - name: "polkadot-prepare-worker"
+        urlTemplate: "https://github.com/paritytech/polkadot-sdk/releases/download/{tag}/polkadot-prepare-worker"
+      - name: "polkadot-execute-worker"
+        urlTemplate: "https://github.com/paritytech/polkadot-sdk/releases/download/{tag}/polkadot-execute-worker"
+    requirements: { logFile: logs/polkadot.log }
+    ports:
+      - { role: http, port: 42220, label: "JSON-RPC (HTTP + WS)", config: required }
+      - { role: p2p, port: 42222, label: "P2P (tcp; litep2p also udp/webrtc-direct)", config: required, protocol: both }
+      - { role: metrics, port: 42224, label: "Prometheus (127.0.0.1)", config: required }
+# No `snapshots:` block: snapshots.polkadot.io is a multi-file store (files.txt manifest), not one archive; discovery +
+# download are done by PolkadotSnapshotResolver (substrate-files://) and the agent runner, like cardano's mithril://.

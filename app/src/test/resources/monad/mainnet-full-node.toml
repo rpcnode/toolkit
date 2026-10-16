@@ -1,0 +1,157 @@
+#########################################################
+# Node-specific configuration
+#########################################################
+beneficiary = "0x0000000000000000000000000000000000000000"
+node_name = "<NODE_NAME>"                                  # Node Name
+network_name = "mainnet"                                   # DO NOT CHANGE
+ipc_tx_batch_size = 1000
+ipc_max_queued_batches = 10
+# must be <= ipc_max_queued_batches
+ipc_queued_batches_watermark = 3
+
+statesync_threshold = 600
+statesync_max_concurrent_requests = 5
+
+#########################################################
+# Network-wide configuration
+#########################################################
+chain_id = 143
+
+[peer_discovery]
+self_address = "<IP>:<PORT>"               # IP Address and Port
+self_auth_port = 8001
+self_record_seq_num = 0                    # Should be 0 initially
+self_name_record_sig = "<NAME_RECORD_SIG>" # Name Record Signature
+refresh_period = 20
+request_timeout = 5
+unresponsive_prune_threshold = 3
+last_participation_prune_threshold = 1000
+min_num_peers = 150
+max_num_peers = 600
+ping_rate_limit_per_second = 100
+
+[fullnode_raptorcast]
+enable_publisher = true
+enable_client = true
+raptor10_fullnode_redundancy_factor = 3.0
+max_group_size = 150
+round_span = 240
+invite_lookahead = 20
+max_invite_wait = 10
+deadline_round_dist = 10
+init_empty_round_span = 23
+max_num_group = 3
+invite_future_dist_min = 1
+invite_future_dist_max = 600
+invite_accept_heartbeat_ms = 10000
+
+[network]
+bind_address_host = "0.0.0.0"
+bind_address_port = 8000
+authenticated_bind_address_port = 8001
+max_rtt_ms = 300
+max_mbps = 1000
+
+#########################################################
+# Peers configuration
+#########################################################
+
+[fullnode_dedicated]
+identities = []
+
+[fullnode_raptorcast.full_nodes_prioritized]
+identities = []
+
+[blocksync_override]
+peers = []
+
+[statesync]
+expand_to_group = true
+
+[[statesync.init_peers]]
+secp256k1_pubkey = "037d1cbb43ffc35b540f5175cf366f5f5b5ee1c578ce493e5f689856da148f1cba"
+
+[[statesync.init_peers]]
+secp256k1_pubkey = "02b74a25df4a04bf3fda28a8460946e1cc097adfe0f3851a67546ca328a052020e"
+
+[[statesync.init_peers]]
+secp256k1_pubkey = "039bed2d57eb4140967b3a114594f046252fd781dba383d8ebcafac1988b7908f0"
+
+[[statesync.init_peers]]
+secp256k1_pubkey = "02a7dd4717c55010da5b49fde4515dd1932e138c3b34360d34a9e112e5269eefca"
+
+[[statesync.init_peers]]
+secp256k1_pubkey = "0267695371b9a65a2f3ad8324e15f09be7322c1678e5ae36aca277d4eb85a2c5ed"
+
+[[statesync.init_peers]]
+secp256k1_pubkey = "024ed4df9c6b174ec5eaf9b1d937cf9ce69581aacfd0581f54793b3c13db69757d"
+
+[[statesync.init_peers]]
+secp256k1_pubkey = "03f9e716c905b1d18ef97ada135799bd885b8c4bf24b01acc9964564cdee898527"
+
+[[statesync.init_peers]]
+secp256k1_pubkey = "032760f4b5ce58fd6d4c952a1bfcd44bf315a2a178614700ed9e95cd42bbdb1bf6"
+
+# mf-mainnet-bootstrap-fn-lsn-fra-006
+[[bootstrap.peers]]
+address = "64.31.29.190:8000"
+record_seq_num = 1
+name_record_sig = "1d1cdf398a82fd294e1baa4d179b6b0d0f0489207ab1601b26a806b9468859b92f1397cb7b577ba39c27a7c7ffd2ccc8630d5b5c2aa4095d0fb0090d9fda78ee00"
+secp256k1_pubkey = "037d1cbb43ffc35b540f5175cf366f5f5b5ee1c578ce493e5f689856da148f1cba"
+auth_port = 8001
+
+# mf-mainnet-bootstrap-fn-lsn-jfk-013
+[[bootstrap.peers]]
+address = "64.31.53.173:8000"
+record_seq_num = 1
+name_record_sig = "00e2cbbfd5b9f28ffc8417ed10f02ba2910b07157daae37b19740c66fe7e87535f00418c97534a69caad9b100e2b562a8f119c11debd3eb787433b82378b6d4100"
+secp256k1_pubkey = "02b74a25df4a04bf3fda28a8460946e1cc097adfe0f3851a67546ca328a052020e"
+auth_port = 8001
+
+# mf-mainnet-bootstrap-fn-lsn-sgp-005
+[[bootstrap.peers]]
+address = "208.115.197.25:8000"
+record_seq_num = 1
+name_record_sig = "4d22a214e9fdab1e8ba0b684597c3db1e0fd5e369e148f83fea88af24b7dfca75c82293758aba386e69fa3d538a54c2147e7619d931806bf1a073742bb0a3a9300"
+secp256k1_pubkey = "039bed2d57eb4140967b3a114594f046252fd781dba383d8ebcafac1988b7908f0"
+auth_port = 8001
+
+# mf-mainnet-bootstrap-fn-tsw-ams-001
+[[bootstrap.peers]]
+address = "64.130.52.235:8000"
+record_seq_num = 1
+name_record_sig = "d4edc830f19f1e087989f65e02b306424847b5cd34b85b51834df5556d6018396941fdf86b6a8fb5ba80f9b15d880a3ac93bbcee09e698727284d58ccebb1c1500"
+secp256k1_pubkey = "02a7dd4717c55010da5b49fde4515dd1932e138c3b34360d34a9e112e5269eefca"
+auth_port = 8001
+
+# mf-mainnet-bootstrap-fn-tsw-pit-004
+[[bootstrap.peers]]
+address = "64.130.56.50:8000"
+record_seq_num = 1
+name_record_sig = "7a14e16076ec7013fab5d2e287793eb8a2b0309d5cb636472bf134a7c333368520cec2eaafc6e0a3c7a5f146dc6ac0e3942fd4a4a77af7dc61fc4c097513d23301"
+secp256k1_pubkey = "0267695371b9a65a2f3ad8324e15f09be7322c1678e5ae36aca277d4eb85a2c5ed"
+auth_port = 8001
+
+# mf-mainnet-bootstrap-fn-tsw-tyo-004
+[[bootstrap.peers]]
+address = "64.130.49.148:8000"
+record_seq_num = 1
+name_record_sig = "4d9bc60e5b82da690946e00fbf42c5414fcd28e0796195f55376ec9b296c9f486c5c54f3ea4be6b10a7a3a9f14d763b75bcb36bd992393b2974b3a16576bb05f00"
+secp256k1_pubkey = "024ed4df9c6b174ec5eaf9b1d937cf9ce69581aacfd0581f54793b3c13db69757d"
+auth_port = 8001
+
+# cl-sgp-007
+[[bootstrap.peers]]
+address = "69.162.93.53:8000"
+record_seq_num = 1
+name_record_sig = "6fa31238fd234196338693890c73f91bc893b009cf4c84f40c05d24c62a4c1e2617ef5b6b90c897b356c7d2207a58dc2b1fb2f1d8b787b2f4b4154fe606ef0bd00"
+secp256k1_pubkey = "03f9e716c905b1d18ef97ada135799bd885b8c4bf24b01acc9964564cdee898527"
+auth_port = 8001
+
+# cl-swe-015
+[[bootstrap.peers]]
+address = "185.189.46.19:8000"
+record_seq_num = 1
+name_record_sig = "28198a163a8f6e89bb0b709bfef91f4e4d4d0de86e0c3bd069ea6cb4098b45bd099d3654a135b982906ed8897ed3778f14febf3ec88deee1f30d777fb8f2cba801"
+secp256k1_pubkey = "032760f4b5ce58fd6d4c952a1bfcd44bf315a2a178614700ed9e95cd42bbdb1bf6"
+auth_port = 8001

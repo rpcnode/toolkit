@@ -1,0 +1,32 @@
+# Robinhood Chain = an Arbitrum Orbit chain on Nitro. Nitro comes from the Docker Hub registry (HTTP layers, no Docker
+# daemon) exactly like Arbitrum; the chain-info file is the Robinhood CDN's. Snapshots: Nitro's own --init.latest from
+# robinhood-snapshots.offchainlabs.com. Env `testnet` = Robinhood Chain Sepolia.
+programs:
+  - env: mainnet
+    id: nitro
+    source: { type: github, repo: OffchainLabs/nitro }
+    artifacts:
+      - name: "nitro-x86_64-linux.tar.gz"
+        nameAarch64: "nitro-aarch64-linux.tar.gz"
+        urlTemplate: "docker://offchainlabs/nitro-node:{tag}"
+        urlTemplateAarch64: "docker://offchainlabs/nitro-node:{tag}"
+    configs:
+      - name: robinhood-chain-info.json
+        urlTemplate: "https://cdn.robinhood.com/assets/generated_assets/hoodchain_docsite/chain-node-configs/robinhood-chain-info.json"
+    ports:
+      - { role: http, port: 8667, label: "HTTP RPC", config: required }
+      - { role: ws, port: 8668, label: "WebSocket RPC", config: required }
+  - env: testnet
+    id: nitro
+    source: { type: github, repo: OffchainLabs/nitro }
+    artifacts:
+      - name: "nitro-x86_64-linux.tar.gz"
+        nameAarch64: "nitro-aarch64-linux.tar.gz"
+        urlTemplate: "docker://offchainlabs/nitro-node:{tag}"
+        urlTemplateAarch64: "docker://offchainlabs/nitro-node:{tag}"
+    configs:
+      - name: robinhood-chain-testnet-info.json
+        urlTemplate: "https://cdn.robinhood.com/assets/generated_assets/hoodchain_docsite/chain-node-configs/robinhood-chain-testnet-info.json"
+    ports:
+      - { role: http, port: 8677, label: "HTTP RPC", config: required }
+      - { role: ws, port: 8678, label: "WebSocket RPC", config: required }

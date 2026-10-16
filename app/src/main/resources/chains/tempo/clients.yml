@@ -1,0 +1,40 @@
+# Tempo from tempoxyz/tempo GitHub releases (no Docker). VERIFIED 2026-10-13: v1.16.0 (2026-10-06) latest; assets per release:
+#   tempo-<tag>-x86_64-unknown-linux-gnu.tar.gz (45.8 MB) and tempo-<tag>-aarch64-unknown-linux-gnu.tar.gz (43.4 MB) + .sha256/.asc (GPG fingerprint EE3C5D41EA963E896F310EC3CBBFA54B20D33446), plus a separate tempo-sidecar-* tarball (not needed).
+# Each tarball holds ONE file named tempo-<tag>-<target> (VERIFIED): the starter installs it as bin/tempo.
+# The repo also publishes crate tags (tempo-primitives@1.16.0 …): `tagPrefix: "v"` keeps only the node releases. One binary `tempo` serves mainnet and moderato (--chain).
+# Network upgrades are version-gated (tempo.xyz/developers/docs/guide/node/network-upgrades lists the required version per network): follow-latest is the default, expose a pin.
+# Ports come from PORTS.md (tempo base 42590): mainnet 42590-42599, moderato 42600-42609. Tempo's own defaults (8545/8546/30303/8001/8551) are not used
+# (a follower also binds the consensus metrics server 127.0.0.1:8001 and reth's authrpc 8551: both are pinned to catalog ports).
+programs:
+  - env: mainnet
+    id: tempo
+    source: { type: github, repo: tempoxyz/tempo, tagPrefix: "v" }
+    artifacts:
+      - name: "tempo-linux-x86_64.tar.gz"
+        nameAarch64: "tempo-linux-aarch64.tar.gz"
+        urlTemplate: "https://github.com/tempoxyz/tempo/releases/download/{tag}/tempo-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/tempoxyz/tempo/releases/download/{tag}/tempo-{tag}-aarch64-unknown-linux-gnu.tar.gz"
+    requirements: { logFile: logs/tempo.log }
+    ports:
+      - { role: http, port: 42590, label: "HTTP RPC", config: required }
+      - { role: ws, port: 42591, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 42592, label: "Execution P2P", config: required, protocol: both }
+      - { role: authrpc, port: 42593, label: "reth authrpc (127.0.0.1)", config: required }
+      - { role: metrics, port: 42594, label: "Metrics (127.0.0.1)", config: required }
+      - { role: consensus_metrics, port: 42595, label: "Consensus metrics (127.0.0.1)", config: required }
+  - env: moderato
+    id: tempo
+    source: { type: github, repo: tempoxyz/tempo, tagPrefix: "v" }
+    artifacts:
+      - name: "tempo-linux-x86_64.tar.gz"
+        nameAarch64: "tempo-linux-aarch64.tar.gz"
+        urlTemplate: "https://github.com/tempoxyz/tempo/releases/download/{tag}/tempo-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/tempoxyz/tempo/releases/download/{tag}/tempo-{tag}-aarch64-unknown-linux-gnu.tar.gz"
+    requirements: { logFile: logs/tempo.log }
+    ports:
+      - { role: http, port: 42600, label: "HTTP RPC", config: required }
+      - { role: ws, port: 42601, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 42602, label: "Execution P2P", config: required, protocol: both }
+      - { role: authrpc, port: 42603, label: "reth authrpc (127.0.0.1)", config: required }
+      - { role: metrics, port: 42604, label: "Metrics (127.0.0.1)", config: required }
+      - { role: consensus_metrics, port: 42605, label: "Consensus metrics (127.0.0.1)", config: required }

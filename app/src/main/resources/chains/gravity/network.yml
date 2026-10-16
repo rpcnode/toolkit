@@ -1,0 +1,119 @@
+# Gravity L1 (mainnet chain id 127001, Longevity testnet 7771625): AptosBFT consensus + Gravity Reth (parallel EVM) in ONE process (`gravity_node node …`), Public Full Node (PFN) role.
+# (Confirmed by the user: Gravity L1 only, chain id 0x1f019 = 127001. The legacy Gravity Alpha Mainnet — chain 1625 — is an Arbitrum Nitro L2: not this network.)
+# Snapshot optional — official PFN data tarballs at stable URLs (HEAD 2026-10-13): mainnet 112.6 GB, testnet 95.3 GB (plain .tar, resume supported).
+# Sizing is INFERRED from the snapshot sizes (docs: "budget well above the current chain size"); benchmark nodes were 8 vCPU / 16 GB.
+label: Gravity
+diskRoles:
+  - id: data
+    label: Node DB (consensus_db + quorumstoreDB + reth)
+    media: nvme
+diskNotes:
+  - "Layout under the data role leaf: consensus_db/, quorumstoreDB/, reth/ (+ secure_storage.json, rand_db — node-specific, NEVER copied from another node or a snapshot)."
+  - "Identity (identity.yaml, private keys, 0600) is generated once by `gravity_cli genesis generate-key` and kept under <node_dir>/.toolkit/config; public_full_node.yaml is rendered there on every Start."
+  - "Authrpc, metrics and the inspection service listen on 127.0.0.1 only; RPC namespaces are eth,net,web3."
+  - "Hardfork times are compiled into the binary: a node on an old release fail-stops at the activation block (docs mainnet-hardforks)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Gravity Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 400
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: optional
+    tipLagBlocks: 30
+    publicTip:
+      urls:
+        - https://mainnet-rpc.gravity.xyz
+    snapshotTypes:
+      - id: pfn
+        kind: full
+        label: Official PFN data snapshot
+        hint: "https://gravity-snapshots.b-cdn.net/gravity-mainnet-data/latest.tar (112.6 GB, point-in-time cut; node syncs forward). Default."
+        diskGiB: 400
+        default: true
+  - id: testnet
+    label: Gravity Longevity Testnet
+    diskHintGiB: 768
+    fullNodeGiB: 300
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: optional
+    tipLagBlocks: 30
+    publicTip:
+      urls:
+        - https://testnet-rpc.gravity.xyz
+    snapshotTypes:
+      - id: pfn
+        kind: full
+        label: Official PFN data snapshot
+        hint: "https://gravity-snapshots.b-cdn.net/gravity-testnet-data/latest.tar (95.3 GB). Default."
+        diskGiB: 300
+        default: true
+
+# CLI flags live in the systemd unit (chains/evmfamily GravityProfile); public_full_node.yaml is rendered on every Start.
+# EvmCatalogTest compares the literals with the rendered unit.
+clientConfig:
+  program: gravity_node
+  format: flags
+  bindings:
+    - key: snapshot
+      source: install_option
+      option: snapshot
+      default: "pfn"
+      description: Official PFN data snapshot
+    - key: storage-dir
+      source: disk_role_dir
+      role: data
+      description: "Gravity storage dir (Disks data role): consensus_db/, quorumstoreDB/, reth/"
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: JSON-RPC WebSocket port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: Reth P2P port (tcp + udp)
+    - key: authrpc-port
+      source: catalog_port
+      role: engine
+      description: Reth authrpc port, 127.0.0.1 (internal to the process)
+    - key: metrics-port
+      source: catalog_port
+      role: metrics
+      description: Reth Prometheus port, 127.0.0.1
+    - key: inspection-port
+      source: catalog_port
+      role: inspection
+      description: Gravity inspection service port, 127.0.0.1
+    - key: public-port
+      source: catalog_port
+      role: consensus_p2p
+      description: Gravity public-network listener (noise-ik, tcp); an outbound-only PFN may leave it firewalled
+    - key: http-api
+      source: literal
+      value: "eth,net,web3"
+      description: "--http.api / --ws.api"
+    - key: rpc-max-connections
+      source: literal
+      value: "3000"
+      description: "--rpc.max-connections (upstream template 20000)"
+    - key: prune-transactionlookup-distance
+      source: literal
+      value: "10064"
+      description: "--prune.transactionlookup.distance (docs: must be >= 10064 on production PFNs)"
+    - key: txpool-max-account-slots
+      source: literal
+      value: "64"
+      description: "--txpool.max-account-slots (docs example)"
+    - key: limit-nofile
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE of every unit
+
+diagnostics:
+  - id: path_mtu

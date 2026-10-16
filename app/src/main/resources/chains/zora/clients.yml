@@ -1,0 +1,51 @@
+# Zora: Zora Network (Conduit-hosted OP Stack, Superchain Registry `zora`): op-reth + op-node. Same constraints as Mode: NO public snapshot — without a snapshot_url the node derives the chain from L1 (weeks).
+# op-reth + op-node: pinned tags of ethereum-optimism/optimism, compiled by the panel build hosts (`build:`, Dockerfiles beside this file) and
+# synced as `<name>-<arch>`; a host without the prebuilt binary compiles them itself (chains/opstack/run.sh.tmpl).
+# The pins MUST equal OpstackToolchain.RETH_TAG / NODE_TAG (a test keeps them equal).
+programs:
+  - env: mainnet
+    id: op-reth
+    source: { type: pinned, version: "2.6.0", tag: "op-reth/v2.6.0", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-reth.Dockerfile, outputs: [op-reth], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/zora.log }
+    artifacts: []
+    ports:
+      - { role: http, port: 42830, label: "EL JSON-RPC", config: required }
+      - { role: ws, port: 42831, label: "EL WebSocket", config: required }
+      - { role: engine, port: 42833, label: "EL Engine API (127.0.0.1)", config: required }
+      - { role: metrics, port: 42834, label: "EL metrics (127.0.0.1)", config: required }
+      - { role: p2p, port: 42832, label: "EL P2P", config: required, protocol: both }
+      - { role: discv5, port: 42838, label: "EL discv5 (UDP)", config: required, protocol: udp }
+  - env: mainnet
+    id: op-node
+    source: { type: pinned, version: "1.19.9", tag: "op-node/v1.19.9", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-node.Dockerfile, outputs: [op-node], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/zora.log }
+    artifacts: []
+    ports:
+      - { role: cl_rpc, port: 42835, label: "op-node RPC (127.0.0.1)", config: required }
+      - { role: cl_metrics, port: 42837, label: "op-node metrics (127.0.0.1)", config: required }
+      - { role: cl_p2p, port: 42836, label: "op-node P2P", config: required, protocol: both }
+  - env: sepolia
+    id: op-reth
+    source: { type: pinned, version: "2.6.0", tag: "op-reth/v2.6.0", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-reth.Dockerfile, outputs: [op-reth], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/zora.log }
+    artifacts: []
+    ports:
+      - { role: http, port: 42840, label: "EL JSON-RPC", config: required }
+      - { role: ws, port: 42841, label: "EL WebSocket", config: required }
+      - { role: engine, port: 42843, label: "EL Engine API (127.0.0.1)", config: required }
+      - { role: metrics, port: 42844, label: "EL metrics (127.0.0.1)", config: required }
+      - { role: p2p, port: 42842, label: "EL P2P", config: required, protocol: both }
+      - { role: discv5, port: 42848, label: "EL discv5 (UDP)", config: required, protocol: udp }
+  - env: sepolia
+    id: op-node
+    source: { type: pinned, version: "1.19.9", tag: "op-node/v1.19.9", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-node.Dockerfile, outputs: [op-node], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/zora.log }
+    artifacts: []
+    ports:
+      - { role: cl_rpc, port: 42845, label: "op-node RPC (127.0.0.1)", config: required }
+      - { role: cl_metrics, port: 42847, label: "op-node metrics (127.0.0.1)", config: required }
+      - { role: cl_p2p, port: 42846, label: "op-node P2P", config: required, protocol: both }

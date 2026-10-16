@@ -71,7 +71,7 @@ class ToolkitDatabaseTest
                 "SELECT COUNT(*) FROM flyway_schema_history",
             ).use { rs ->
                 assertTrue(rs.next())
-                assertEquals(17, rs.getInt(1))
+                assertEquals(18, rs.getInt(1))
             }
         }
     }

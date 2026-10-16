@@ -1,0 +1,164 @@
+# Ethereum Classic (proof of work, Core-Geth). Snapshot never: no official or community chaindata snapshot exists
+# (checked 2026-10-13) and snap sync is fast (mainnet ~70 min, Mordor ~20 min on the vendor reference machine).
+# Directory name is the network id. Ports live in clients.yml beside this file.
+label: Ethereum Classic
+diskRoles:
+  - id: chaindata
+    label: Chaindata
+    media: nvme
+diskNotes:
+  - "Core-Geth binary + zip live in the chaindata role leaf (bin/geth); --datadir is <chaindata>/datadir (geth creates <datadir>/geth/chaindata + ancient there)."
+  - "Full (default): snap sync + gcmode full, ~51 GiB at block 25.3M (vendor measurement 2026-09-13). Archive: full sync from genesis + gcmode archive, not measured by the vendor (~1 TiB is the old toolkit's hint)."
+  - "Proof of work: no consensus client, no JWT, no Engine API."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Ethereum Classic Mainnet
+    diskHintGiB: 256
+    fullNodeGiB: 256
+    archiveGiB: 1024
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://etc.drpc.org
+        - https://etc.etcdesktop.com
+        - https://etc.blockscout.com/api/eth-rpc
+  - id: mordor
+    label: Ethereum Classic Mordor
+    diskHintGiB: 64
+    fullNodeGiB: 64
+    archiveGiB: 128
+    cpuCores: 2
+    memoryGiB: 8
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc.mordor.etccooperative.org
+
+# CLI flags live in the systemd unit (chains/etc, EtcUnitBodies). format: flags — no conf patch on Start.
+# Every literal below is the same number/string as the constant in EtcUnitBodies and as the flag in node.service.tmpl.
+# Public namespaces are limited to eth,net,web3: no debug / admin / personal / miner / txpool; no ws, no graphql, no CORS.
+clientConfig:
+  program: core-geth
+  format: flags
+  bindings:
+    - key: node
+      source: install_option
+      option: node
+      default: "full"
+      description: Core-Geth mode — full (snap sync + gcmode full) or archive (syncmode full from genesis + gcmode archive)
+    - key: chain
+      source: literal
+      value: "--classic"
+      onlyEnv: [mainnet]
+      description: Network selection flag (Ethereum Classic mainnet, chain id 61)
+    - key: chain
+      source: literal
+      value: "--mordor"
+      onlyEnv: [mordor]
+      description: Network selection flag (Mordor testnet, chain id 63)
+    - key: datadir
+      source: disk_role_dir
+      role: chaindata
+      relative: datadir
+      description: Core-Geth --datadir (under the chaindata role; keeps the binary named geth out of <datadir>/geth/)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: JSON-RPC WebSocket port (same bind address as HTTP)
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: P2P listen port (TCP) and discovery port (UDP, same number)
+    - key: http-host
+      source: literal
+      value: "0.0.0.0"
+      description: HTTP RPC bind address (no auth / TLS / rate limit on the node — put a proxy in front before exposing it)
+    - key: http-api
+      source: literal
+      value: "eth,net,web3"
+      description: Public JSON-RPC namespaces (an empty list stops the node; debug / admin / personal / miner / txpool stay off)
+    - key: http-vhosts
+      source: literal
+      value: "*"
+      description: Accepted Host headers (default is localhost only)
+    - key: ws-api
+      source: literal
+      value: "eth,net,web3"
+      description: WebSocket JSON-RPC namespaces (same set as HTTP; eth_subscribe is part of eth)
+    - key: ws-origins
+      source: literal
+      value: "*"
+      description: Accepted WebSocket Origin headers (default is none)
+    - key: cache
+      source: literal
+      value: "4096"
+      onlyEnv: [mainnet]
+      description: Internal cache, MiB (geth lowers it to a third of host RAM; vendor default 1024)
+    - key: cache
+      source: literal
+      value: "1024"
+      onlyEnv: [mordor]
+      description: Internal cache, MiB (vendor default)
+    - key: maxpeers
+      source: literal
+      value: "50"
+      description: Peer slots (vendor default; ETC has ~550 nodes)
+    - key: history-transactions
+      source: literal
+      value: "0"
+      description: Index every transaction (0 = all blocks; vendor default 2350000 ≈ 1 year) so old receipts and hash lookups answer
+    - key: mess
+      source: literal
+      value: "true"
+      description: MESS (ECBP-1100) deep-reorg protection, pinned on (the v1.13.0 default); keep every node of a fleet the same
+    - key: rpc-gascap
+      source: literal
+      value: "50000000"
+      description: Gas cap for eth_call / eth_estimateGas (vendor default)
+    - key: rpc-evmtimeout
+      source: literal
+      value: "5s"
+      description: Time limit of one eth_call (vendor default)
+    - key: rpc-batch-request-limit
+      source: literal
+      value: "1000"
+      description: Max calls in one JSON-RPC batch (vendor default)
+    - key: rpc-batch-response-max-size
+      source: literal
+      value: "25000000"
+      description: Max bytes returned by one batch (vendor default)
+    - key: rpc-txfeecap
+      source: literal
+      value: "1"
+      description: Fee cap in ether for transactions sent through the node (vendor default)
+    - key: txpool-globalslots
+      source: literal
+      value: "5120"
+      description: Executable transaction slots in the pool (vendor default)
+    - key: txpool-globalqueue
+      source: literal
+      value: "1024"
+      description: Non-executable transaction slots in the pool (vendor default)
+    - key: ipcdisable
+      source: literal
+      value: "true"
+      description: IPC socket off (HTTP is the only local interface; a deep node_dir would exceed the 108-byte unix socket path)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for geth
+    - key: TimeoutStopSec
+      source: literal
+      value: "300"
+      description: Seconds systemd waits for a clean stop before SIGKILL (vendor unit uses 300)
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

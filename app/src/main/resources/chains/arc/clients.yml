@@ -1,0 +1,34 @@
+# Circle Arc node = Reth-based execution layer + Malachite consensus layer + the snapshot tool, one tarball from
+# circlefin/arc-node GitHub releases (no Docker). Peers are not used (--disable-discovery): the CL pulls blocks from the
+# relay endpoints. Ports: only local ones — EL JSON-RPC, EL metrics, CL RPC and CL metrics.
+programs:
+  - env: mainnet
+    id: arc-node
+    source: { type: github, repo: circlefin/arc-node }
+    artifacts:
+      - name: "arc-node-linux-x86_64.tar.gz"
+        nameAarch64: "arc-node-linux-aarch64.tar.gz"
+        urlTemplate: "https://github.com/circlefin/arc-node/releases/download/{tag}/arc-node-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/circlefin/arc-node/releases/download/{tag}/arc-node-{tag}-aarch64-unknown-linux-gnu.tar.gz"
+    requirements: { logFile: logs/arc.log }
+    ports:
+      - { role: http, port: 8591, label: "EL JSON-RPC", config: required }
+      - { role: ws, port: 8593, label: "EL WebSocket RPC", config: required }
+      - { role: el_metrics, port: 9291, label: "EL metrics", config: required }
+      - { role: cl_rpc, port: 31091, label: "CL RPC", config: required }
+      - { role: cl_metrics, port: 29091, label: "CL metrics", config: required }
+  - env: testnet
+    id: arc-node
+    source: { type: github, repo: circlefin/arc-node }
+    artifacts:
+      - name: "arc-node-linux-x86_64.tar.gz"
+        nameAarch64: "arc-node-linux-aarch64.tar.gz"
+        urlTemplate: "https://github.com/circlefin/arc-node/releases/download/{tag}/arc-node-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/circlefin/arc-node/releases/download/{tag}/arc-node-{tag}-aarch64-unknown-linux-gnu.tar.gz"
+    requirements: { logFile: logs/arc.log }
+    ports:
+      - { role: http, port: 8592, label: "EL JSON-RPC", config: required }
+      - { role: ws, port: 8594, label: "EL WebSocket RPC", config: required }
+      - { role: el_metrics, port: 9292, label: "EL metrics", config: required }
+      - { role: cl_rpc, port: 31092, label: "CL RPC", config: required }
+      - { role: cl_metrics, port: 29092, label: "CL metrics", config: required }

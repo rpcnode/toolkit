@@ -1,0 +1,42 @@
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+# one-shot init (idempotent: skipped when <datadir>/geth/chaindata exists) — see ImmutableNodeProcessStarter
+ExecStartPre=/bin/bash -c 'test -d {{datadir}}/geth/chaindata || {{bin}} immutable bootstrap rpc --zkevm {{zkevm_net}} --datadir {{datadir}}'
+ExecStart={{bin}} \
+  --zkevm {{zkevm_net}} \
+  --config {{config_file}} \
+  --datadir {{datadir}} \
+  --port {{p2p_port}} \
+  --http \
+  --http.addr 0.0.0.0 \
+  --http.port {{http_port}} \
+  --http.api {{http_api}} \
+  --http.vhosts=* \
+  --http.corsdomain=* \
+  --ws \
+  --ws.addr 0.0.0.0 \
+  --ws.port {{ws_port}} \
+  --ws.api {{http_api}} \
+  --ws.origins=* \
+  --metrics \
+  --metrics.addr 127.0.0.1 \
+  --metrics.port {{metrics_port}} \
+  --gossipdefault \
+  --disabletxpoolgossip \
+  --rpcproxy
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=300
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE={{limit_nofile}}
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

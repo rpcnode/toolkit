@@ -143,7 +143,10 @@ class YamlNetworkFactsRepositoryTest
             setOf("node", "datadir", "heimdall-home", "http-port", "p2p-port", "heimdall-api-port"),
             polyFacts.clientConfig!!.bindings.map { it.path }.toSet(),
         )
-        assertEquals("never", polyFacts.envs.single { it.id == "mainnet" }.snapshot)
+        // Heimdall v2 cannot sync from genesis and Bor from block 0 takes days: both are restored from snapshots (PolygonSnapshot)
+        assertEquals("required", polyFacts.envs.single { it.id == "mainnet" }.snapshot)
+        assertEquals("required", polyFacts.envs.single { it.id == "amoy" }.snapshot)
+        assertEquals(listOf("full"), polyFacts.envs.single { it.id == "amoy" }.snapshotTypes.map { it.id })
         assertEquals(2, polyFacts.diskRoles.size)
 
         val bsc = repo.find(NetworkId.BSC)

@@ -1,0 +1,28 @@
+# Same unit shape as chains/avalanche (FlareUnitBodies renders {{exec_start}} from the flag list in FAMILY.md):
+#   <node_dir>/bin/avalanchego --network-id=<flare|songbird|costwo> --data-dir=<node_dir>/data --db-dir=<blockchain>/db --log-dir=<node_dir>/logs
+#     --http-host=0.0.0.0 --http-port=<http> --http-allowed-hosts=* --staking-port=<p2p> --api-admin-enabled=false --index-enabled=false
+#     --bootstrap-ips=<info.getNodeIP of https://<net>-bootstrap.flare.network/ext/info> --bootstrap-ids=<info.getNodeID, same endpoint>
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+ExecStart={{exec_start}}
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=90
+KillMode=control-group
+KillSignal=SIGTERM
+FinalKillSignal=SIGKILL
+IPAccounting=yes
+CPUAccounting=yes
+MemoryAccounting=yes
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE={{nofile}}
+
+[Install]
+WantedBy=multi-user.target

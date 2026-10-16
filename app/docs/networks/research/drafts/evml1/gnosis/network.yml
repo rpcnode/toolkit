@@ -1,0 +1,122 @@
+# Gnosis Chain (+ Chiado testnet): Nethermind (execution) + Lighthouse (consensus). Snapshot never — Nethermind snap sync
+# (FastSync + SnapSync are on in its shipped gnosis.json / chiado.json) and Lighthouse checkpoint sync.
+# Directory name is the network id. Ports live in clients.yml beside this file.
+# Sizing: hardware floor (4 threads, 16 GB RAM, NVMe) VERIFIED in gnosischain/documentation; disk figures are INFERRED
+# (no official full-node size published; Erigon mirror docs list ~530 GiB pruned / ~1.7 TiB archive for Gnosis in 2024).
+label: Gnosis Chain
+diskRoles:
+  - id: execution
+    label: Execution Client DB
+    media: nvme
+  - id: consensus
+    label: Consensus Client DB
+    media: ssd
+diskNotes:
+  - "Nethermind binary + its configs/ and chainspec/ live in <execution>/bin; --data-dir is <execution>/data (DB under data/nethermind_db/<chain>)."
+  - "Lighthouse datadir on the consensus role (SSD). JWT is shared under <node_dir>/.toolkit/jwt.hex."
+  - "Post-merge: Nethermind and Lighthouse must both run; there is no PoW fallback."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Gnosis Chain
+    diskHintGiB: 2048
+    fullNodeGiB: 1024
+    archiveGiB: 4096
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc.gnosischain.com
+        - https://gnosis-rpc.publicnode.com
+      beaconUrls:
+        - https://gnosis-beacon-api.publicnode.com
+  - id: chiado
+    label: Gnosis Chiado Testnet
+    diskHintGiB: 512
+    fullNodeGiB: 256
+    archiveGiB: 1024
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc.chiadochain.net
+        - https://gnosis-chiado-rpc.publicnode.com
+      beaconUrls:
+        - https://gnosis-chiado-beacon-api.publicnode.com
+
+# CLI flags live in the systemd units (chains/gnosis). Capacity literals mirror node.service.tmpl exactly.
+clientConfig:
+  program: nethermind
+  format: flags
+  bindings:
+    - key: node
+      source: install_option
+      option: node
+      default: "full"
+      description: Nethermind config — full (gnosis / chiado) or archive (gnosis_archive / chiado_archive)
+    - key: data-dir
+      source: disk_role_dir
+      role: execution
+      relative: data
+      description: Nethermind --data-dir (Disks execution role)
+    - key: lighthouse-datadir
+      source: disk_role_dir
+      role: consensus
+      description: Lighthouse --datadir (Disks consensus role)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: JSON-RPC WebSocket port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: Nethermind P2P + discovery port
+    - key: engine-port
+      source: catalog_port
+      role: engine
+      description: Engine API (JWT) port, 127.0.0.1
+    - key: metrics-port
+      source: catalog_port
+      role: metrics
+      description: Nethermind Prometheus port, 127.0.0.1
+    - key: beacon-port
+      source: catalog_port
+      role: beacon
+      description: Lighthouse HTTP (beacon API) port, 127.0.0.1
+    - key: consensus-p2p
+      source: catalog_port
+      role: consensus_p2p
+      description: Lighthouse P2P port (tcp + udp discovery)
+    - key: quic-port
+      source: catalog_port
+      role: consensus_quic
+      description: Lighthouse QUIC port (udp)
+    - key: json-rpc-modules
+      source: literal
+      value: "Eth,Net,Web3,Subscribe,Rpc"
+      description: Public namespaces (no Debug, Trace, TxPool, Admin, Personal)
+    - key: json-rpc-max-batch-size
+      source: literal
+      value: "1000"
+      description: JsonRpc.MaxBatchSize
+    - key: json-rpc-request-queue-limit
+      source: literal
+      value: "500"
+      description: JsonRpc.RequestQueueLimit
+    - key: max-active-peers
+      source: literal
+      value: "50"
+      description: Network.MaxActivePeers
+    - key: limit-nofile
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE of both units
+
+diagnostics:
+  - id: path_mtu

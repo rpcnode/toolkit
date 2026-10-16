@@ -1433,8 +1433,8 @@ class StartSnapshotDownloadUseCase(
         {
             val ref = EvmSnapshotSentinel.parse(initial.url)
                 ?: error("invalid evm-snapshot URL: ${initial.url}")
-            val profile = evmSnapshots.profileFor(ref)
-                ?: error("no EVM-family network ${ref.network}")
+            val profile = evmSnapshots.snapshotFor(ref)
+                ?: error("no scripted snapshot for network ${ref.network}")
             val dest = Path.of(initial.destDir)
             val bins = when (val r = evmSnapshots.ensureBinaries(profile, ref.env, dest))
             {

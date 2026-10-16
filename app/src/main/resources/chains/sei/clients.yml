@@ -1,0 +1,36 @@
+# Sei: seid from upstream GitHub releases (no Docker). Draft, see specs/cosmos/networks.md for verification.
+programs:
+  - env: mainnet
+    id: seid
+    source: { type: github, repo: sei-protocol/sei-chain }
+    artifacts:
+      - name: "sei-chain-linux-x86_64.tar.gz"   # contains seid (+README/CHANGELOG)
+        nameAarch64: "sei-chain-linux-arm64.tar.gz"
+        urlTemplate: "https://github.com/sei-protocol/sei-chain/releases/download/{tag}/sei-chain_{version}_linux_x86_64.tar.gz"
+        urlTemplateAarch64: "https://github.com/sei-protocol/sei-chain/releases/download/{tag}/sei-chain_{version}_linux_arm64.tar.gz"
+    requirements: { logFile: logs/sei.log }
+    ports:
+      - { role: http, port: 42350, label: "EVM JSON-RPC", config: required }
+      - { role: ws, port: 42351, label: "EVM WebSocket", config: required }
+      - { role: p2p, port: 42352, label: "CometBFT P2P", config: required }
+      - { role: metrics, port: 42354, label: "CometBFT Prometheus (127.0.0.1)", config: required }
+      - { role: cl_rpc, port: 42355, label: "CometBFT RPC (/status)", config: required }
+      - { role: grpc, port: 42357, label: "Cosmos gRPC", config: required }
+      - { role: api, port: 42358, label: "Cosmos REST (LCD)", config: required }
+  - env: testnet
+    id: seid
+    source: { type: github, repo: sei-protocol/sei-chain }
+    artifacts:
+      - name: "sei-chain-linux-x86_64.tar.gz"   # contains seid (+README/CHANGELOG)
+        nameAarch64: "sei-chain-linux-arm64.tar.gz"
+        urlTemplate: "https://github.com/sei-protocol/sei-chain/releases/download/{tag}/sei-chain_{version}_linux_x86_64.tar.gz"
+        urlTemplateAarch64: "https://github.com/sei-protocol/sei-chain/releases/download/{tag}/sei-chain_{version}_linux_arm64.tar.gz"
+    requirements: { logFile: logs/sei.log }
+    ports:
+      - { role: http, port: 42360, label: "EVM JSON-RPC", config: required }
+      - { role: ws, port: 42361, label: "EVM WebSocket", config: required }
+      - { role: p2p, port: 42362, label: "CometBFT P2P", config: required }
+      - { role: metrics, port: 42364, label: "CometBFT Prometheus (127.0.0.1)", config: required }
+      - { role: cl_rpc, port: 42365, label: "CometBFT RPC (/status)", config: required }
+      - { role: grpc, port: 42367, label: "Cosmos gRPC", config: required }
+      - { role: api, port: 42368, label: "Cosmos REST (LCD)", config: required }

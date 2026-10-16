@@ -3,6 +3,7 @@ package rpcnode.toolkit.nodes.application.ingest
 import java.time.Instant
 import rpcnode.toolkit.clients.application.formatPinsVersion
 import rpcnode.toolkit.clients.application.pinsUpdateAvailable
+import rpcnode.toolkit.clients.domain.model.isNewerClientRelease
 import rpcnode.toolkit.clients.domain.repository.ClientVersionRepository
 import rpcnode.toolkit.networks.application.tip.NetworkTipCache
 import rpcnode.toolkit.networks.domain.model.DEFAULT_TIP_LAG_BLOCKS
@@ -216,7 +217,7 @@ internal suspend fun compareToLatest(
     // Prefer pin.latest; fall back to current when latest was never probed.
     val updateAvailable = latest.isNotEmpty() &&
         clientVersion.isNotEmpty() &&
-        !looseSameVersion(clientVersion, latest)
+        isNewerClientRelease(latest, clientVersion)
     return ClientVersionCompare(latest = latest, updateAvailable = updateAvailable)
 }
 

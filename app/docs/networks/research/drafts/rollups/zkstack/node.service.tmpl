@@ -1,0 +1,27 @@
+[Unit]
+Description={{description}}
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# The EN resolves contracts/, etc/multivm_bootloaders/ and migrations/ relative to its CURRENT DIRECTORY
+# (zksync_utils Workspace::locate() falls back to "." when no cargo workspace is found) — zk_root is that directory.
+WorkingDirectory={{zk_root}}
+Environment=ZKSYNC_HOME={{zk_root}}
+EnvironmentFile={{env_file}}
+EnvironmentFile={{db_env_file}}
+ExecStartPre=/bin/bash {{pg_script}}
+ExecStartPre={{zk_root}}/bin/sqlx database setup --source {{zk_root}}/migrations
+ExecStart={{zk_root}}/bin/zksync_external_node{{component_args}}
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=infinity
+TimeoutStopSec=300
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE={{limit_nofile}}
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

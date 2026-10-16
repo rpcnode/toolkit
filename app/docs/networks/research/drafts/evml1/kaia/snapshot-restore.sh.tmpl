@@ -1,0 +1,22 @@
+#!/bin/bash
+# Kaia official chaindata restore (chains/kaia KaiaSnapshotRunner). One pass: curl | tar --zstd (no 2.3 TB archive on disk).
+# The URL is the one-line https://snapshots.node.kaia.io/<network>/pruning-chaindata/latest.txt (VERIFIED); manifest.json next to it carries bytes + md5.
+set -euo pipefail
+export LC_ALL=C
+UNIT='{{unit}}'; DATA='{{datadir}}'; MARKER='{{marker}}'; STATE='{{state}}'; LOG='{{log}}'
+LATEST='{{latest_txt_url}}'    # https://snapshots.node.kaia.io/{mainnet|kairos}/pruning-chaindata/latest.txt
+MANIFEST='{{manifest_url}}'    # …/manifest.json
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+st() { echo "{\"phase\":\"$1\",\"pct\":$2,\"detail\":\"$3\",\"updated_at\":\"$(now)\"}" >"$STATE"; }
+mkdir -p "$DATA" "$(dirname "$LOG")"
+[ -f "$MARKER" ] && { st done 100 "snapshot already restored"; exit 0; }
+command -v zstd >/dev/null || { st error 0 "zstd missing"; exit 1; }
+systemctl stop "$UNIT" 2>/dev/null || true
+URL="$(curl -fsSL --retry 8 --retry-all-errors "$LATEST" | head -1)"
+BYTES="$(curl -fsSL "$MANIFEST" | python3 -c 'import json,sys;m=json.load(sys.stdin);print(m["latest"]["bytes"])' 2>/dev/null || echo 0)"
+st download 1 "streaming $(basename "$URL")"
+rm -rf "$DATA"/klay
+# resumable variant: aria2c -x8 -d "$SCRATCH" then tar; the single-pass pipe is the default because the disk plan has no room for both copies.
+( curl -fsSL --retry 8 --retry-all-errors "$URL" | pv -n -s "$BYTES" 2>"$STATE.pct" | tar --zstd -xf - -C "$DATA" ) 2>&1 | tee -a "$LOG"
+[ -d "$DATA/klay/chaindata" ] || { st error 0 "klay/chaindata missing after extract"; exit 1; }
+now >"$MARKER"; st done 100 "Kaia chaindata restored"

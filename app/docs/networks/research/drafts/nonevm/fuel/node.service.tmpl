@@ -1,0 +1,27 @@
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+# KEYPAIR (libp2p secret) and RELAYER (Ethereum RPC url, may embed an API key) come from a 0600 file written on Start,
+# so neither shows up in `ps` or in this world-readable unit (fuel-core clap flags `--keypair` / `--relayer` read these env vars).
+EnvironmentFile={{node_dir}}/.toolkit/fuel.env
+ExecStart={{exec_start}}
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=180
+KillMode=control-group
+KillSignal=SIGTERM
+FinalKillSignal=SIGKILL
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+IPAccounting=yes
+CPUAccounting=yes
+MemoryAccounting=yes
+LimitNOFILE={{nofile}}
+
+[Install]
+WantedBy=multi-user.target

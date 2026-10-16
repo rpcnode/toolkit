@@ -61,6 +61,12 @@ interface RemovalOps
     fun removeUnits(units: List<String>, network: String, env: String): HostNodeStartResult
     fun removeSnapshotUnit(nodeId: String)
 
+    /**
+     * Brings a clean-up script written by an older agent up to date before it runs (it is written at the node's Start, so an old node
+     * keeps an old script). Returns how many were rewritten.
+     */
+    fun refreshRemoveHooks(network: String, dirs: List<Path>): Int = 0
+
     /** True when a node folder carries a chain clean-up script (TON: drops the indexer's database, removes MyTonCtrl). */
     fun hasRemoveHook(dirs: List<Path>): Boolean = false
 
@@ -97,6 +103,9 @@ class HostRemovalOps(private val stopSnapshotJobs: (List<Path>) -> Int = { 0 }) 
 
     override fun removeUnits(units: List<String>, network: String, env: String): HostNodeStartResult =
         HostNodeLaunchSupport.removeUnits(units, network, env)
+
+    override fun refreshRemoveHooks(network: String, dirs: List<Path>): Int =
+        rpcnode.toolkit.agent.infrastructure.proc.RemoveHookRefresh.refresh(network, dirs)
 
     override fun hasRemoveHook(dirs: List<Path>): Boolean =
         dirs.any { Files.isRegularFile(it.resolve(HostNodeLaunchSupport.REMOVE_HOOK)) }
@@ -251,7 +260,8 @@ class RemoveNodeStepsUseCase(
             else setStep(nodeId, "stop", "skipped", "not running")
         }
 
-        // 1b. chain clean-up that needs the node folder (TON: drop the indexer's database, role and tablespace)
+        // 1b. chain clean-up that needs the node folder (TON: drop the indexer's database, remove MyTonCtrl and ton_http_api)
+        ops.refreshRemoveHooks(network, dirs)
         if (ops.hasRemoveHook(dirs))
         {
             setStep(nodeId, "database", "running", "")

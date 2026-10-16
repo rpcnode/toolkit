@@ -1,0 +1,111 @@
+# Flare (flare / songbird / coston2): go-flare = avalanchego fork (C-Chain EVM embedded). Snapshot never — no official DB snapshot found;
+# the node bootstraps P/X/C from the Flare bootstrap node. Directory name is the network id. Ports live in clients.yml.
+# Sizing VERIFIED in dev.flare.network/run-node/system-requirements (4 cores / 16 GB, SSD >= 1200 MB/s read + 600 MB/s write);
+# the page lists four unnamed tables in the tab order flare, coston2, songbird, coston -> mapping to networks is INFERRED.
+label: Flare
+diskRoles:
+  - id: blockchain
+    label: Chain DB (P / X / C)
+    media: nvme
+diskNotes:
+  - "db-dir is the blockchain role; staking keys, chain configs and logs live under the node_dir (data-dir), like chains/avalanche."
+  - "Full (default): pruning on. Archive: C-Chain pruning off (5.7 TB flare / 11.2 TB songbird per the docs)."
+  - "Bootstrap IP + node id are fetched from https://<net>-bootstrap.flare.network/ext/info on every Start (they rotate); the last good answer is cached in .toolkit/flare-bootstrap.json."
+  - "/ext/health, /ext/info and /ext/metrics are served on the public HTTP port by avalanchego itself: put a proxy that forwards only /ext/bc/C/rpc and /ext/bc/C/ws in front."
+oneEnvPerHost: false
+envs:
+  - id: flare
+    label: Flare Mainnet
+    diskHintGiB: 1536
+    fullNodeGiB: 1024
+    archiveGiB: 5836
+    cpuCores: 8
+    memoryGiB: 16
+    snapshot: never
+    tipLagBlocks: 6
+    publicTip:
+      urls:
+        - https://flare-api.flare.network/ext/C/rpc
+  - id: songbird
+    label: Songbird Canary-Network
+    diskHintGiB: 3584
+    fullNodeGiB: 2765
+    archiveGiB: 11469
+    cpuCores: 8
+    memoryGiB: 16
+    snapshot: never
+    tipLagBlocks: 6
+    publicTip:
+      urls:
+        - https://songbird-api.flare.network/ext/C/rpc
+  - id: coston2
+    label: Coston2 Testnet
+    diskHintGiB: 512
+    fullNodeGiB: 256
+    archiveGiB: 1229
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    tipLagBlocks: 6
+    publicTip:
+      urls:
+        - https://coston2-api.flare.network/ext/C/rpc
+
+# Flags + C-Chain config.json written on Start (chains/evmfamily FlareProfile). EvmCatalogTest compares the literals with the rendered unit / config.
+clientConfig:
+  program: go-flare
+  format: flags
+  bindings:
+    - key: node
+      source: install_option
+      option: node
+      default: "full"
+      description: C-Chain mode — full (pruning on) or archive (pruning off)
+    - key: db-dir
+      source: disk_role_dir
+      role: blockchain
+      relative: db
+      description: avalanchego --db-dir (Disks blockchain role)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: HTTP API / C-Chain RPC port (/ext/C/rpc, /ext/bc/C/ws, /ext/metrics)
+    - key: staking-port
+      source: catalog_port
+      role: p2p
+      description: Staking P2P port (TCP)
+    - key: http-host
+      source: literal
+      value: "0.0.0.0"
+      description: "--http-host"
+    - key: http-allowed-hosts
+      source: literal
+      value: "*"
+      description: "--http-allowed-hosts"
+    - key: api-admin-enabled
+      source: literal
+      value: "false"
+      description: "--api-admin-enabled"
+    - key: index-enabled
+      source: literal
+      value: "false"
+      description: "--index-enabled"
+    - key: eth-apis
+      source: literal
+      value: "eth,eth-filter,net,web3,internal-eth,internal-blockchain,internal-transaction"
+      description: "C-Chain config.json eth-apis (the coreth default list: no debug / tx-pool / admin)"
+    - key: rpc-gas-cap
+      source: literal
+      value: "50000000"
+      description: C-Chain config.json rpc-gas-cap
+    - key: rpc-tx-fee-cap
+      source: literal
+      value: "100"
+      description: C-Chain config.json rpc-tx-fee-cap
+    - key: limit-nofile
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE
+
+diagnostics:
+  - id: path_mtu

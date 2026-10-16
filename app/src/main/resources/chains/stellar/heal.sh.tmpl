@@ -1,0 +1,32 @@
+#!/bin/bash
+# RpcNode Stellar heal (ExecStartPre of the stellar-rpc unit) — port of the Go JournalNeedsReset / resetCaptiveCore.
+# When the log lines written since the previous start contain a known captive-core failure marker, the captive-core
+# bucket directory is wiped (it is rebuilt from the history archive in minutes; stellar_rpc.sqlite is NOT touched).
+# At most one wipe per 30 minutes, so a crash loop cannot keep deleting the catch-up progress.
+set -u
+LOG={{log_file}}
+STATE={{state_dir}}
+CORE_STORAGE={{core_storage}}
+OFFSET="$STATE/heal-offset"
+LAST="$STATE/heal-last"
+MARKERS='invalid captive core toml|validators\.[0-9]+\.|address already in use|permission denied|failed to create storage directory|unsupported ledger version|upgrade this stellar-core|error running stellar-core catchup'
+mkdir -p "$STATE" "$CORE_STORAGE"
+
+size=$(stat -c %s "$LOG" 2>/dev/null || echo 0)
+off=$(cat "$OFFSET" 2>/dev/null || echo 0)
+[[ "$off" =~ ^[0-9]+$ ]] || off=0
+(( off > size )) && off=0   # log was rotated / truncated
+echo "$size" >"$OFFSET"
+
+[[ -f "$LOG" ]] || exit 0
+if tail -c +"$((off + 1))" "$LOG" | grep -qiE "$MARKERS"; then
+  now=$(date +%s); last=$(cat "$LAST" 2>/dev/null || echo 0)
+  [[ "$last" =~ ^[0-9]+$ ]] || last=0
+  if (( now - last >= 1800 )); then
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [rpcnode-heal] captive-core failure marker in the log — wiping $CORE_STORAGE" >>"$LOG"
+    rm -rf "$CORE_STORAGE" && mkdir -p "$CORE_STORAGE"
+    echo "$now" >"$LAST"
+    echo "$(stat -c %s "$LOG" 2>/dev/null || echo 0)" >"$OFFSET"
+  fi
+fi
+exit 0

@@ -100,6 +100,15 @@ class ClientProgramsVersionTest
     }
 
     @Test
+    fun installed_build_ahead_of_latest_is_not_an_update()
+    {
+        assertFalse(clientProgramsUpdateAvailable("1.8.0-alpha", "1.7.8"))
+        assertTrue(clientProgramsUpdateAvailable("1.7.8", "1.8.0-alpha"))
+        assertFalse(clientProgramsUpdateAvailable("geth 1.18.0 · lighthouse 8.2.2", "geth 1.17.5 · lighthouse 8.2.2"))
+        assertTrue(clientProgramsUpdateAvailable("geth 1.17.4 · lighthouse 8.2.2", "geth 1.17.5 · lighthouse 8.2.2"))
+    }
+
+    @Test
     fun formatPinsVersion_builds_composite_latest()
     {
         val pins = listOf(

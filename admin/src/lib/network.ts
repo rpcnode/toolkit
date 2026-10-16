@@ -61,7 +61,7 @@ export function isNoSnapshotNetwork(network?: string | null): boolean {
   return (
     isBitcoinNetwork(network) ||
     isEthereumNetwork(network) ||
-    isPolygonNetwork(network) ||
+    // Polygon is not listed: Heimdall v2 cannot sync from genesis, both clients are restored from snapshots (catalog `snapshot: required`)
     n === 'hyperliquid' ||
     n === 'arb' ||
     n === 'robinhood' ||

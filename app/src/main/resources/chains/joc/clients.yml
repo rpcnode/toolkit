@@ -1,0 +1,33 @@
+# Japan Open Chain: Nethermind with its built-in joc-mainnet / joc-testnet configs (VERIFIED: configs/joc-mainnet.json, joc-testnet.json and
+# the *_archive variants are inside the nethermind 2.1.0 release zip; chainspecs src/Nethermind/Chains/joc-{mainnet,testnet}.json: Clique, period 5, epoch 30000).
+# Artifact resolution + zip layout identical to chains/gnosis (see there). No consensus client.
+# Ports come from specs/PORTS.md (joc base 41780): mainnet 41780-41789, testnet 41790-41799.
+programs:
+  - env: mainnet
+    id: nethermind
+    source: { type: github, repo: NethermindEth/nethermind }
+    artifacts:
+      - name: "nethermind-linux-x64.zip"
+        nameAarch64: "nethermind-linux-arm64.zip"
+        urlTemplate: "github-asset:nethermind-*-linux-x64.zip"
+        urlTemplateAarch64: "github-asset:nethermind-*-linux-arm64.zip"
+    requirements: { logFile: logs/joc.log }
+    ports:
+      - { role: http, port: 41780, label: "HTTP RPC", config: required }
+      - { role: ws, port: 41781, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 41782, label: "P2P", config: required, protocol: both }
+      - { role: metrics, port: 41784, label: "Metrics", config: required }
+  - env: testnet
+    id: nethermind
+    source: { type: github, repo: NethermindEth/nethermind }
+    artifacts:
+      - name: "nethermind-linux-x64.zip"
+        nameAarch64: "nethermind-linux-arm64.zip"
+        urlTemplate: "github-asset:nethermind-*-linux-x64.zip"
+        urlTemplateAarch64: "github-asset:nethermind-*-linux-arm64.zip"
+    requirements: { logFile: logs/joc.log }
+    ports:
+      - { role: http, port: 41790, label: "HTTP RPC", config: required }
+      - { role: ws, port: 41791, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 41792, label: "P2P", config: required, protocol: both }
+      - { role: metrics, port: 41794, label: "Metrics", config: required }

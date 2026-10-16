@@ -1,0 +1,131 @@
+# Stacks (stacks-node follower). Needs a Bitcoin node as burnchain: mainnet = a Bitcoin Core of this panel (or any reachable
+# bitcoind RPC + P2P), testnet (krypton) = Hiro's public regtest bitcoind (no local Bitcoin needed).
+# Snapshot: required on mainnet in practice (Hiro chainstate archive ~275 GB .tar.zst; syncing from genesis takes weeks and a
+# pruned Bitcoin node cannot serve a from-genesis sync); optional on testnet (5.9 GB).
+label: Stacks
+diskRoles:
+  - id: state
+    label: Chainstate (working_dir)
+    media: nvme
+diskNotes:
+  - "node.working_dir is the state role leaf; stacks-node keeps <working_dir>/mainnet (or /krypton) with sqlite + MARF chainstate."
+  - "The Hiro archive is a tar.zst whose top-level directory is mainnet/ (krypton/ on testnet): extract INTO working_dir."
+  - "stacks.toml is generated under node_dir on Start (Bitcoin credentials included) — never in the panel DB."
+  - "Mainnet needs a Bitcoin node: reuse the panel's Bitcoin mainnet node on the same host (127.0.0.1:8332/8333). Pruned Bitcoin (prune>=1024) works only after the snapshot restore."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Stacks Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 700
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: required
+    publicTip:
+      urls:
+        - https://api.hiro.so/v2/info
+        - https://api.mainnet.hiro.so/v2/info
+    snapshotTypes:
+      - id: chainstate
+        kind: full
+        label: Chainstate · Hiro archive
+        hint: Hiro stacks-blockchain chainstate (tar.zst, ~275 GB, updated daily)
+        diskGiB: 1024
+        default: true
+  - id: testnet
+    label: Stacks Testnet (krypton)
+    diskHintGiB: 64
+    fullNodeGiB: 32
+    cpuCores: 2
+    memoryGiB: 8
+    snapshot: optional
+    publicTip:
+      urls:
+        - https://api.testnet.hiro.so/v2/info
+    snapshotTypes:
+      - id: chainstate
+        kind: full
+        label: Chainstate · Hiro archive
+        hint: Hiro testnet chainstate (tar.zst, ~5.9 GB)
+        diskGiB: 64
+        default: true
+
+# stacks.toml generated on Start (chains/stacks, StacksConfigToml). format: flags — the keys are the TOML paths.
+# Capacity literals are the VERIFIED vendor defaults (stackslib config) written explicitly; the unit runs
+# `stacks-node start --config <node_dir>/stacks.toml`.
+clientConfig:
+  program: stacks-node
+  format: flags
+  bindings:
+    - key: node.working_dir
+      source: disk_role_dir
+      role: state
+      description: node.working_dir (Disks state role)
+    - key: node.rpc_bind (port)
+      source: catalog_port
+      role: http
+      description: RPC port (0.0.0.0:<port>); also the local height source (GET /v2/info)
+    - key: node.p2p_bind (port)
+      source: catalog_port
+      role: p2p
+      description: P2P port (0.0.0.0:<port>)
+    - key: node.prometheus_bind (port)
+      source: catalog_port
+      role: metrics
+      description: Prometheus port (127.0.0.1:<port>)
+    - key: node.miner
+      source: literal
+      value: "false"
+      description: Follower — no mining
+    - key: node.stacker
+      source: literal
+      value: "false"
+      description: Follower — no signing
+    - key: node.txindex
+      source: literal
+      value: "false"
+      description: Transaction index (needed only for stacks-blockchain-api; not shipped)
+    - key: burnchain.peer_host
+      source: install_option
+      option: burnchain_host
+      default: "127.0.0.1"
+      description: Bitcoin node host (mainnet; testnet is fixed to bitcoin.regtest.hiro.so)
+    - key: burnchain.rpc_port
+      source: install_option
+      option: burnchain_rpc_port
+      default: "8332"
+      description: Bitcoin RPC port (the panel's Bitcoin mainnet node uses 8332; testnet fixed 18443)
+    - key: burnchain.peer_port
+      source: install_option
+      option: burnchain_p2p_port
+      default: "8333"
+      description: Bitcoin P2P port (testnet fixed 18444)
+    - key: burnchain.username
+      source: install_option
+      option: burnchain_user
+      default: ""
+      description: Bitcoin RPC user (stacks-node cannot read bitcoind's .cookie)
+    - key: burnchain.password
+      source: install_option
+      option: burnchain_password
+      default: ""
+      description: Bitcoin RPC password
+    - key: connection_options.max_http_clients
+      source: literal
+      value: "1000"
+      description: Max concurrent HTTP connections (vendor default; prod preset raises it)
+    - key: connection_options.num_clients
+      source: literal
+      value: "750"
+      description: Max inbound P2P connections (vendor default)
+    - key: connection_options.num_neighbors
+      source: literal
+      value: "32"
+      description: StackerDB replication targets (vendor default)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for stacks-node
+
+diagnostics:
+  - id: path_mtu

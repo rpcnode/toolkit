@@ -1,0 +1,38 @@
+# Osmosis: osmosisd from upstream GitHub releases (no Docker). Draft, see specs/cosmos/networks.md for verification.
+programs:
+  - env: mainnet
+    id: osmosisd
+    source: { type: github, repo: osmosis-labs/osmosis }
+    artifacts:
+      - name: "osmosisd"
+        nameAarch64: "osmosisd"
+        urlTemplate: "https://github.com/osmosis-labs/osmosis/releases/download/{tag}/osmosisd-{version}-linux-amd64"
+        urlTemplateAarch64: "https://github.com/osmosis-labs/osmosis/releases/download/{tag}/osmosisd-{version}-linux-arm64"
+    configs:
+      - name: genesis.json
+        urlTemplate: "https://genesis.osmosis.zone/genesis.json"
+    requirements: { logFile: logs/osmosis.log }
+    ports:
+      - { role: http, port: 42110, label: "CometBFT RPC (/status)", config: required }
+      - { role: p2p, port: 42112, label: "CometBFT P2P", config: required }
+      - { role: metrics, port: 42114, label: "CometBFT Prometheus (127.0.0.1)", config: required }
+      - { role: api, port: 42115, label: "Cosmos REST (LCD)", config: required }
+      - { role: grpc, port: 42117, label: "Cosmos gRPC", config: required }
+  - env: testnet
+    id: osmosisd
+    source: { type: github, repo: osmosis-labs/osmosis, includePrerelease: true }
+    artifacts:
+      - name: "osmosisd"
+        nameAarch64: "osmosisd"
+        urlTemplate: "https://github.com/osmosis-labs/osmosis/releases/download/{tag}/osmosisd-{version}-linux-amd64"
+        urlTemplateAarch64: "https://github.com/osmosis-labs/osmosis/releases/download/{tag}/osmosisd-{version}-linux-arm64"
+    configs:
+      - name: genesis.json
+        urlTemplate: "https://genesis.testnet.osmosis.zone/genesis.json"
+    requirements: { logFile: logs/osmosis.log }
+    ports:
+      - { role: http, port: 42120, label: "CometBFT RPC (/status)", config: required }
+      - { role: p2p, port: 42122, label: "CometBFT P2P", config: required }
+      - { role: metrics, port: 42124, label: "CometBFT Prometheus (127.0.0.1)", config: required }
+      - { role: api, port: 42125, label: "Cosmos REST (LCD)", config: required }
+      - { role: grpc, port: 42127, label: "Cosmos gRPC", config: required }

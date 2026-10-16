@@ -1,0 +1,25 @@
+#!/bin/bash
+# Berachain official snapshot pair (BerachainSnapshotResolver picks the newest row pair of ONE block from https://snapshots.berachain.com/index.csv).
+# index.csv columns: type,size_bytes,block_number,version,created_at,sha256,url,url_s3 ; types: reth-pruned reth-archive beacon-kit-pruned beacon-kit-archive.
+set -euo pipefail
+export LC_ALL=C
+UNITS='{{units}}'; RETH_DIR='{{reth_datadir}}'; BEACOND_HOME='{{beacond_home}}'; SCRATCH='{{scratch}}'
+EL_URL='{{el_url}}'; EL_SHA='{{el_sha256}}'; CL_URL='{{cl_url}}'; CL_SHA='{{cl_sha256}}'
+MARKER='{{marker}}'; STATE='{{state}}'; LOG='{{log}}'
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+st() { echo "{\"phase\":\"$1\",\"pct\":$2,\"detail\":\"$3\",\"updated_at\":\"$(now)\"}" >"$STATE"; }
+[ -f "$MARKER" ] && { st done 100 "snapshot already restored"; exit 0; }
+command -v lz4 >/dev/null || { st error 0 "lz4 missing"; exit 1; }
+for u in $UNITS; do systemctl stop "$u" 2>/dev/null || true; done
+mkdir -p "$SCRATCH" "$RETH_DIR" "$BEACOND_HOME"
+st download 5 "beacon-kit snapshot"
+curl -fL --retry 8 --retry-all-errors -C - -o "$SCRATCH/cl.tar.lz4" "$CL_URL"
+echo "$CL_SHA  $SCRATCH/cl.tar.lz4" | sha256sum -c -
+rm -rf "$BEACOND_HOME/data"; lz4 -d -c "$SCRATCH/cl.tar.lz4" | tar -x -C "$BEACOND_HOME"; rm -f "$SCRATCH/cl.tar.lz4"
+st download 20 "reth snapshot (large)"
+curl -fL --retry 8 --retry-all-errors -C - -o "$SCRATCH/el.tar.lz4" "$EL_URL"
+echo "$EL_SHA  $SCRATCH/el.tar.lz4" | sha256sum -c -
+rm -rf "$RETH_DIR"/db "$RETH_DIR"/rocksdb "$RETH_DIR"/blobstore "$RETH_DIR"/static_files
+lz4 -d -c "$SCRATCH/el.tar.lz4" | tar -x -C "$RETH_DIR"; rm -f "$SCRATCH/el.tar.lz4"
+[ -d "$RETH_DIR/db" ] || { st error 0 "reth db/ missing after extract"; exit 1; }
+now >"$MARKER"; st done 100 "Berachain snapshot restored"

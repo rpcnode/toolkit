@@ -1,0 +1,18 @@
+# snarkOS (Aleo client node) from ProvableHQ/snarkOS GitHub releases. MAINNET ONLY.
+# VERIFIED 2026-10-14: v4.12.0 ships aleo-v4.12.0-x86_64-unknown-linux-gnu.zip (36.8 MB; one file inside: `snarkos`), plus aarch64-apple-darwin
+# and windows. NO linux-aarch64 asset on any release. Release rule (AleoClientReleaseResolver): highest final v<number> tag that
+# carries the Linux zip. The `testnet-v*` tags are prereleases with ZERO assets, built against another snarkVM (a mainnet binary cannot
+# follow the testnet): testnet is DEFERRED until the toolkit has a native source-build mechanism.
+programs:
+  - env: mainnet
+    id: snarkos
+    source: { type: github, repo: ProvableHQ/snarkOS, tagPrefix: "v" }
+    artifacts:
+      - name: "snarkos-linux-x86_64.zip"
+        urlTemplate: "https://github.com/ProvableHQ/snarkOS/releases/download/{tag}/aleo-{tag}-x86_64-unknown-linux-gnu.zip"
+    requirements: { logFile: logs/snarkos.log }
+    ports:
+      - { role: http, port: 41030, label: "REST API", config: required }
+      - { role: p2p, port: 41032, label: "P2P (node)", config: required }
+      - { role: metrics, port: 41034, label: "Prometheus (127.0.0.1)", config: required }
+# No `snapshots:` - snarkOS prefetches blocks from https://cdn.provable.com/v0/blocks/mainnet by itself at start (--cdn default).

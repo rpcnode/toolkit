@@ -1,0 +1,31 @@
+[Unit]
+Description={{description}}
+After=network-online.target {{geth_unit}}
+Wants=network-online.target
+Requires={{geth_unit}}
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+Environment=MORPH_NODE_L2_ETH_RPC=http://127.0.0.1:{{http_port}}
+Environment=MORPH_NODE_L2_ENGINE_RPC=http://127.0.0.1:{{engine_port}}
+Environment=MORPH_NODE_L2_ENGINE_AUTH={{jwt_file}}
+Environment=MORPH_NODE_L1_ETH_RPC={{l1_rpc}}
+Environment=MORPH_NODE_L1_ETH_BEACON_RPC={{l1_beacon}}
+Environment=MORPH_NODE_L1_CHAIN_ID={{l1_chain_id}}
+Environment=MORPH_NODE_ROLLUP_ADDRESS={{rollup_contract}}
+Environment=MORPH_NODE_SYNC_DEPOSIT_CONTRACT_ADDRESS={{l1_message_queue}}
+Environment=MORPH_NODE_DERIVATION_START_HEIGHT={{derivation_start_height}}
+Environment=MORPH_NODE_DERIVATION_BASE_HEIGHT={{l2_base_height}}
+Environment=MORPH_NODE_SYNC_START_HEIGHT={{l1_msg_start_height}}
+ExecStart={{bin}} --home {{node_home}} --log.filename {{node_home}}/node.log --{{net_flag}}
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=120
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE={{limit_nofile}}
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

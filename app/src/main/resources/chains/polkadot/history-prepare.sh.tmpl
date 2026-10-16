@@ -1,0 +1,112 @@
+#!/bin/bash
+# RpcNode Polkadot history indexer — preparation. Runs as its own unit (rpcnode-polkadot-<env>-history-prepare.service) because
+# the processor and the API are confined to loopback by systemd (IPAddressDeny) and so cannot download or run apt.
+# What it does, idempotently, on every Start:
+#   1. PostgreSQL: the host's own server is used when there is one and is not reconfigured; only a separate role, database and
+#      tablespace for this node are created (a server this script installs from apt is tuned). The password is generated once and
+#      kept 0600 under {{state_dir}}; SQL goes in through stdin, never through argv.
+#   2. Node.js {{node_version}} from nodejs.org into {{idx_dir}}/node (the sha256 of the tarball is pinned in this script).
+#      Nothing is installed system-wide.
+#   3. The squid project (written by Start into {{idx_dir}}/squid): `npm ci --ignore-scripts` from its package-lock.json (every
+#      package is pinned and integrity-checked, no install script runs) and `tsc`, once per project version.
+#   4. The database schema (`squid-typeorm-migration apply`, idempotent) and the `ready` marker the processor and the API wait for.
+# Removing the node runs bin/rpcnode-on-remove.sh, which drops the role, database and tablespace again.
+set -uo pipefail
+ENV_ID={{env}}
+STATE_DIR={{state_dir}}
+IDX={{idx_dir}}
+LOG={{log_file}}
+NODE_VERSION={{node_version}}
+NODE_SHA256_X64={{node_sha256_x64}}
+NODE_SHA256_ARM64={{node_sha256_arm64}}
+PROJECT_HASH={{project_hash}}
+
+PG_ROLE="rpcnode_polkadot_${ENV_ID}"; PG_DB="rpcnode_polkadot_${ENV_ID}"; PG_TS="rpcnode_polkadot_${ENV_ID}_ts"
+PG_CONF_TAG="polkadot-history"; PG_MAINT_MIN_MB={{maint_min_mb}}
+PWDIR="$STATE_DIR/polkadot-history"
+TS_DIR="$IDX/pgdata"; NODE_DIR="$IDX/node"; SQUID="$IDX/squid"
+READY="$PWDIR/ready"
+
+mkdir -p "$(dirname "$LOG")" "$STATE_DIR" "$IDX" "$PWDIR" "$SQUID"
+chmod 755 "$IDX"; chmod 700 "$PWDIR"
+exec >>"$LOG" 2>&1
+
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [history-prepare] $*"; }
+
+{{postgres_functions}}
+
+# --- tools this script itself needs ------------------------------------------------------------------------------------------
+tools_ok() {
+  local c
+  for c in curl tar gzip sha256sum awk; do command -v "$c" >/dev/null 2>&1 || return 1; done
+}
+
+install_tools() {
+  tools_ok && return 0
+  command -v apt-get >/dev/null 2>&1 || { log "missing curl/tar/gzip/coreutils and no apt-get: install them first"; return 1; }
+  log "installing curl, tar and ca-certificates"
+  DEBIAN_FRONTEND=noninteractive apt-get update -y && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends curl tar gzip ca-certificates
+}
+
+# the role of this node may hold at most as many connections as the processor (<= 10), the API pool and a few tools need: a runaway
+# client of this node cannot use up the connections of the other databases on a shared server
+limit_connections() {
+  psql_su -d postgres -c "alter role $PG_ROLE connection limit {{pg_connection_limit}}"
+}
+
+# --- Node.js (pinned, under the indexer dir) ----------------------------------------------------------------------------------
+install_node() {
+  [[ -x "$NODE_DIR/bin/node" && -f "$PWDIR/node-$NODE_VERSION" ]] && return 0
+  local arch want got tmp
+  case "$(uname -m)" in
+    x86_64) arch=x64; want="$NODE_SHA256_X64" ;;
+    aarch64) arch=arm64; want="$NODE_SHA256_ARM64" ;;
+    *) log "unsupported CPU $(uname -m) for Node.js"; return 1 ;;
+  esac
+  tmp="$(mktemp -d "$IDX/node-dl.XXXXXX")" || return 1
+  log "downloading Node.js $NODE_VERSION ($arch)"
+  curl -fsSL "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-$arch.tar.gz" -o "$tmp/node.tar.gz" || { rm -rf "$tmp"; return 1; }
+  got="$(sha256sum "$tmp/node.tar.gz" | awk '{ print $1 }')"
+  if [[ "$got" != "$want" ]]; then log "Node.js tarball checksum mismatch (got $got)"; rm -rf "$tmp"; return 1; fi
+  tar -xzf "$tmp/node.tar.gz" --no-same-owner -C "$tmp" || { rm -rf "$tmp"; return 1; }
+  rm -rf "$NODE_DIR"
+  mv "$tmp/node-v$NODE_VERSION-linux-$arch" "$NODE_DIR" || { rm -rf "$tmp"; return 1; }
+  rm -rf "$tmp"
+  touch "$PWDIR/node-$NODE_VERSION"
+  log "Node.js $("$NODE_DIR/bin/node" -v) installed in $NODE_DIR"
+}
+
+# --- the squid project: npm ci from the lock file + tsc, once per project version ---------------------------------------------
+build_project() {
+  [[ -f "$SQUID/lib/main.js" && -f "$PWDIR/build-$PROJECT_HASH" ]] && return 0
+  log "building the history indexer (project $PROJECT_HASH): npm ci --ignore-scripts + tsc"
+  rm -rf "$SQUID/node_modules" "$SQUID/lib"
+  (
+    cd "$SQUID" || exit 1
+    mkdir -p "$IDX/home"
+    export HOME="$IDX/home" PATH="$NODE_DIR/bin:$PATH" npm_config_cache="$IDX/npm-cache" npm_config_update_notifier=false npm_config_fund=false npm_config_audit=false
+    npm ci --ignore-scripts && node_modules/.bin/tsc
+  ) || return 1
+  rm -f "$PWDIR"/build-*
+  touch "$PWDIR/build-$PROJECT_HASH"
+}
+
+# --- schema: the typeorm migrations of the project (idempotent) --------------------------------------------------------------
+apply_schema() {
+  (
+    cd "$SQUID" || exit 1
+    export PATH="$NODE_DIR/bin:$PATH" DB_HOST=127.0.0.1 DB_PORT="$PG_PORT" DB_NAME="$PG_DB" DB_USER="$PG_ROLE" DB_PASS
+    DB_PASS="$(cat "$PW_FILE")"
+    node_modules/.bin/squid-typeorm-migration apply
+  )
+}
+
+rm -f "$READY"
+log "preparing the history indexer for polkadot $ENV_ID; indexer dir $IDX"
+until install_tools && ensure_password && provision_database && limit_connections && install_node && build_project && apply_schema; do
+  log "a preparation step failed (details above) — retrying in 60 s"
+  sleep 60
+done
+touch "$READY"
+log "ready: database $PG_DB on 127.0.0.1:$PG_PORT, role $PG_ROLE, tablespace $PG_TS in $TS_DIR"

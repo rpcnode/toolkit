@@ -1,0 +1,35 @@
+# immutable-geth: GitHub immutable/immutable-geth tag v1.0.0-beta.17 (2026-01-14, not a prerelease; no release assets).
+# Binary route A (recommended): ghcr.io/immutable/immutable-geth/immutable-geth:{tag} -> /usr/local/bin/geth (static, amd64 only).
+# Route B (arm64 / no registry): `build:` Dockerfile = `go run build/ci.go install -static ./cmd/geth` on golang:1.21 (upstream Dockerfile).
+# The *-public.toml files live in the repo at immutable/config/ and are downloaded as configs (raw GitHub, same tag).
+programs:
+  - env: mainnet
+    id: geth
+    source: { type: github, repo: immutable/immutable-geth }
+    artifacts:
+      - name: "immutable-geth-x86_64-linux.tar.gz"
+        urlTemplate: "docker://ghcr.io/immutable/immutable-geth/immutable-geth:{tag}"
+    configs:
+      - name: mainnet-public.toml
+        urlTemplate: "https://raw.githubusercontent.com/immutable/immutable-geth/{tag}/immutable/config/mainnet-public.toml"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 41690, label: "HTTP JSON-RPC", config: required }
+      - { role: ws, port: 41691, label: "WebSocket JSON-RPC", config: required }
+      - { role: p2p, port: 41692, label: "P2P", config: required, protocol: both }
+      - { role: metrics, port: 41694, label: "Metrics (127.0.0.1)", config: required }
+  - env: testnet
+    id: geth
+    source: { type: github, repo: immutable/immutable-geth }
+    artifacts:
+      - name: "immutable-geth-x86_64-linux.tar.gz"
+        urlTemplate: "docker://ghcr.io/immutable/immutable-geth/immutable-geth:{tag}"
+    configs:
+      - name: testnet-public.toml
+        urlTemplate: "https://raw.githubusercontent.com/immutable/immutable-geth/{tag}/immutable/config/testnet-public.toml"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 41700, label: "HTTP JSON-RPC", config: required }
+      - { role: ws, port: 41701, label: "WebSocket JSON-RPC", config: required }
+      - { role: p2p, port: 41702, label: "P2P", config: required, protocol: both }
+      - { role: metrics, port: 41704, label: "Metrics (127.0.0.1)", config: required }

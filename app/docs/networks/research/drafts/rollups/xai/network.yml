@@ -1,0 +1,96 @@
+# Xai (Arbitrum Orbit AnyTrust L3 on Arbitrum One, Nitro). Mainnet only. Snapshot never: no public Xai snapshot exists, Nitro
+# initialises from the chain-info genesis and derives the chain from the Arbitrum One inbox + DAS (days, see risks.md).
+# Directory name is the network id (xai). Ports live in clients.yml beside this file.
+label: Xai
+dataRoot: xai
+diskRoles:
+  - id: execution
+    label: Execution DB
+    media: nvme
+diskNotes:
+  - "Nitro --persistent.chain is the execution role leaf."
+  - "Xai is an Orbit chain whose PARENT is Arbitrum One (not Ethereum): the parent-chain RPC is an Arbitrum One endpoint, no beacon / blob API is needed."
+  - "AnyTrust: batch data comes from the Data Availability Committee REST aggregator (https://xai-chain.net/das-servers); without it the node stalls."
+  - "Submitted transactions are forwarded to the chain's public RPC (--execution.forwarding-target); Nitro will not start without a target."
+  - "xai-chain-info.json (chain config + rollup contracts) is vendored by the toolkit (source: OffchainLabs/community-helm-charts nitro README, Xai section)."
+  - "No snapshot: first sync replays the whole chain from genesis. Plan for days of sync; the public RPC is the sequencer feed fallback."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Xai Mainnet
+    diskHintGiB: 2048
+    fullNodeGiB: 1024
+    archiveGiB: 3072
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://xai-chain.net/rpc
+    l1Parent:
+      rpc: https://arb1.arbitrum.io/rpc
+      beacon: ""
+      pickHelp: |
+        Xai settles on Arbitrum One. Use an Arbitrum One RPC: an active `arb` node from this panel (same-host uses 127.0.0.1) or
+        a private provider. The public arb1.arbitrum.io/rpc is rate limited and stalls the sync.
+
+# CLI flags live in systemd (chains/xai). No conf patch on Start.
+clientConfig:
+  program: nitro
+  format: flags
+  bindings:
+    - key: datadir
+      source: disk_role_dir
+      role: execution
+      description: Nitro --persistent.chain (Disks execution role)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: JSON-RPC WebSocket port
+    - key: metrics-port
+      source: catalog_port
+      role: metrics
+      description: Nitro Prometheus endpoint (127.0.0.1)
+    - key: http-api
+      source: literal
+      value: "net,web3,eth"
+      description: --http.api (no debug on the public port)
+    - key: ws-api
+      source: literal
+      value: "net,web3,eth"
+      description: --ws.api
+    - key: rpc-max-batch-response-size
+      source: literal
+      value: "25000000"
+      description: --rpc.max-batch-response-size (bytes)
+    - key: filter-log-cache-size
+      source: literal
+      value: "256"
+      description: --execution.rpc.filter-log-cache-size
+    - key: persistent-handles
+      source: literal
+      value: "16384"
+      description: --persistent.handles (Pebble table cache)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd open-file limit for Nitro
+    - key: l1-rpc
+      source: install_option
+      option: l1_rpc
+      default: ""
+      description: Arbitrum One RPC (parent chain)
+      testConnect:
+        kind: eth_rpc
+        label: Test connect
+        help: |
+          Panel POSTs eth_blockNumber to this URL. Expect a hex height. The parent chain of Xai is Arbitrum One (chain id 42161).
+          Local arb example: http://127.0.0.1:8647.
+
+diagnostics:
+  - id: path_mtu
+  - id: arb_l1

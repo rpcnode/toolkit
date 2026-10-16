@@ -1,0 +1,96 @@
+# NEAR Protocol RPC node (neard, tracked_shards_config AllShards). No snapshot: bootstrap = epoch sync + state sync from P2P
+# peers (FastNEAR says the free nearcore snapshots were deprecated 2025-06-01; archival snapshots are request-based).
+label: NEAR
+diskRoles:
+  - id: state
+    label: neard home (hot DB, keys, config)
+    media: nvme
+diskNotes:
+  - "neard --home is the state role leaf: config.json, genesis.json, node_key.json and data/ (RocksDB) live there."
+  - "Official RPC hardware: 8 cores / 32 GB / 4 TB NVMe recommended (2.5 TB, 16 GB, 15k IOPS minimum). Size grows with gc_num_epochs_to_keep (5 default, 3 minimum)."
+  - "First start runs `neard init` (genesis + rpc config download) and replaces config.json network.boot_nodes with live peers from the public network_info — an empty boot_nodes leaves the node at 0 peers."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: NEAR Mainnet
+    diskHintGiB: 4096
+    fullNodeGiB: 2560
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc.mainnet.near.org
+        - https://rpc.mainnet.fastnear.com
+        - https://near.drpc.org
+  - id: testnet
+    label: NEAR Testnet
+    diskHintGiB: 1024
+    fullNodeGiB: 1024
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc.testnet.near.org
+        - https://rpc.testnet.fastnear.com
+        - https://near-testnet.drpc.org
+
+# `neard --home <state> run …` flags + config.json keys patched on Start (NearUnitBodies / NearConfigPatch). format: flags.
+# Literals mirror the patched config.json and the unit LimitNOFILE. config.json is born from the official `rpc` profile
+# (VERIFIED: nearcore-deploy/<chain>/rpc/config.json); values below are that profile's defaults, written explicitly.
+clientConfig:
+  program: neard
+  format: flags
+  bindings:
+    - key: home
+      source: disk_role_dir
+      role: state
+      description: neard --home (Disks state role)
+    - key: rpc-addr (port)
+      source: catalog_port
+      role: http
+      description: "JSON-RPC port, `neard run --rpc-addr 0.0.0.0:<port>` (config rpc.addr); also GET /status"
+    - key: network-addr (port)
+      source: catalog_port
+      role: p2p
+      description: "P2P port, `neard run --network-addr 0.0.0.0:<port>` (config network.addr)"
+    - key: rpc-prometheus-addr (port)
+      source: catalog_port
+      role: metrics
+      description: "Prometheus port, `neard run --rpc-prometheus-addr 127.0.0.1:<port>` (default: served on the RPC port at /metrics)"
+    - key: rpc.limits_config.json_payload_max_size
+      source: literal
+      value: "10485760"
+      description: Max JSON-RPC request body, bytes (profile default 10 MiB)
+    - key: rpc.cors_allowed_origins
+      source: literal
+      value: "*"
+      description: CORS (profile default)
+    - key: view_client_threads
+      source: literal
+      value: "4"
+      description: Threads serving view (read) RPC calls (profile default 4; prod preset raises it)
+    - key: network.max_num_peers
+      source: literal
+      value: "40"
+      description: Max connected peers (profile default)
+    - key: gc_num_epochs_to_keep
+      source: literal
+      value: "5"
+      description: Epochs of history kept (profile default; min 3; disk grows with it)
+    - key: tracked_shards_config
+      source: literal
+      value: "AllShards"
+      description: RPC node tracks every shard
+    - key: store.max_open_files
+      source: literal
+      value: "10000"
+      description: RocksDB max open files (profile default)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for neard
+
+diagnostics:
+  - id: path_mtu

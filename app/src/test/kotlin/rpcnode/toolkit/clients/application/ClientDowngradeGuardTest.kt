@@ -84,4 +84,60 @@ class ClientDowngradeGuardTest
         assertEquals("4.8.2.3", resolved.version)
         assertNull(resolved.error)
     }
+
+    private fun bscMainnet() = tronMainnet().copy(
+        network = NetworkId.BSC,
+        programId = "geth",
+        source = ClientVersionSource.Pinned(version = "1.7.8", tag = "v1.7.8", label = "bnb-chain/bsc"),
+    )
+
+    private fun liveBsc(version: String) = mapOf(
+        NetworkId.BSC to ClientReleaseResolver {
+            ClientRelease(version = version, tag = "v$version", sourceLabel = "bnb-chain/bsc")
+        },
+    )
+
+    @Test
+    fun a_network_release_older_than_installed_keeps_the_installed_build() = runTest {
+        // bsc/mainnet: installed 1.8.0-alpha, newest release carrying the config zip is 1.7.8
+        val resolved = resolveClientRelease(
+            bscMainnet(), feedDown, liveBsc("1.7.8"),
+            installedVersion = "1.8.0-alpha", installedTag = "v1.8.0-alpha",
+        )
+        assertEquals("1.8.0-alpha", resolved.version)
+        assertEquals("v1.8.0-alpha", resolved.tag)
+        assertNull(resolved.error)
+    }
+
+    @Test
+    fun a_network_release_newer_than_installed_is_still_offered() = runTest {
+        val resolved = resolveClientRelease(
+            bscMainnet(), feedDown, liveBsc("1.8.0"),
+            installedVersion = "1.8.0-alpha2", installedTag = "v1.8.0-alpha2",
+        )
+        assertEquals("1.8.0", resolved.version)
+        assertEquals("v1.8.0", resolved.tag)
+    }
+
+    @Test
+    fun a_release_candidate_does_not_replace_the_same_release() = runTest {
+        val resolved = resolveClientRelease(
+            bscMainnet(), feedDown, liveBsc("1.8.0-rc1"),
+            installedVersion = "1.8.0", installedTag = "v1.8.0",
+        )
+        assertEquals("1.8.0", resolved.version)
+    }
+
+    @Test
+    fun prereleases_order_alpha_beta_rc_then_release()
+    {
+        assertTrue(isOlderClientVersion("1.8.0-alpha", "1.8.0-alpha2"))
+        assertTrue(isOlderClientVersion("1.8.0-alpha2", "1.8.0-beta"))
+        assertTrue(isOlderClientVersion("1.8.0-beta3", "1.8.0-rc1"))
+        assertTrue(isOlderClientVersion("1.8.0-rc1", "1.8.0"))
+        assertFalse(isOlderClientVersion("1.8.0", "1.8.0-rc1"))
+        assertFalse(isOlderClientVersion("1.8.0", "1.8.0-alpha2"))
+        assertTrue(isOlderClientVersion("1.7.8", "1.8.0-alpha"))
+        assertFalse(isOlderClientVersion("1.9.0", "1.8.0-alpha"))
+    }
 }

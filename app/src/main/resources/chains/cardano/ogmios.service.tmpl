@@ -1,0 +1,22 @@
+[Unit]
+Description={{description}}
+After=network-online.target {{node_unit}}
+PartOf={{node_unit}}
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+Environment=CARDANO_NODE_SOCKET_PATH={{socket_path}}
+ExecStart={{exec_start}}
+# Ogmios exits when the node socket is missing or the node goes away; it reconnects by being started again.
+Restart=always
+RestartSec=10
+NoNewPrivileges=yes
+PrivateTmp=yes
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE={{nofile}}
+
+[Install]
+WantedBy=multi-user.target

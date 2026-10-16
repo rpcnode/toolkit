@@ -1,0 +1,42 @@
+[Unit]
+Description={{description}}
+After=network-online.target {{el_unit}}
+Wants=network-online.target
+Requires={{el_unit}}
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+ExecStart={{bin}} \
+  --log.level=info \
+  --l2=http://127.0.0.1:{{engine_port}} \
+  --l2.jwt-secret={{jwt_file}} \
+  --l2.enginekind=reth \
+  --sequencer.enabled=false \
+  --verifier.l1-confs=1 \
+  --rollup.config={{rollup_config}} \
+  --rpc.addr=127.0.0.1 \
+  --rpc.port={{cl_rpc_port}} \
+  --rpc.enable-admin=true \
+  --p2p.listen.tcp={{cl_p2p_port}} \
+  --p2p.listen.udp={{cl_p2p_port}} \
+  --p2p.peerstore.path={{cl_data}}/p2p/opnode_peerstore_db \
+  --p2p.discovery.path={{cl_data}}/p2p/opnode_discovery_db \
+  --p2p.bootnodes={{op_node_bootnodes}} \
+  --p2p.static={{p2p_static_peers}} \
+  --l1={{l1_rpc}} \
+  --l1.beacon={{l1_beacon}} \
+  --l1.rpckind=standard \
+  --conductor.enabled=false \
+  --safedb.path={{cl_data}}/safedb \
+  --syncmode=execution-layer
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=120
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE={{limit_nofile}}
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

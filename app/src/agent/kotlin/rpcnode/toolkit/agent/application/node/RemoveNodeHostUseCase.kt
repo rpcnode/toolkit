@@ -61,7 +61,9 @@ class RemoveNodeHostUseCase(
             }
             if (nodeDir != null)
             {
-                // chain clean-up that needs the node folder (TON: drops the indexer database, role and tablespace)
+                // chain clean-up that needs the node folder (TON: drops the indexer database, removes MyTonCtrl and ton_http_api);
+                // a script written by an older agent is brought up to date first
+                rpcnode.toolkit.agent.infrastructure.proc.RemoveHookRefresh.refresh(network, listOf(Path.of(nodeDir)))
                 when (val hook = HostNodeLaunchSupport.runRemoveHook(Path.of(nodeDir), wipeData))
                 {
                     is HostNodeLaunchSupport.HookResult.Failed -> return@withContext RemoveNodeHostResult.Failed(hook.detail)

@@ -20,7 +20,7 @@ diskNotes:
   - "MyTonCtrl uses host-global /var/ton-work — RpcNode symlinks it to the blockchain disk role."
   - "Only one TON env per host (validator/mytoncore units are shared)."
   - "Dump (~30d) is the product default; archive needs ≥12 TiB NVMe."
-  - "The v3 indexer is installed with the node (no Docker, after the node install): toncenter worker/classifier/API are built from source; the database is a separate role + database + tablespace (on the indexer disk) in the host's PostgreSQL — an existing server is only added to, never reconfigured; if there is none, PostgreSQL is installed and tuned. Removing the node drops them again. It indexes forward from the moment the node is synced and grows with the chain. The first build takes a long time (like the node's). Put the indexer role on its own NVMe."
+  - "The v3 indexer is installed with the node (no Docker, after the node install): toncenter worker/classifier/API are built from source; the database is a PostgreSQL cluster of its own for this node (data AND WAL on the indexer disk, loopback-only catalog port, tuned for the load) — the host's other PostgreSQL servers are never touched and the system disk takes no WAL traffic. A node installed before dedicated clusters keeps its role/database/tablespace in the shared server as it was. Removing the node drops the cluster again. It indexes forward from the moment the node is synced and grows with the chain. The first build takes a long time (like the node's). Put the indexer role on its own NVMe."
   - "One public URL: agent port rpc_public serves /api/v2/* (ton-http-api) and /api/v3/* (indexer)."
 oneEnvPerHost: true
 # Node page warnings, run by the host agent (GET /api/nodes/{id}/diagnostics). port = role from clients.yml.

@@ -1,0 +1,400 @@
+# Cardano (cardano-node relay). Snapshot required on every env — Mithril certified cardano-db via mithril-client.
+# Optional indexer companions (install option `indexer`: none | ogmios | dbsync | both): Ogmios (JSON-RPC / WebSocket on 127.0.0.1)
+# and cardano-db-sync (PostgreSQL; the host's own server is reused, like the TON indexer).
+# Directory name is the network id. Ports live in clients.yml beside this file.
+label: Cardano
+diskRoles:
+  - id: blockchain
+    label: Node DB (immutable / ledger)
+    media: nvme
+  - id: indexer
+    label: Indexer (db-sync ledger state, PostgreSQL tablespace)
+    media: nvme
+diskNotes:
+  - "database-path is <blockchain role>/db; node.socket, config/ (config.json, topology.json, genesis files) and bin/ live under the node_dir."
+  - "config.json and the genesis files come from the cardano-node release tarball (share/<env>/), so they always match the installed version; config.json is regenerated on every Start."
+  - "Mithril restores the certified immutable DB plus the signed ledger snapshot into <blockchain role>/db (mainnet ~220 GiB). The node is stopped while it runs."
+  - "The ledger state is held in memory (LedgerDB V2InMemory): mainnet needs 24 GiB RAM at minimum, 32 GiB recommended."
+  - "cardano-node has no RPC port: the P2P port is public, the Prometheus port listens on 127.0.0.1 only, the node-to-client socket is a local file."
+  - "Indexer (install option, default none; applies on the next Start): Ogmios = JSON-RPC / WebSocket API on 127.0.0.1 (needs no disk, ~0.2-0.5 GiB RAM). Never expose it unauthenticated: it also submits transactions."
+  - "Indexer db-sync = cardano-db-sync writing the whole chain into the host's PostgreSQL (a separate role + database + tablespace on the indexer disk role; the server itself is only added to). Upstream sizing for mainnet (13.6, default insert options): PostgreSQL ~440 GiB (plan 700 GiB+ and growing), ledger state ~10 GiB, db-sync ~21 GiB RSS next to the node's ~24 GiB, so a mainnet host needs 64 GiB RAM, 4+ cores and fast NVMe (upstream asks for 60k IOPS). Preprod: ~16 GiB DB, 3.5 GiB RSS. A first sync from genesis takes days. Linux x86_64 only (upstream ships no aarch64 build)."
+  - "Put the indexer role on its own NVMe: the PostgreSQL tablespace (indexer/pgdata) and db-sync's ledger state (indexer/ledger-state) live there. Without a separate disk they go under <node_dir>/indexer."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Cardano Mainnet
+    diskHintGiB: 512
+    fullNodeGiB: 512
+    cpuCores: 4
+    memoryGiB: 32
+    snapshot: required
+    publicTip:
+      urls:
+        - https://api.koios.rest/api/v1/tip
+    snapshotTypes:
+      - id: mithril
+        kind: full
+        label: Mithril · certified
+        hint: Official Mithril cardano-db (certificate chain verified by mithril-client); ~222 GiB, minutes to a few hours depending on bandwidth
+        diskGiB: 224
+        default: true
+  - id: preprod
+    label: Cardano Preprod
+    diskHintGiB: 100
+    fullNodeGiB: 100
+    cpuCores: 2
+    memoryGiB: 16
+    snapshot: required
+    publicTip:
+      urls:
+        - https://preprod.koios.rest/api/v1/tip
+    snapshotTypes:
+      - id: mithril
+        kind: full
+        label: Mithril · certified
+        hint: Official Mithril cardano-db for the Preprod testnet (~19 GiB)
+        diskGiB: 20
+        default: true
+  - id: preview
+    label: Cardano Preview
+    diskHintGiB: 100
+    fullNodeGiB: 100
+    cpuCores: 2
+    memoryGiB: 16
+    snapshot: required
+    publicTip:
+      urls:
+        - https://preview.koios.rest/api/v1/tip
+    snapshotTypes:
+      - id: mithril
+        kind: full
+        label: Mithril · certified
+        hint: Official Mithril cardano-db for the Preview testnet (~16 GiB)
+        diskGiB: 16
+        default: true
+
+# Command line + generated config.json on Start (chains/cardano). format: flags — no conf patch.
+# Capacity / production literals mirror CardanoUnitBodies (args, configJson, unit) — keep them identical.
+# Keys with dots are config.json paths; keys in CamelCase are config.json top-level keys; LimitNOFILE / TimeoutStopSec are unit settings.
+clientConfig:
+  program: cardano-node
+  format: flags
+  bindings:
+    - key: database-path
+      source: disk_role_dir
+      role: blockchain
+      relative: db
+      description: cardano-node --database-path (Disks blockchain role)
+    - key: socket-path
+      source: disk_role_dir
+      role: blockchain
+      file: true
+      relative: node.socket
+      description: node-to-client UNIX socket (local only, CARDANO_NODE_SOCKET_PATH)
+    - key: config
+      source: disk_role_dir
+      role: blockchain
+      file: true
+      relative: config/config.json
+      description: Generated from the release's share/<env>/config.json (metrics port, peer targets, stdout format patched)
+    - key: topology
+      source: disk_role_dir
+      role: blockchain
+      file: true
+      relative: config/topology.json
+      description: Upstream topology.json of the release (bootstrap peers + peer-snapshot.json)
+    - key: port
+      source: catalog_port
+      role: p2p
+      description: node-to-node P2P port (TCP, public)
+    - key: host-addr
+      source: literal
+      value: "0.0.0.0"
+      description: P2P bind address
+    - key: PrometheusSimple.port
+      source: catalog_port
+      role: metrics
+      description: Prometheus metrics port (config.json TraceOptions backends; height probe reads it)
+    - key: PrometheusSimple.host
+      source: literal
+      value: "127.0.0.1"
+      description: Prometheus bind address — loopback only (unauthenticated endpoint)
+    - key: Stdout.format
+      source: literal
+      value: "HumanFormatUncoloured"
+      description: stdout trace format (upstream default is coloured; ANSI codes pollute logs/cardano.log)
+    - key: LedgerDB.Backend
+      source: literal
+      value: "V2InMemory"
+      description: Ledger state in RAM (needs >=24 GiB on mainnet). V2LSM (on disk) is not supported with Mithril ledger snapshots in v1
+    - key: TargetNumberOfRootPeers
+      source: literal
+      value: "60"
+      description: P2P peer-selection target (relay default)
+    - key: TargetNumberOfKnownPeers
+      source: literal
+      value: "150"
+      description: P2P peer-selection target (relay default)
+    - key: TargetNumberOfEstablishedPeers
+      source: literal
+      value: "30"
+      description: P2P peer-selection target (default)
+    - key: TargetNumberOfActivePeers
+      source: literal
+      value: "20"
+      description: P2P peer-selection target (default)
+    - key: TargetNumberOfKnownBigLedgerPeers
+      source: literal
+      value: "15"
+      description: Big-ledger-peer target (default)
+    - key: TargetNumberOfEstablishedBigLedgerPeers
+      source: literal
+      value: "10"
+      description: Big-ledger-peer target (default)
+    - key: TargetNumberOfActiveBigLedgerPeers
+      source: literal
+      value: "5"
+      description: Big-ledger-peer target (default)
+    - key: AcceptedConnectionsLimit.hardLimit
+      source: literal
+      value: "512"
+      description: Inbound connections hard cap (default)
+    - key: AcceptedConnectionsLimit.softLimit
+      source: literal
+      value: "384"
+      description: Inbound connections soft cap — above it new connections are delayed (default)
+    - key: AcceptedConnectionsLimit.delay
+      source: literal
+      value: "5"
+      description: Seconds a connection is delayed above the soft cap (default)
+    - key: RTS.N
+      source: literal
+      value: "2"
+      description: GHC RTS capabilities (+RTS -N2 -RTS) — the binary's built-in default, made explicit
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for cardano-node
+    - key: TimeoutStopSec
+      source: literal
+      value: "600"
+      description: systemd stop timeout — a clean stop writes the ledger snapshot
+    # --- Indexer: Ogmios (install option indexer = ogmios | both). Flags verified against server/src/Ogmios/Options.hs @ v7.0.0 ---
+    - key: Ogmios.port
+      source: catalog_port
+      role: ogmios
+      whenInstallOption: indexer
+      whenInstallOptionValue: "ogmios,both"
+      description: Ogmios JSON-RPC / WebSocket port (--port)
+    - key: Ogmios.host
+      source: literal
+      value: "127.0.0.1"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "ogmios,both"
+      description: Ogmios bind address (--host) — loopback only; Ogmios has no authentication and also submits transactions
+    - key: Ogmios.timeout
+      source: literal
+      value: "90"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "ogmios,both"
+      description: Ogmios --timeout, seconds of inactivity after which a client connection is closed (upstream default)
+    - key: Ogmios.max-in-flight
+      source: literal
+      value: "1000"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "ogmios,both"
+      description: Ogmios --max-in-flight, ChainSync requests pipelined per connection (upstream default; v7 has no max-connections flag — cap them in the proxy)
+    - key: Ogmios.log-level
+      source: literal
+      value: "Info"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "ogmios,both"
+      description: Ogmios --log-level (all components)
+    - key: Ogmios.LimitNOFILE
+      source: literal
+      value: "1048576"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "ogmios,both"
+      description: systemd LimitNOFILE for Ogmios (one descriptor per WebSocket client)
+    # --- Indexer: cardano-db-sync (install option indexer = dbsync | both) ---
+    - key: DbSync.config
+      source: disk_role_dir
+      role: blockchain
+      relative: config/db-sync-config.json
+      file: true
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync --config, generated on every Start (NodeConfigFile = the node's config.json, so genesis files and protocol follow the node)
+    - key: DbSync.schema-dir
+      source: disk_role_dir
+      role: blockchain
+      relative: schema
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync --schema-dir, the SQL migrations of the release tarball (replaced on every update)
+    - key: DbSync.state-dir
+      source: disk_role_dir
+      role: indexer
+      relative: ledger-state
+      optional: true
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync --state-dir, its ledger state snapshots (~10 GiB on mainnet; Indexer disk role)
+    - key: DbSync.tablespace-dir
+      source: disk_role_dir
+      role: indexer
+      relative: pgdata
+      optional: true
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: PostgreSQL tablespace of the db-sync database (Indexer disk role; owned by the postgres user)
+    - key: DbSync.PrometheusPort
+      source: catalog_port
+      role: dbsync_metrics
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync Prometheus port (config PrometheusPort; the product binds all interfaces, the unit allows loopback only)
+    - key: DbSync.IPAddressAllow
+      source: literal
+      value: "localhost"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: systemd IPAddressDeny=any + IPAddressAllow — db-sync needs only PostgreSQL on 127.0.0.1 and the node socket
+    - key: DbSync.ledger_backend
+      source: literal
+      value: "inmemory"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync ledger_backend — UTxO set in RAM (~16 GiB on mainnet); the LSM on-disk backend is experimental upstream
+    - key: DbSync.insert_options.tx_cbor
+      source: literal
+      value: "disable"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync insert_options — no raw transaction CBOR (upstream recommended default)
+    - key: DbSync.insert_options.tx_out.value
+      source: literal
+      value: "enable"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync insert_options — keep every tx input and output (largest database; upstream recommended default)
+    - key: DbSync.insert_options.tx_out.use_address_table
+      source: literal
+      value: "false"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync insert_options — addresses stored inline (the address table can only be chosen on an empty database)
+    - key: DbSync.insert_options.ledger
+      source: literal
+      value: "enable"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync insert_options — maintain the ledger state (rewards, stake distribution, pots, parameters)
+    - key: DbSync.insert_options.shelley.enable
+      source: literal
+      value: "true"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync insert_options — certificates, withdrawals, parameter proposals
+    - key: DbSync.insert_options.multi_asset.enable
+      source: literal
+      value: "true"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync insert_options — multi-asset tables
+    - key: DbSync.insert_options.metadata.enable
+      source: literal
+      value: "true"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync insert_options — transaction metadata
+    - key: DbSync.insert_options.plutus.enable
+      source: literal
+      value: "true"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync insert_options — scripts, datums, redeemers
+    - key: DbSync.insert_options.governance
+      source: literal
+      value: "enable"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync insert_options — Conway governance data
+    - key: DbSync.insert_options.offchain_pool_data
+      source: literal
+      value: "disable"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync insert_options — no pool metadata fetching (outbound HTTPS to arbitrary hosts; db-sync is confined to loopback; upstream default since 13.7.0.1)
+    - key: DbSync.insert_options.offchain_vote_data
+      source: literal
+      value: "disable"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync insert_options — no governance vote metadata fetching (same reason; upstream default since 13.7.0.1)
+    - key: DbSync.insert_options.pool_stat
+      source: literal
+      value: "enable"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync insert_options — pool statistics (part of the upstream "full" preset)
+    - key: DbSync.insert_options.json_type
+      source: literal
+      value: "text"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync insert_options — JSON columns as text (upstream recommended default; jsonb is slower to insert)
+    - key: DbSync.insert_options.disable_epoch
+      source: literal
+      value: "false"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: db-sync insert_options — maintain the epoch view
+    - key: DbSync.LimitNOFILE
+      source: literal
+      value: "1048576"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: systemd LimitNOFILE for db-sync
+    - key: DbSync.TimeoutStopSec
+      source: literal
+      value: "300"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: systemd stop timeout — db-sync finishes its block batch before it exits
+    - key: Postgres.role.maintenance_work_mem_min_mb
+      source: literal
+      value: "1024"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: Role-level PostgreSQL setting for the db-sync role only (at least 1 GiB, up to RAM/16; upstream docker uses 1GB) — the rest of the server is not touched
+    - key: Postgres.role.max_parallel_maintenance_workers
+      source: literal
+      value: "4"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: Role-level PostgreSQL setting for the db-sync role (upstream docker uses 4) — index creation after the sync reaches the tip
+    - key: Postgres.role.random_page_cost
+      source: literal
+      value: "1.1"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: Role-level PostgreSQL setting for the db-sync role (NVMe)
+    - key: Postgres.role.effective_io_concurrency
+      source: literal
+      value: "200"
+      whenInstallOption: indexer
+      whenInstallOptionValue: "dbsync,both"
+      description: Role-level PostgreSQL setting for the db-sync role (NVMe)
+
+# Node page checks (host agent). path_mtu: PMTU black hole makes peers time out. nat: inbound P2P needs the public address or a forward.
+diagnostics:
+  - id: path_mtu
+  - id: nat
+    port: p2p
+    protocol: tcp
+  # Optional indexer companions (install option indexer): hidden while healthy or disabled; sync progress shows as info.
+  - id: cardano_ogmios
+    port: ogmios
+  - id: cardano_dbsync
+    port: dbsync_metrics

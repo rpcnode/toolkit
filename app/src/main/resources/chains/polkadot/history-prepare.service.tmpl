@@ -1,0 +1,20 @@
+[Unit]
+Description={{description}}
+After=network-online.target postgresql.service
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+# simple + RemainAfterExit: `systemctl restart` returns at once (the first run may install PostgreSQL, download Node.js and build
+# the project), the unit stays active after the script has finished, and a crash is retried.
+Type=simple
+RemainAfterExit=yes
+ExecStart={{exec_start}}
+Restart=on-failure
+RestartSec=60
+Nice=10
+TimeoutStopSec=60
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

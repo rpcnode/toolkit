@@ -1,0 +1,48 @@
+type Block @entity {
+  id: ID!
+  height: Int! @index
+  hash: String! @index
+  parentHash: String!
+  timestamp: DateTime! @index
+  specVersion: Int!
+  extrinsicCount: Int!
+  eventCount: Int!
+}
+
+type Extrinsic @entity @index(fields: ["signer", "blockNumber"]) @index(fields: ["pallet", "call", "blockNumber"]) {
+  id: ID!
+  blockNumber: Int! @index
+  index: Int!
+  hash: String! @index
+  pallet: String!
+  call: String!
+  signer: String
+  success: Boolean!
+  tip: BigInt
+  timestamp: DateTime! @index
+  args: JSON
+}
+
+type Event @entity @index(fields: ["pallet", "name", "blockNumber"]) {
+  id: ID!
+  blockNumber: Int! @index
+  index: Int!
+  extrinsicIndex: Int
+  phase: String!
+  pallet: String!
+  name: String!
+  timestamp: DateTime!
+  args: JSON
+}
+
+type Transfer @entity @index(fields: ["from", "blockNumber"]) @index(fields: ["to", "blockNumber"]) {
+  id: ID!
+  blockNumber: Int! @index
+  timestamp: DateTime! @index
+  extrinsicHash: String @index
+  extrinsicIndex: Int
+  eventIndex: Int!
+  from: String!
+  to: String!
+  amount: BigInt!
+}

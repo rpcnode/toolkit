@@ -1,0 +1,51 @@
+# xlayer-reth (execution). op-node (cl.service.tmpl) is the companion started after it (JWT shared via {{jwt_file}}).
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+ExecStart={{bin}} node \
+  --datadir={{datadir}} \
+  --chain={{chain_name}} \
+  --config={{reth_config}} \
+  --http \
+  --http.addr=0.0.0.0 \
+  --http.port={{http_port}} \
+  --http.corsdomain=* \
+  --http.api={{http_api}} \
+  --ws \
+  --ws.addr=0.0.0.0 \
+  --ws.port={{ws_port}} \
+  --ws.origins=* \
+  --ws.api={{http_api}} \
+  --rpc.max-connections={{rpc_max_connections}} \
+  --rpc.max-response-size={{rpc_max_response_size}} \
+  --authrpc.addr=127.0.0.1 \
+  --authrpc.port={{engine_port}} \
+  --authrpc.jwtsecret={{jwt_file}} \
+  --port={{p2p_port}} \
+  --metrics=127.0.0.1:{{metrics_port}} \
+  --rollup.disable-tx-pool-gossip \
+  --rollup.sequencer-http={{sequencer_http}} \
+  --disable-discovery \
+  --discovery.v5.port={{discv5_port}} \
+  --max-outbound-peers={{max_peers}} \
+  --max-inbound-peers={{max_peers}} \
+  --trusted-peers={{trusted_peers}} \
+  --rpc.legacy-url={{legacy_rpc_url}} \
+  --rpc.legacy-timeout=30s \
+  --log.file.directory={{log_dir}} \
+  --log.file.filter=info
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=300
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE={{limit_nofile}}
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

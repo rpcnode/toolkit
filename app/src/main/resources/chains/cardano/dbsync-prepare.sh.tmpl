@@ -1,0 +1,34 @@
+#!/bin/bash
+# RpcNode Cardano db-sync — preparation. Runs as its own unit (rpcnode-cardano-<env>-dbsync-prepare.service) because
+# db-sync itself is confined to loopback by systemd (IPAddressDeny) and so cannot run apt.
+# It makes sure a PostgreSQL server exists (the host's own is used when there is one and is not reconfigured; only a
+# separate role, database and tablespace for this node are created; without a server `postgresql` is installed from apt
+# and tuned), writes the 0600 pgpass file that db-sync reads (PGPASSFILE) and then drops the `ready` marker that the
+# db-sync wrapper waits for. Everything is idempotent: it runs again on every Start.
+# Removing the node runs bin/rpcnode-on-remove.sh, which drops the role, database and tablespace again.
+set -uo pipefail
+ENV_ID={{env}}
+STATE_DIR={{state_dir}}
+IDX={{idx_dir}}
+LOG={{log_file}}
+
+PG_ROLE="rpcnode_cardano_${ENV_ID}"; PG_DB="rpcnode_cardano_${ENV_ID}"; PG_TS="rpcnode_cardano_${ENV_ID}_ts"
+PG_CONF_TAG="cardano-dbsync"; PG_MAINT_MIN_MB={{maint_min_mb}}
+PWDIR="$STATE_DIR/cardano-dbsync"
+TS_DIR="$IDX/pgdata"; LEDGER_DIR="$IDX/ledger-state"
+READY="$PWDIR/ready"
+
+mkdir -p "$(dirname "$LOG")" "$STATE_DIR" "$IDX" "$PWDIR" "$LEDGER_DIR"
+chmod 755 "$IDX"; chmod 700 "$PWDIR"
+exec >>"$LOG" 2>&1
+
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [dbsync-prepare] $*"; }
+
+{{postgres_functions}}
+
+rm -f "$READY"
+log "preparing the PostgreSQL database for cardano db-sync ($ENV_ID); indexer dir $IDX"
+ensure_password
+until provision_database; do log "database setup failed — retrying in 60 s"; sleep 60; done
+touch "$READY"
+log "ready: database $PG_DB on 127.0.0.1:$PG_PORT, role $PG_ROLE, tablespace $PG_TS in $TS_DIR"

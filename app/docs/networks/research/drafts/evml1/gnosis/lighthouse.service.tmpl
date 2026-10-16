@@ -1,0 +1,30 @@
+# Lighthouse beacon node for Gnosis / Chiado (same binary as chains/ethereum, other --network + checkpoint).
+# {{lighthouse_network}} = gnosis | chiado; {{checkpoint_url}} = https://checkpoint.gnosischain.com | https://checkpoint.chiadochain.net (both VERIFIED 2026-10-13).
+# Beacon API stays on 127.0.0.1 (the toolkit reads the execution height); QUIC pinned explicitly so it never lands on port+1.
+[Unit]
+Description={{description}}
+After=network-online.target {{nethermind_unit}}
+Wants=network-online.target {{nethermind_unit}}
+
+[Service]
+Type=simple
+ExecStart={{bin}} bn \
+  --network {{lighthouse_network}} \
+  --datadir {{datadir}} \
+  --execution-endpoint http://127.0.0.1:{{engine_port}} \
+  --execution-jwt {{jwt_path}} \
+  --checkpoint-sync-url {{checkpoint_url}} \
+  --http --http-address 127.0.0.1 --http-port {{beacon_port}} \
+  --port {{consensus_p2p}} \
+  --quic-port {{quic_port}} \
+  --metrics --metrics-address 127.0.0.1 --metrics-port {{consensus_metrics}}
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=300
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE=1048576
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

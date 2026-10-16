@@ -1,0 +1,165 @@
+# ZKsync Era (ZK Stack external node, mainnet + Sepolia). zksync-era ships the external node ONLY as a container image
+# (matterlabs/external-node): the toolkit extracts the binary + contracts from the image layers over HTTPS (no Docker daemon),
+# see FAMILY.md "delivery". Needs PostgreSQL (provisioned by the unit's ExecStartPre, data in a tablespace under node_dir).
+# Snapshot: the EN restores itself from the public GCS bucket on first start (snapshotBootstrap: via_node).
+label: ZKsync Era
+dataRoot: zksync
+hostPackages:
+  - postgresql
+  - libssl3
+diskRoles:
+  - id: rocksdb
+    label: State cache + Merkle tree (RocksDB)
+    media: nvme
+  - id: postgres
+    label: PostgreSQL tablespace
+    media: nvme
+diskNotes:
+  - "EN_STATE_CACHE_PATH and EN_MERKLE_TREE_PATH are two directories under the rocksdb role leaf and must never be shared between nodes."
+  - "PostgreSQL holds the chain state (database in a tablespace under the postgres role). The unit provisions role/db/tablespace on the host server (or installs postgresql from apt)."
+  - "First start restores a protocol snapshot from the public GCS bucket (~11 GB compressed, Postgres ~1h, Merkle tree ~3h, then catch-up): the API is down until Postgres recovery is done."
+  - "Snapshot recovery + pruning keeps only recent history. Full history needs a Postgres dump (none published for Era) or genesis sync (months)."
+  - "Era mainnet settles through the ZKsync Gateway: EN_GATEWAY_URL is required besides the Ethereum L1 RPC."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: ZKsync Era Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 512
+    archiveGiB: 11264
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: required
+    snapshotBootstrap: via_node
+    publicTip:
+      urls:
+        - https://mainnet.era.zksync.io
+    snapshotTypes:
+      - id: recovery
+        kind: full
+        label: Snapshot recovery · pruned
+        hint: Official GCS protocol snapshot (zksync-era-mainnet-external-node-snapshots), no pre-snapshot history. Postgres < 500 GB; grows ~15 GB/day unless pruning is on. Default.
+        diskGiB: 512
+        default: true
+    l1Parent:
+      rpc: https://ethereum-rpc.publicnode.com
+      beacon: ""
+      pickHelp: |
+        The EN makes about 2 L1 calls per batch (more while syncing). Click Public for publicnode or pick an active
+        Ethereum node from this panel (same-host uses 127.0.0.1).
+  - id: sepolia
+    label: ZKsync Sepolia Testnet
+    diskHintGiB: 128
+    fullNodeGiB: 64
+    archiveGiB: 512
+    cpuCores: 4
+    memoryGiB: 32
+    snapshot: required
+    snapshotBootstrap: via_node
+    publicTip:
+      urls:
+        - https://sepolia.era.zksync.dev
+    snapshotTypes:
+      - id: recovery
+        kind: full
+        label: Snapshot recovery · pruned
+        hint: Official GCS protocol snapshot (zksync-era-boojnet-external-node-snapshots). Default.
+        diskGiB: 64
+        default: true
+    l1Parent:
+      rpc: https://ethereum-sepolia-rpc.publicnode.com
+      beacon: ""
+      pickHelp: |
+        ZKsync Sepolia settles on Ethereum Sepolia (via its Gateway). Click Public or pick an active Ethereum Sepolia node.
+
+clientConfig:
+  program: zksync_external_node
+  format: flags   # en.env is generated on every Start (chains/zkstack) — no conf patch; the keys below are the EN_* variables
+  bindings:
+    - key: snapshot
+      source: install_option
+      option: snapshot
+      default: "recovery"
+      description: recovery = EN restores the GCS snapshot (EN_SNAPSHOTS_RECOVERY_ENABLED=true); anything else = genesis sync
+    - key: rocksdb
+      source: disk_role_dir
+      role: rocksdb
+      description: parent of EN_STATE_CACHE_PATH (state_keeper) and EN_MERKLE_TREE_PATH (lightweight)
+    - key: postgres
+      source: disk_role_dir
+      role: postgres
+      description: Postgres tablespace directory (pgdata)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: EN_HTTP_PORT
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: EN_WS_PORT
+    - key: health-port
+      source: catalog_port
+      role: health
+      description: EN_HEALTHCHECK_PORT (127.0.0.1 in practice; do not expose)
+    - key: metrics-port
+      source: catalog_port
+      role: metrics
+      description: EN_PROMETHEUS_PORT
+    - key: pruning
+      source: install_option
+      option: pruning
+      default: "true"
+      description: EN_PRUNING_ENABLED (docs compose default true; must be false while the Merkle tree is being recovered)
+    - key: pruning-retention-sec
+      source: install_option
+      option: pruning_retention_sec
+      default: "259200"
+      description: EN_PRUNING_DATA_RETENTION_SEC (3 days; <24h is ignored on mainnet)
+    - key: db-pool-size
+      source: literal
+      value: "50"
+      description: DATABASE_POOL_SIZE (prepared mainnet config; compose uses 10)
+    - key: req-entities-limit
+      source: literal
+      value: "10000"
+      description: EN_REQ_ENTITIES_LIMIT (max logs/entities per request)
+    - key: filters-limit
+      source: literal
+      value: "10000"
+      description: EN_FILTERS_LIMIT
+    - key: subscriptions-limit
+      source: literal
+      value: "10000"
+      description: EN_SUBSCRIPTIONS_LIMIT
+    - key: max-response-body-size-mb
+      source: literal
+      value: "10"
+      description: EN_MAX_RESPONSE_BODY_SIZE_MB (default)
+    - key: max-response-overrides
+      source: literal
+      value: "eth_getLogs=100"
+      description: EN_MAX_RESPONSE_BODY_SIZE_OVERRIDES_MB
+    - key: latest-values-cache-mb
+      source: literal
+      value: "512"
+      description: EN_LATEST_VALUES_CACHE_SIZE_MB (RAM vs VM-call speed; judgement)
+    - key: api-namespaces
+      source: literal
+      value: "eth,net,web3,zks,pubsub"
+      description: EN_API_NAMESPACES (no debug / en on the public port)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd open-file limit
+    - key: l1-rpc
+      source: install_option
+      option: l1_rpc
+      default: ""
+      description: Ethereum L1 execution RPC (EN_ETH_CLIENT_URL)
+      testConnect:
+        kind: eth_rpc
+        label: Test connect
+        help: Panel POSTs eth_blockNumber. The EN needs L1 mainnet for Era mainnet and L1 Sepolia for the testnet.
+
+diagnostics:
+  - id: path_mtu

@@ -1,0 +1,38 @@
+#!/bin/bash
+# Runs when the node is removed (stop first, then this, then the files). Drops what the dbsync-prepare script created in
+# PostgreSQL — the database, its tablespace and the role — the tablespace directory and db-sync's ledger state. The
+# PostgreSQL server itself (existing or installed by the prepare script) stays; other databases on it are not touched.
+# Changing the install option from db-sync to none does NOT run this: the data stays until the node is removed.
+set -uo pipefail
+PWDIR={{pw_dir}}
+IDX={{idx_dir}}
+
+if [[ ! -f "$PWDIR/pg.env" ]]; then
+  echo "the db-sync database was never created — nothing to drop"
+  exit 0
+fi
+# shellcheck disable=SC1091
+. "$PWDIR/pg.env"
+
+psql_su() { ( cd / && setpriv --reuid=postgres --regid=postgres --init-groups psql -p "$PG_PORT" -X -q -At -v ON_ERROR_STOP=1 "$@" ); }
+
+if ! psql_su -d postgres -c 'select 1' >/dev/null 2>&1; then
+  systemctl start postgresql >/dev/null 2>&1 || true
+  sleep 5
+fi
+if ! psql_su -d postgres -c 'select 1' >/dev/null 2>&1; then
+  echo "PostgreSQL is not reachable on port $PG_PORT — database $PG_DB, tablespace $PG_TS and role $PG_ROLE were NOT dropped"
+  exit 0
+fi
+
+# db-sync is already stopped; close whatever else is still connected
+psql_su -d postgres -c "select pg_terminate_backend(pid) from pg_stat_activity where datname = '$PG_DB' and pid <> pg_backend_pid()" >/dev/null 2>&1 || true
+psql_su -d postgres -c "drop database if exists $PG_DB" || exit 1
+psql_su -d postgres -c "drop tablespace if exists $PG_TS" || exit 1
+psql_su -d postgres -c "drop role if exists $PG_ROLE" || exit 1
+
+# the tablespace directory and the ledger state are db-sync's own (inside its indexer directory); keep anything that is not
+if [[ -n "$PG_TS_DIR" && "$PG_TS_DIR" == "$IDX"/* ]]; then rm -rf "$PG_TS_DIR"; fi
+rm -rf "$IDX/ledger-state"
+rm -f "$PWDIR/pg.env" "$PWDIR/pgpass" "$PWDIR/postgres_password" "$PWDIR/pg-tuned" "$PWDIR/ready"
+echo "dropped database $PG_DB, tablespace $PG_TS and role $PG_ROLE (PostgreSQL port $PG_PORT)"

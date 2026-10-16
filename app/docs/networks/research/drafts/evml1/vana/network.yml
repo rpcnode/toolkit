@@ -1,0 +1,116 @@
+# Vana L1 (mainnet chain id 1480) + Moksha testnet (14800): proof-of-stake EVM chain = geth (execution) + Prysm fork (consensus).
+# Snapshot never — geth full sync from genesis + Prysm checkpoint sync (no official EL/CL snapshot found).
+# Hardware VERIFIED in docs.vana.org/network/validators: mainnet 8 cores / 32 GB / 1.2 TB SSD, x86-64 only; testnet 2 cores / 8 GB / 100 GB.
+label: Vana
+diskRoles:
+  - id: execution
+    label: Execution Client DB
+    media: nvme
+  - id: consensus
+    label: Consensus Client DB
+    media: ssd
+diskNotes:
+  - "geth --datadir is <execution>/datadir (genesis.json is `geth init`-ed once, state.scheme=path); the geth binary lives in <execution>/bin."
+  - "Prysm datadir on the consensus role; genesis.ssz + config.yml are fetched from vana-com/vana networks/<env>/ into <node_dir>/.toolkit/."
+  - "Mainnet needs the PATCHED geth (state override at block 9228152) — stock geth stops at that block. Moksha runs stock geth."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Vana Mainnet
+    diskHintGiB: 1536
+    fullNodeGiB: 1228
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: never
+    tipLagBlocks: 5
+    publicTip:
+      urls:
+        - https://rpc.vana.org
+  - id: moksha
+    label: Vana Moksha Testnet
+    diskHintGiB: 256
+    fullNodeGiB: 100
+    cpuCores: 2
+    memoryGiB: 8
+    snapshot: never
+    tipLagBlocks: 5
+    publicTip:
+      urls:
+        - https://rpc.moksha.vana.org
+
+clientConfig:
+  program: geth
+  format: flags
+  bindings:
+    - key: datadir
+      source: disk_role_dir
+      role: execution
+      relative: datadir
+      description: geth --datadir (Disks execution role)
+    - key: prysm-datadir
+      source: disk_role_dir
+      role: consensus
+      description: Prysm --datadir (Disks consensus role)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: JSON-RPC WebSocket port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: geth P2P port (tcp + udp)
+    - key: engine-port
+      source: catalog_port
+      role: engine
+      description: Engine API (JWT) port, 127.0.0.1
+    - key: metrics-port
+      source: catalog_port
+      role: metrics
+      description: geth metrics port, 127.0.0.1
+    - key: beacon-port
+      source: catalog_port
+      role: beacon
+      description: Prysm gRPC-gateway (beacon REST) port, 127.0.0.1
+    - key: consensus-p2p-tcp
+      source: catalog_port
+      role: consensus_p2p
+      description: Prysm P2P TCP port
+    - key: consensus-p2p-udp
+      source: catalog_port
+      role: consensus_udp
+      description: Prysm P2P UDP (discovery) port
+    - key: prysm-rpc-port
+      source: catalog_port
+      role: consensus_rpc
+      description: Prysm gRPC port (validators only), 127.0.0.1
+    - key: http-api
+      source: literal
+      value: "eth,net,web3"
+      description: --http.api / --ws.api (as the official compose file)
+    - key: rpc-batch-request-limit
+      source: literal
+      value: "5000"
+      description: --rpc.batch-request-limit (official compose value; prod preset lowers it)
+    - key: rpc-batch-response-max-size
+      source: literal
+      value: "125000000"
+      description: --rpc.batch-response-max-size
+    - key: rpc-txfeecap
+      source: literal
+      value: "1000"
+      description: --rpc.txfeecap
+    - key: state-scheme
+      source: literal
+      value: "path"
+      description: --state.scheme (full node; archive needs hash + gcmode=archive)
+    - key: limit-nofile
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE of both units
+
+diagnostics:
+  - id: path_mtu

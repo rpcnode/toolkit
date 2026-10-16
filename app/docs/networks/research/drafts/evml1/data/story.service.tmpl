@@ -1,0 +1,24 @@
+# story (consensus). `story init` + config patch already done (story-setup.sh.tmpl). Engine endpoint/JWT are passed as flags (VERIFIED in client/cmd/flags.go).
+[Unit]
+Description={{description}}
+After=network-online.target {{geth_unit}}
+Wants=network-online.target {{geth_unit}}
+Requires={{geth_unit}}
+
+[Service]
+Type=simple
+ExecStart={{bin}} run \
+  --home {{home}} \
+  --engine-endpoint http://127.0.0.1:{{engine_port}} \
+  --engine-jwt-file {{jwt_path}} \
+  --api-enable --api-address 127.0.0.1:{{cl_api_port}}
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=300
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE=1048576
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,39 @@
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+# The Ethereum L1 WebSocket (Juno's eth-node option) usually carries a provider key: it is read from this 0600 file as JUNO_ETH_NODE,
+# never from argv or this unit.
+EnvironmentFile={{env_file}}
+ExecStart={{bin}} \
+  --network={{network}} \
+  --db-path={{datadir}} \
+  --http \
+  --http-host=0.0.0.0 \
+  --http-port={{http_port}} \
+  --ws \
+  --ws-host=0.0.0.0 \
+  --ws-port={{ws_port}} \
+  --metrics \
+  --metrics-host=127.0.0.1 \
+  --metrics-port={{metrics_port}} \
+  --db-cache-size={{db_cache_size}} \
+  --rpc-max-block-scan={{rpc_max_block_scan}} \
+  --rpc-request-timeout={{rpc_request_timeout}} \
+  --rpc-max-concurrent-requests={{rpc_max_concurrent_requests}} \
+  --rpc-max-request-queue={{rpc_max_request_queue}} \
+  --log-level=info{{prune_flags}}
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=300
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE={{limit_nofile}}
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,124 @@
+#########################################################
+# Node-specific configuration
+#########################################################
+beneficiary = "0x0000000000000000000000000000000000000000"
+node_name = "<NODE_NAME>"                                  # Node Name
+network_name = "testnet"                                   # DO NOT CHANGE
+ipc_tx_batch_size = 1000
+ipc_max_queued_batches = 10
+# must be <= ipc_max_queued_batches
+ipc_queued_batches_watermark = 3
+
+statesync_threshold = 600
+statesync_max_concurrent_requests = 5
+
+#########################################################
+# Network-wide configuration
+#########################################################
+chain_id = 10143
+
+[peer_discovery]
+self_address = "<IP>"                      # IP Address and Port
+self_tcp_port = 8000
+self_auth_port = 8001
+self_direct_udp_auth_port = 8002
+self_record_seq_num = 0                    # Should be 0 initially
+self_name_record_sig = "<NAME_RECORD_SIG>" # Name Record Signature
+refresh_period = 20
+request_timeout = 5
+unresponsive_prune_threshold = 3
+last_participation_prune_threshold = 1000
+min_num_peers = 90
+max_num_peers = 450
+ping_rate_limit_per_second = 100
+
+[fullnode_raptorcast]
+enable_publisher = true
+enable_client = true
+raptor10_fullnode_redundancy_factor = 3.0
+max_group_size = 150
+round_span = 240
+invite_lookahead = 20
+max_invite_wait = 10
+deadline_round_dist = 10
+init_empty_round_span = 23
+max_num_group = 3
+invite_future_dist_min = 1
+invite_future_dist_max = 600
+invite_accept_heartbeat_ms = 10000
+
+[network]
+bind_address_host = "0.0.0.0"
+bind_address_tcp_port = 8000
+authenticated_bind_address_port = 8001
+direct_udp_bind_address_port = 8002
+max_rtt_ms = 300
+max_mbps = 1000
+
+#########################################################
+# Peers configuration
+#########################################################
+
+[fullnode_dedicated]
+identities = []
+
+[fullnode_raptorcast.full_nodes_prioritized]
+identities = []
+
+[blocksync_override]
+peers = []
+
+[statesync]
+expand_to_group = true
+
+[[statesync.init_peers]]
+secp256k1_pubkey = "02d84a0236ed911c8425dd78951ebbbbdfa7628781274b8db4423c67f65944102e"
+
+[[statesync.init_peers]]
+secp256k1_pubkey = "0319bb3b694487c34ce350254e12462787e15ec9116efc1a905a0a9e4e180235bd"
+
+[[statesync.init_peers]]
+secp256k1_pubkey = "03816049f25776260594160053555a14bc2b802c3cb04df4e557d107dbfa834541"
+
+[[statesync.init_peers]]
+secp256k1_pubkey = "03e72965cd3710d7bdde238fe24d36565b363632edccc22bf16dee2bcf16180475"
+
+# mf-testnet-bootstrap-fn-lsn-jfk-006
+[[bootstrap.peers]]
+address = "64.31.54.6:8000"
+record_seq_num = 1
+secp256k1_pubkey = "0x02d84a0236ed911c8425dd78951ebbbbdfa7628781274b8db4423c67f65944102e"
+name_record_sig = "0x930027c1bf5e254624c330c84c600bb84323f8491aae398de22bf077bd3883761ba56c4564a683ce211bac92c8294fdc460470a0db8172839fc53e3f5247762301"
+auth_port = 8001
+
+# mf-testnet-bootstrap-fn-lsn-fra-007
+[[bootstrap.peers]]
+address = "64.31.29.227:8000"
+record_seq_num = 1
+secp256k1_pubkey = "0x0319bb3b694487c34ce350254e12462787e15ec9116efc1a905a0a9e4e180235bd"
+name_record_sig = "0xf2bd1599b438be55e211342072fcd29a4584bfa5e1629b1d9bddb20b2cfe839468266808e66b55151c1680eff7df95d8b7a676028af54aaf1875ffe8a409e75e00"
+auth_port = 8001
+
+# mf-testnet-bootstrap-fn-tsw-pit-005
+[[bootstrap.peers]]
+address = "64.130.56.117:8000"
+record_seq_num = 1
+secp256k1_pubkey = "0x036d09f684b77ae83c70cd1afe082aec114bfbf2732db7f0902c987862a2e4cc7b"
+name_record_sig = "0xd4306ab7290cea0fa005d5cd7c75725cc735b354e2c1dfe33ed0b09059b2f74753d45dd8f3def95976938309b7285fd8d221167d93850901269c37f7371de3f001"
+auth_port = 8001
+
+# CL-1 (EU)
+[[bootstrap.peers]]
+address = "185.189.44.231:8000"
+record_seq_num = 1
+secp256k1_pubkey = "0x03816049f25776260594160053555a14bc2b802c3cb04df4e557d107dbfa834541"
+name_record_sig = "0x27da01f515ffa4f186d396736bec49d310f83550271f0f005c78d48946e2649220696676917e32e3747d89559cb070e47a94613a96c1bc390cb46ab16a2b122200"
+auth_port = 8001
+
+# CL-2 (US)
+[[bootstrap.peers]]
+address = "185.150.190.139:8000"
+record_seq_num = 1
+secp256k1_pubkey = "0x03e72965cd3710d7bdde238fe24d36565b363632edccc22bf16dee2bcf16180475"
+name_record_sig = "0xa6fee099bfc8598a11cfafae9256dec8a143fd95fa94114c524ca0a8763af09529bb905d92d7cb88327e756db0eadfb6ebdab51c2b146e688a5d25aa6073d1fe00"
+auth_port = 8001

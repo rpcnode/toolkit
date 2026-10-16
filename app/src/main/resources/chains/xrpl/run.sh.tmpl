@@ -1,0 +1,92 @@
+#!/bin/bash
+# RpcNode XRPL node: builds xrpld from the GitHub source release (the Ripple apt pool lags behind the releases and the
+# older packages are amendment blocked), then runs it. The unit stays alive during the build (this script is its main
+# process), so a long compile is not a failed start. A binary the panel already compiled for this CPU (PREBUILT, built on a
+# host agent of the same architecture) is used instead, when it runs here; the local compile is the fallback. Build: BUILD.md of XRPLF/rippled — Conan 2 + CMake + Clang 22 (the
+# compiler CI tests), Release, xrpld only. Dependencies come from the xrplf Conan remote or are compiled (hours).
+set -uo pipefail
+ROOT={{root}}
+SRC_TAR={{src_tar}}
+PREBUILT={{prebuilt}}
+BIN={{bin}}
+CONF={{conf}}
+LOG={{log_file}}
+CLANG_MAJOR={{clang_major}}
+STATE="$ROOT/.toolkit"
+TOOLS="$ROOT/tools"
+WORK="$ROOT/xrpld-build"
+MARK="$STATE/xrpld-built"
+mkdir -p "$(dirname "$LOG")" "$STATE" "$TOOLS" "$(dirname "$BIN")"
+exec >>"$LOG" 2>&1
+
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [xrpld-build] $*"; }
+
+{{clang_functions}}
+
+install_packages() {
+  [[ -f "$STATE/xrpld-apt.done" ]] && return 0
+  command -v apt-get >/dev/null 2>&1 || { log "apt-get not found — Debian/Ubuntu only"; return 1; }
+  log "installing build tools"
+  DEBIAN_FRONTEND=noninteractive apt-get update -y && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    build-essential git curl ca-certificates cmake ninja-build pkg-config python3 python3-venv python3-pip ccache xz-utils \
+    lsb-release gnupg || return 1
+  # C++23 library for clang (libstdc++): the newest the distribution has
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libstdc++-14-dev 2>/dev/null \
+    || DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libstdc++-13-dev 2>/dev/null || true
+  touch "$STATE/xrpld-apt.done"
+}
+
+build_xrpld() {
+  install_packages || return 1
+  ensure_clang_major "$CLANG_MAJOR" || return 1
+  if [[ ! -x "$TOOLS/venv/bin/conan" ]]; then
+    log "installing Conan"
+    python3 -m venv "$TOOLS/venv" && "$TOOLS/venv/bin/pip" install --quiet 'conan>=2.17' || return 1
+  fi
+  local ram_gb jobs
+  ram_gb=$(awk '/MemTotal/ { printf "%d", $2 / 1048576 }' /proc/meminfo)
+  jobs=$(( ram_gb / 4 )); (( jobs < 1 )) && jobs=1; (( jobs > $(nproc) )) && jobs=$(nproc)
+  rm -rf "$WORK"; mkdir -p "$WORK"
+  tar -xzf "$SRC_TAR" -C "$WORK" --strip-components=1 || return 1
+  cd "$WORK" || return 1
+  export CONAN_HOME="$TOOLS/conan" PATH="$TOOLS/venv/bin:$PATH" CC="clang-$CLANG_MAJOR" CXX="clang++-$CLANG_MAJOR"
+  export CCACHE_DIR="$TOOLS/ccache"
+  log "building $(basename "$(tar -tzf "$SRC_TAR" 2>/dev/null | head -n1)") with $CC, $jobs jobs (hours: the dependencies are compiled too)"
+  ./conan/init.sh || return 1
+  mkdir -p .build && cd .build || return 1
+  conan install .. --output-folder . --build missing --settings build_type=Release || return 1
+  cmake -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release \
+    -Dxrpld=ON -Dtests=OFF .. || return 1
+  cmake --build . --parallel "$jobs" --target xrpld || return 1
+  install -m 755 xrpld "$BIN" || return 1
+  cd "$ROOT" && rm -rf "$WORK"
+}
+
+use_prebuilt() {
+  [[ -n "$PREBUILT" && -f "$PREBUILT" ]] || return 1
+  chmod 755 "$PREBUILT" 2>/dev/null
+  # built on a newer system than this one (glibc) → it will not start; compile locally instead
+  "$PREBUILT" --version >/dev/null 2>&1 || { log "prebuilt $(basename "$PREBUILT") does not run on this host — compiling from source"; return 1; }
+  if ! cmp -s "$PREBUILT" "$BIN"; then
+    install -m 755 "$PREBUILT" "$BIN.new" && mv -f "$BIN.new" "$BIN" || return 1
+  fi
+  echo "prebuilt:$(basename "$PREBUILT")" >"$MARK"
+  return 0
+}
+
+want=""
+[[ -f "$SRC_TAR" ]] && want="$(tar -tzf "$SRC_TAR" 2>/dev/null | head -n1 | cut -d/ -f1)"
+if use_prebuilt; then
+  log "using the prebuilt $(basename "$PREBUILT")"
+elif [[ -z "$want" ]]; then
+  log "no prebuilt xrpld for this CPU and no source archive — sync the client again"
+  exit 1
+elif [[ ! -x "$BIN" || "$(cat "$MARK" 2>/dev/null)" != "$want" ]]; then
+  until build_xrpld; do
+    log "build failed — retrying in 10 min (details above)"
+    sleep 600
+  done
+  echo "$want" >"$MARK"
+  log "built $want → $BIN"
+fi
+exec "$BIN" --conf "$CONF"

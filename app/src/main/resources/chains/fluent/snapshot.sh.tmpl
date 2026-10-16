@@ -1,0 +1,15 @@
+# Fluent snapshot: `fluent init` + `fluent download` (legacy path: reads https://cdn.fluent.xyz/snapshots/<chain id>/latest.txt
+# and streams that archive into the datadir; resumable, .part file + HTTP Range). The tool prints no percentage the toolkit
+# can rely on, so the progress line shows the bytes on disk (added by the agent).
+FLUENT='{{fluent}}'
+DATA='{{datadir}}'
+CHAIN='{{chain}}'
+[ -x "$FLUENT" ] || fail "fluent missing at $FLUENT - sync the Fluent clients first"
+mkdir -p "$DATA"
+state download 0 "fluent download --chain $CHAIN"
+# init is idempotent for an empty datadir; an already initialised one keeps its files
+"$FLUENT" init --datadir "$DATA" --chain "$CHAIN" >>"$LOG" 2>&1 || echo "fluent init returned non-zero (continuing: datadir may already be initialised)" >>"$LOG"
+"$FLUENT" download --datadir "$DATA" --chain "$CHAIN" 2>&1 | tr '\r' '\n' | tee -a "$LOG" >/dev/null
+[ "${PIPESTATUS[0]}" -eq 0 ] || fail "fluent download failed (see $LOG)"
+touch "$MARKER"
+state done 100 "Fluent snapshot restored"

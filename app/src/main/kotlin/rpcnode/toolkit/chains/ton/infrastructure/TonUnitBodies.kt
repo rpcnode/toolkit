@@ -26,6 +26,9 @@ object TonUnitBodies
     /** Run by the agent when the node is removed (after the node is stopped, before its files go): indexer DB + MyTonCtrl. */
     const val REMOVE_HOOK_SCRIPT = HostNodeLaunchSupport.REMOVE_HOOK
 
+    /** Bump when remove-hook.sh.tmpl changes in a way an installed node must get before it is removed (see [TonRemoveHookRefresh]). */
+    const val REMOVE_HOOK_VERSION = 2
+
     /** Go toolchain unpacked next to the indexer (newer ones are fetched by Go itself if go.mod asks for it). */
     const val INDEXER_GO_VERSION = "1.24.4"
 
@@ -92,6 +95,7 @@ object TonUnitBodies
                 "http_port" to ports.http.toString(),
                 "api_port" to ports.indexer.toString(),
                 "redis_port" to ports.indexerRedis.toString(),
+                "pg_port" to ports.indexerPg.toString(),
                 "is_testnet" to if (e == "testnet") "1" else "0",
                 "max_lag" to INDEXER_MAX_LAG_SEC.toString(),
                 "release_tag" to INDEXER_RELEASE_TAG,
@@ -105,6 +109,7 @@ object TonUnitBodies
         return HostSystemdUnitTemplate.render(
             HostSystemdUnitTemplate.load("ton", "remove-hook.sh.tmpl"),
             mapOf(
+                "hook_version" to REMOVE_HOOK_VERSION.toString(),
                 "pw_dir" to shellQuote("$stateDir/ton-indexer"),
                 "idx_dir" to shellQuote(indexerDir),
             ),

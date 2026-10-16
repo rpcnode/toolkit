@@ -1,0 +1,148 @@
+# 0G Chain (Aristotle mainnet / Galileo testnet): 0gchaind (CometBFT consensus layer) + reth (execution layer, Engine API + JWT).
+# Same dual-process shape as base/optimism (EL primary, CL companion). Snapshot never in v1 — no official 0G snapshot exists
+# (docs.0g.ai: mainnet starts from genesis; only a third-party ~90 GB pruned snapshot is mentioned). Ports live in clients.yml.
+label: 0G Chain
+diskRoles:
+  - id: execution
+    label: Execution (reth datadir)
+    media: nvme
+  - id: consensus
+    label: Consensus (0gchaind home)
+    media: ssd
+diskNotes:
+  - "reth --datadir is the execution role leaf; 0gchaind --home is the consensus role leaf (config/, data/)."
+  - "Release package (reth, 0gchaind, geth-genesis.json, kzg-trusted-setup.json, 0gchaind-home config) is extracted under the node_dir; jwt.hex lives in <node_dir>/.toolkit."
+  - "Both processes must run: 0gchaind drives reth through the Engine API (127.0.0.1) with a shared jwt.hex."
+  - "reth is the recommended EL (docs.0g.ai migrate-geth-to-reth); the package also ships geth (not used by the toolkit)."
+  - "Mainnet needs no Ethereum RPC for a non-validator node (restaking flags are validator-only)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: 0G Aristotle Mainnet (chain id 16661)
+    diskHintGiB: 1024
+    fullNodeGiB: 1024
+    cpuCores: 8
+    memoryGiB: 64
+    snapshot: never
+    publicTip:
+      urls:
+        - https://evmrpc.0g.ai
+        - https://0g.drpc.org
+        - https://16661.rpc.thirdweb.com
+  - id: testnet
+    label: 0G Galileo Testnet (chain id 16602)
+    diskHintGiB: 4096
+    fullNodeGiB: 4096
+    cpuCores: 8
+    memoryGiB: 64
+    snapshot: never
+    publicTip:
+      urls:
+        - https://evmrpc-testnet.0g.ai
+
+# Flags of reth / 0gchaind + patched config.toml/app.toml (chains/zerog). format: flags — no conf patch.
+# Literals mirror ZerogUnitBodies / ZerogConfigDefaults and the unit LimitNOFILE.
+clientConfig:
+  program: reth
+  format: flags
+  bindings:
+    - key: datadir
+      source: disk_role_dir
+      role: execution
+      description: reth --datadir (Disks execution role)
+    - key: home
+      source: disk_role_dir
+      role: consensus
+      description: 0gchaind --home (Disks consensus role)
+    - key: http.port
+      source: catalog_port
+      role: http
+      description: reth JSON-RPC port (0.0.0.0)
+    - key: ws.port
+      source: catalog_port
+      role: ws
+      description: reth WebSocket port (0.0.0.0)
+    - key: port
+      source: catalog_port
+      role: p2p
+      description: reth P2P + discovery port (TCP + UDP)
+    - key: authrpc.port
+      source: catalog_port
+      role: engine
+      description: reth Engine API port (127.0.0.1, JWT)
+    - key: metrics
+      source: catalog_port
+      role: metrics
+      description: reth Prometheus port (127.0.0.1)
+    - key: rpc.laddr
+      source: catalog_port
+      role: cl_rpc
+      description: 0gchaind CometBFT RPC port (0.0.0.0, /status)
+    - key: p2p.laddr
+      source: catalog_port
+      role: cl_p2p
+      description: 0gchaind CometBFT P2P port
+    - key: instrumentation.prometheus_listen_addr
+      source: catalog_port
+      role: cl_metrics
+      description: 0gchaind Prometheus port (127.0.0.1)
+    - key: chaincfg.node-api.address
+      source: catalog_port
+      role: node_api
+      description: 0gchaind node API port (127.0.0.1)
+    - key: http.addr
+      source: literal
+      value: "0.0.0.0"
+      description: reth JSON-RPC / WebSocket bind address
+    - key: http.api
+      source: literal
+      value: "eth,net,web3"
+      description: Public EVM namespaces (the 0G docs sample exposes eth,net,admin — not used)
+    - key: authrpc.addr
+      source: literal
+      value: "127.0.0.1"
+      description: Engine API bind (the 0G docs sample binds 0.0.0.0 — not used)
+    - key: engine.persistence-threshold
+      source: literal
+      value: "0"
+      description: Persist every block immediately (required by 0G docs for sub-second blocks)
+    - key: engine.memory-block-buffer-target
+      source: literal
+      value: "0"
+      description: Minimise in-memory block buffering (0G docs)
+    - key: rpc.unsafe
+      source: literal
+      value: "false"
+      description: CometBFT unsafe RPC routes stay off
+    - key: rpc.pprof_laddr
+      source: literal
+      value: ""
+      description: pprof disabled (package default is 0.0.0.0:6060)
+    - key: rpc.max_open_connections
+      source: literal
+      value: "2000"
+      description: CometBFT RPC connection cap (package default 900)
+    - key: p2p.max_num_inbound_peers
+      source: literal
+      value: "40"
+      description: CL inbound peer slots (package default)
+    - key: p2p.max_num_outbound_peers
+      source: literal
+      value: "10"
+      description: CL outbound peer slots (package default)
+    - key: chaincfg.chain-spec
+      source: literal
+      value: "mainnet"
+      description: Chain spec — mainnet on Aristotle, testnet on Galileo (ZerogProfile per env)
+    - key: chaincfg.block-store-service.enabled
+      source: literal
+      value: "true"
+      description: Block store service (docs flag)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for reth and 0gchaind
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

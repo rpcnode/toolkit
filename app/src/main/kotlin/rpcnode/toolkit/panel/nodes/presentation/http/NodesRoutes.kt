@@ -109,6 +109,9 @@ data class NodeItemResponse(
     @SerialName("needs_snapshot") val needsSnapshot: Boolean = false,
     @SerialName("disk_layout") val diskLayout: JsonElement? = null,
     @SerialName("install_options") val installOptions: JsonElement? = null,
+    /** First time the install began / the node first caught up; "" until then (the node page shows a dash). */
+    @SerialName("install_started_at") val installStartedAt: String = "",
+    @SerialName("synced_at") val syncedAt: String = "",
     @SerialName("created_at") val createdAt: String = "",
     @SerialName("updated_at") val updatedAt: String = "",
 )
@@ -1801,6 +1804,8 @@ private fun Node.toResponse(facts: NetworkFactsRepository) = NodeItemResponse(
     needsSnapshot = nodeNeedsSnapshot(this, facts),
     diskLayout = parseDiskLayoutJson(diskLayoutJson),
     installOptions = parseDiskLayoutJson(installOptionsJson),
+    installStartedAt = installStartedAt,
+    syncedAt = syncedAt,
     createdAt = createdAt,
     updatedAt = updatedAt,
 )

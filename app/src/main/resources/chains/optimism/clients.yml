@@ -1,0 +1,53 @@
+# OP Stack on OP Mainnet / OP Sepolia: op-reth (execution) + op-node (consensus) from the ethereum-optimism/optimism monorepo,
+# which publishes no binaries (only container images). The panel compiles the pinned tags below once per CPU architecture on
+# a host agent (`build:`, Dockerfiles beside this file) and syncs `op-reth-<arch>` / `op-node-<arch>` to the node; a host with
+# no prebuilt binary compiles them itself (run.sh.tmpl). op-reth and op-node must match each other, so the tags are pinned
+# here and in OptimismUnitBodies (a test keeps them equal) and bumped together after verifying the pair. op-geth is
+# end-of-support (2026-05-31).
+programs:
+  - env: mainnet
+    id: op-reth
+    source: { type: pinned, version: "2.6.0", tag: "op-reth/v2.6.0", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-reth.Dockerfile, outputs: [op-reth], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/optimism.log }
+    artifacts: []
+    ports:
+      - { role: http, port: 8561, label: "op-reth JSON-RPC", config: required }
+      - { role: ws, port: 8562, label: "op-reth WebSocket", config: required }
+      - { role: engine, port: 8563, label: "op-reth Engine API (127.0.0.1)", config: required }
+      - { role: metrics, port: 9261, label: "op-reth metrics", config: required }
+      - { role: p2p, port: 30361, label: "op-reth P2P", config: required, protocol: both }
+      - { role: discv5, port: 9461, label: "op-reth discv5 (UDP)", config: required, protocol: udp }
+  - env: mainnet
+    id: op-node
+    source: { type: pinned, version: "1.19.9", tag: "op-node/v1.19.9", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-node.Dockerfile, outputs: [op-node], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/optimism.log }
+    artifacts: []
+    ports:
+      - { role: cl_rpc, port: 9561, label: "op-node RPC", config: required }
+      - { role: cl_metrics, port: 7361, label: "op-node metrics", config: required }
+      - { role: cl_p2p, port: 9361, label: "op-node P2P", config: required, protocol: both }
+  - env: sepolia
+    id: op-reth
+    source: { type: pinned, version: "2.6.0", tag: "op-reth/v2.6.0", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-reth.Dockerfile, outputs: [op-reth], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/optimism.log }
+    artifacts: []
+    ports:
+      - { role: http, port: 8564, label: "op-reth JSON-RPC", config: required }
+      - { role: ws, port: 8565, label: "op-reth WebSocket", config: required }
+      - { role: engine, port: 8566, label: "op-reth Engine API (127.0.0.1)", config: required }
+      - { role: metrics, port: 9264, label: "op-reth metrics", config: required }
+      - { role: p2p, port: 30364, label: "op-reth P2P", config: required, protocol: both }
+      - { role: discv5, port: 9464, label: "op-reth discv5 (UDP)", config: required, protocol: udp }
+  - env: sepolia
+    id: op-node
+    source: { type: pinned, version: "1.19.9", tag: "op-node/v1.19.9", label: "ethereum-optimism/optimism" }
+    build: { dockerfile: op-node.Dockerfile, outputs: [op-node], platforms: [linux/amd64, linux/arm64] }
+    requirements: { logFile: logs/optimism.log }
+    artifacts: []
+    ports:
+      - { role: cl_rpc, port: 9564, label: "op-node RPC", config: required }
+      - { role: cl_metrics, port: 7364, label: "op-node metrics", config: required }
+      - { role: cl_p2p, port: 9364, label: "op-node P2P", config: required, protocol: both }

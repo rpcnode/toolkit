@@ -1,0 +1,15 @@
+[Unit]
+Description={{description}}
+After=sysinit.target local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Restart=no
+LimitNOFILE={{nofile}}
+{{service_extra}}ExecStart={{exec_start}}
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+
+[Install]
+WantedBy=multi-user.target

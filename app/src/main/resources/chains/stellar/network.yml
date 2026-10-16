@@ -1,0 +1,139 @@
+# Stellar (stellar-rpc + embedded captive stellar-core). Directory name is the network id.
+# Ports live in clients.yml beside this file. No snapshot archive exists: the node bootstraps itself —
+# captive core catches up from the SDF history archives, and (mainnet, `history` option week/month) stellar-rpc
+# backfills its retention window from the public AWS ledger data lake (see intake.md section 7).
+label: Stellar
+# Shared libraries the stellar-core .deb (noble build, Ubuntu 24.04) links against; apt-installed by the host-deps step.
+# No PostgreSQL server is needed (captive core runs on an in-memory SQLite; libpq5 is only a link-time dependency).
+hostPackages:
+  - libc++1-20
+  - libc++abi1-20
+  - libunwind-20
+  - libpq5
+  - libsqlite3-0
+diskRoles:
+  - id: blockchain
+    label: RPC DB + captive-core buckets
+    media: ssd
+diskNotes:
+  - "stellar_rpc.sqlite and captive-core/ (bucket files) live under the blockchain role; binaries, generated config, scripts and logs stay under the node_dir."
+  - "Official sizing (7-day window): 350 GB, +40 GB per extra retention day, local SSD with >= 3K IOPS (network disks hurt performance)."
+  - "History option week/month backfills the window from the public AWS data lake on the first start (mainnet only) — about 24 GB download for 7 days; the RPC is not healthy until the backfill is done."
+  - "Forward-only (never prune) keeps everything from the first start, growing ~40 GB per day on mainnet; it has no snapshot or backfill."
+  - "Only Ubuntu 24.04 (noble) x86_64 is supported: SDF ships amd64 .debs only and the stellar-core build needs glibc 2.38 + libc++ 20."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Stellar Mainnet (Pubnet)
+    diskHintGiB: 512
+    fullNodeGiB: 512
+    archiveGiB: 1536
+    cpuCores: 8
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://mainnet.sorobanrpc.com
+        - https://rpc.lightsail.network
+        - https://soroban-rpc.mainnet.stellar.gateway.fm
+        - https://rpc.ankr.com/stellar_soroban
+  - id: testnet
+    label: Stellar Testnet
+    diskHintGiB: 128
+    fullNodeGiB: 128
+    cpuCores: 4
+    memoryGiB: 8
+    snapshot: never
+    publicTip:
+      urls:
+        - https://soroban-testnet.stellar.org
+        - https://soroban-rpc.testnet.stellar.gateway.fm
+        - https://rpc.ankr.com/stellar_testnet_soroban
+
+# Generated on Start (chains/stellar): {node_dir}/stellar-rpc.toml + captive-core.cfg. format: flags — no conf patch.
+# Every literal below is written verbatim into stellar-rpc.toml (StellarUnitBodies) / the unit; keep them identical.
+clientConfig:
+  program: stellar-rpc
+  format: flags
+  bindings:
+    - key: blockchain
+      source: disk_role_dir
+      role: blockchain
+      description: DB_PATH (stellar_rpc.sqlite) and CAPTIVE_CORE_STORAGE_PATH (captive-core/) — Disks blockchain role
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: ENDPOINT port — public JSON-RPC (bound on 0.0.0.0, no TLS / auth / rate limit — put a proxy in front)
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: captive-core PEER_PORT (stellar overlay, inbound peers; patched into captive-core.cfg)
+    - key: core-query-port
+      source: catalog_port
+      role: core_query
+      description: STELLAR_CAPTIVE_CORE_HTTP_QUERY_PORT — local captive-core query server (getLedgerEntries); keep firewalled
+    - key: admin-port
+      source: catalog_port
+      role: admin
+      description: ADMIN_ENDPOINT port — Prometheus /metrics + pprof on 127.0.0.1 only (no TLS)
+    - key: history
+      source: install_option
+      option: history
+      default: "week"
+      description: Retention window — week (120960 ledgers, backfilled on mainnet) / month (518400, backfilled) / forward (never prune, from first start)
+    - key: endpoint-host
+      source: literal
+      value: "0.0.0.0"
+      description: ENDPOINT bind address of the JSON-RPC server
+    - key: admin-host
+      source: literal
+      value: "127.0.0.1"
+      description: ADMIN_ENDPOINT bind address — must stay loopback (no TLS, exposes pprof)
+    - key: captive-core-http-port
+      source: literal
+      value: "0"
+      description: STELLAR_CAPTIVE_CORE_HTTP_PORT=0 disables stellar-core's command HTTP server (/tx, /stop, /manualclose, ...)
+    - key: preflight-worker-count
+      source: literal
+      value: "8"
+      description: PREFLIGHT_WORKER_COUNT — parallel simulateTransaction workers (default = CPU count; CPU-bound)
+    - key: preflight-worker-queue-size
+      source: literal
+      value: "32"
+      description: PREFLIGHT_WORKER_QUEUE_SIZE — queued simulateTransaction requests before rejecting
+    - key: preflight-enable-debug
+      source: literal
+      value: "false"
+      description: PREFLIGHT_ENABLE_DEBUG — stock default is true; the RPC docs say it must not be on in production
+    - key: request-backlog-global-queue-limit
+      source: literal
+      value: "10000"
+      description: REQUEST_BACKLOG_GLOBAL_QUEUE_LIMIT — outstanding requests across all methods (stock 5000)
+    - key: max-events-limit
+      source: literal
+      value: "10000"
+      description: MAX_EVENTS_LIMIT — max events per getEvents response (stock)
+    - key: max-transactions-limit
+      source: literal
+      value: "200"
+      description: MAX_TRANSACTIONS_LIMIT — max transactions per getTransactions response (stock)
+    - key: max-ledgers-limit
+      source: literal
+      value: "200"
+      description: MAX_LEDGERS_LIMIT — max ledgers per getLedgers response (stock)
+    - key: max-request-execution-duration
+      source: literal
+      value: "25s"
+      description: MAX_REQUEST_EXECUTION_DURATION — hard per-request time limit (504 afterwards; stock)
+    - key: max-healthy-ledger-latency
+      source: literal
+      value: "30s"
+      description: MAX_HEALTHY_LEDGER_LATENCY — getHealth turns into an error when the last ledger is older than this (stock)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for stellar-rpc and its captive stellar-core
+
+# Node page checks (host agent).
+diagnostics:
+  - id: path_mtu

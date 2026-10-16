@@ -30,6 +30,7 @@ class ProbeClientProgramUseCase(
         val resolved = resolveClientRelease(
             spec, githubReleaseClient, clientReleaseResolvers,
             installedVersionFor(spec, existing?.currentVersion.orEmpty(), existing?.currentTag.orEmpty()),
+            existing?.currentTag.orEmpty(),
         )
         val now = Instant.now().toString()
         val key = ClientProgramKey(spec.network, spec.env, spec.programId)

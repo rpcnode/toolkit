@@ -1,0 +1,75 @@
+# Abstract (ZK Stack rollup, Ethereum blobs). Same recipe as zksync (chains/zkstack shared templates): zksync-era external node
+# image pinned to the version Abstract-Foundation/abstract-node (docker/.env.mainnet EN_VERSION) runs. Consensus gossip is disabled upstream.
+label: Abstract
+dataRoot: abstract
+hostPackages:
+  - postgresql
+  - libssl3
+diskRoles:
+  - id: rocksdb
+    label: State cache + Merkle tree (RocksDB)
+    media: nvme
+  - id: postgres
+    label: PostgreSQL tablespace
+    media: nvme
+diskNotes:
+  - "Docs: 32 GB RAM, 300 GB mainnet storage (growth ~1 TB/month without pruning); pruning is ON in Abstract's own compose (EN_PRUNING_ENABLED default true)."
+  - "First start restores the Abstract GCS snapshot (raas-abstract-mainnet-external-node-snapshots) by itself — the API is down until Postgres recovery is done."
+  - "EN_STATE_KEEPER_L2_BLOCK_COMMIT_DEADLINE=200 ms and the eth_sendRawTransactionSync timeouts are Abstract's own settings (200 ms blocks)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Abstract Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 512
+    archiveGiB: 4096
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: required
+    snapshotBootstrap: via_node
+    publicTip:
+      urls:
+        - https://api.mainnet.abs.xyz
+    snapshotTypes:
+      - id: recovery
+        kind: full
+        label: Snapshot recovery · pruned
+        hint: Official GCS snapshot (raas-abstract-mainnet-external-node-snapshots). Default.
+        diskGiB: 512
+        default: true
+    l1Parent:
+      rpc: https://ethereum-rpc.publicnode.com
+      beacon: ""
+      pickHelp: |
+        Abstract settles on Ethereum mainnet. Click Public or pick an active Ethereum node from this panel.
+  - id: testnet
+    label: Abstract Testnet (Sepolia)
+    diskHintGiB: 128
+    fullNodeGiB: 64
+    archiveGiB: 512
+    cpuCores: 4
+    memoryGiB: 32
+    snapshot: required
+    snapshotBootstrap: via_node
+    publicTip:
+      urls:
+        - https://api.testnet.abs.xyz
+    snapshotTypes:
+      - id: recovery
+        kind: full
+        label: Snapshot recovery · pruned
+        hint: Official GCS snapshot (abstract-testnet-external-node-snapshots). Default.
+        diskGiB: 64
+        default: true
+    l1Parent:
+      rpc: https://ethereum-sepolia-rpc.publicnode.com
+      beacon: ""
+      pickHelp: |
+        Abstract Testnet settles on Ethereum Sepolia.
+# clientConfig: identical bindings to chains/zksync/network.yml (copy them verbatim; the shared ZkStackUnitBodies reads them).
+clientConfig:
+  program: zksync_external_node
+  format: flags   # en.env is generated on every Start (chains/zkstack) — no conf patch; the keys below are the EN_* variables
+  bindings: []   # = zksync bindings (snapshot, rocksdb, postgres, http/ws/health/metrics ports, pruning, capacity literals, l1-rpc)
+diagnostics:
+  - id: path_mtu

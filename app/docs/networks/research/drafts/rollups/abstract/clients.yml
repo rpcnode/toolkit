@@ -1,0 +1,31 @@
+# Abstract: matterlabs/external-node image at the tag Abstract-Foundation/abstract-node docker/.env.mainnet (EN_VERSION) pins.
+# Verified 2026-10-13: EN_VERSION=v31.1.0 for mainnet and testnet; Docker Hub tag v31.1.0 exists (amd64+arm64).
+programs:
+  - env: mainnet
+    id: zksync_external_node
+    source: { type: pinned, version: "31.1.0", tag: "v31.1.0", label: "Abstract-Foundation/abstract-node (.env.mainnet EN_VERSION)" }
+    artifacts:
+      - name: "zksync-external-node-x86_64-linux.tar.gz"
+        nameAarch64: "zksync-external-node-aarch64-linux.tar.gz"
+        urlTemplate: "docker://matterlabs/external-node:{tag}"
+        urlTemplateAarch64: "docker://matterlabs/external-node:{tag}"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 41000, label: "HTTP JSON-RPC", config: required }
+      - { role: ws, port: 41001, label: "WebSocket JSON-RPC", config: required }
+      - { role: metrics, port: 41004, label: "Prometheus (127.0.0.1)", config: required }
+      - { role: health, port: 41005, label: "Healthcheck (127.0.0.1)", config: required }
+  - env: testnet
+    id: zksync_external_node
+    source: { type: pinned, version: "31.1.0", tag: "v31.1.0", label: "Abstract-Foundation/abstract-node (.env.testnet EN_VERSION)" }
+    artifacts:
+      - name: "zksync-external-node-x86_64-linux.tar.gz"
+        nameAarch64: "zksync-external-node-aarch64-linux.tar.gz"
+        urlTemplate: "docker://matterlabs/external-node:{tag}"
+        urlTemplateAarch64: "docker://matterlabs/external-node:{tag}"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 41010, label: "HTTP JSON-RPC", config: required }
+      - { role: ws, port: 41011, label: "WebSocket JSON-RPC", config: required }
+      - { role: metrics, port: 41014, label: "Prometheus (127.0.0.1)", config: required }
+      - { role: health, port: 41015, label: "Healthcheck (127.0.0.1)", config: required }

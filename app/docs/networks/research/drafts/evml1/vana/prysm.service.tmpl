@@ -1,0 +1,39 @@
+# Prysm beacon node (Vana build on mainnet). Flags = the official docker-compose `beacon` service.
+# {{checkpoint_url}} = https://rpc.vana.org (mainnet) | https://archive.moksha.vana.org (moksha) — the beacon REST is served on the same host (INFERRED: compose reuses it as TRUSTED_BEACON_NODE_URL).
+# {{bootstrap_flags}} = one ` --bootstrap-node=<enr>` per CL_BOOTNODE_n of .env.<env>.example (20 on mainnet, 2 on moksha).
+# --clear-deposit-contract is kept from the compose file: it makes the retired-contract migration a no-op on upgrade (see the comment block there).
+[Unit]
+Description={{description}}
+After=network-online.target {{geth_unit}}
+Wants=network-online.target {{geth_unit}}
+
+[Service]
+Type=simple
+ExecStart={{bin}} \
+  --accept-terms-of-use \
+  --chain-id={{chain_id}} \
+  --datadir={{datadir}} \
+  --genesis-state={{genesis_ssz}} \
+  --chain-config-file={{config_yml}} \
+  --contract-deployment-block=0 \
+  --clear-deposit-contract \
+  --execution-endpoint=http://127.0.0.1:{{engine_port}} \
+  --jwt-secret={{jwt_path}} \
+  --checkpoint-sync-url={{checkpoint_url}} \
+  --genesis-beacon-api-url={{checkpoint_url}} \
+  --min-sync-peers=1 \
+  --block-batch-limit=256 --block-batch-limit-burst-factor=8 \
+  --blob-batch-limit=256 --blob-batch-limit-burst-factor=8 \
+  --rpc-host=127.0.0.1 --rpc-port={{consensus_rpc}} \
+  --grpc-gateway-host=127.0.0.1 --grpc-gateway-port={{beacon_port}} \
+  --p2p-tcp-port={{consensus_p2p}} --p2p-udp-port={{consensus_udp}}{{p2p_host_flag}}{{bootstrap_flags}}
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=300
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE=1048576
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

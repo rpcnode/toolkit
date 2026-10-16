@@ -1,0 +1,28 @@
+[Unit]
+Description={{description}}
+After=network-online.target postgresql.service {{node_unit}} {{prepare_unit}}
+Wants={{prepare_unit}}
+PartOf={{node_unit}}
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+ExecStart={{exec_start}}
+Restart=on-failure
+RestartSec=30
+# a clean stop lets db-sync finish its block batch and write the ledger state
+TimeoutStopSec={{stop_timeout}}
+KillMode=mixed
+NoNewPrivileges=yes
+PrivateTmp=yes
+# db-sync serves Prometheus on ALL interfaces (no bind option in the product) and needs only PostgreSQL on 127.0.0.1 and
+# the node's UNIX socket, so the unit is confined to loopback: the metrics port is not reachable from outside.
+IPAddressDeny=any
+IPAddressAllow=localhost
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE={{nofile}}
+
+[Install]
+WantedBy=multi-user.target

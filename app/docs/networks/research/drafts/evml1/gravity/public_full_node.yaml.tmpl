@@ -1,0 +1,60 @@
+# Rendered on Start from cluster/templates/public_full_node.yaml.tpl (Galxe/gravity-sdk, ${VAR} -> {{var}}). Identity files come from `gravity_cli genesis generate-key --output-file identity.yaml`.
+# {{pfn_seeds_block}} = the two public mainnet seeds (mainnet-rpc-p2p-{1,3}.gravity.xyz:6180, peer ids + noise keys VERIFIED in docs run-a-mainnet-pfn) or the testnet seed (testnet-rpc-p2p-1.gravity.xyz:6195).
+base:
+  role: "full_node"
+  data_dir: "{{storage_dir}}"
+  waypoint:
+    from_file: "{{config_dir}}/waypoint.txt"
+
+consensus:
+  safety_rules:
+    backend:
+      type: "on_disk_storage"
+      path: {{storage_dir}}/secure_storage.json
+    initial_safety_rules_config:
+      from_file:
+        waypoint:
+          from_file: {{config_dir}}/waypoint.txt
+        identity_blob_path: {{config_dir}}/identity.yaml
+  enable_pipeline: true
+  max_sending_block_txns_after_filtering: 5000
+  max_sending_block_txns: 5000
+  max_receiving_block_txns: 5000
+  max_sending_block_bytes: 31457280
+  max_receiving_block_bytes: 31457280
+  quorum_store:
+    receiver_max_total_txns: 7000
+    sender_max_total_txns: 7000
+    receiver_max_batch_bytes: 1048736
+    sender_max_batch_bytes: 1048736
+    sender_max_total_bytes: 1073741824
+    receiver_max_total_bytes: 1073741824
+    memory_quota: 1073741824
+    db_quota: 1073741824
+    back_pressure:
+      dynamic_max_txn_per_s: 30000
+      backlog_txn_limit_count: 50000
+      backlog_per_validator_batch_limit_count: 2000
+
+full_node_networks:
+  - network_id: public
+    listen_address: "/ip4/0.0.0.0/tcp/{{public_port}}"
+    identity:
+      type: "from_file"
+      path: {{config_dir}}/identity.yaml
+{{pfn_seeds_block}}
+
+storage:
+  dir: "{{storage_dir}}"
+
+log_file_path: "{{log_dir}}/consensus_log/pfn.log"
+
+inspection_service:
+  port: {{inspection_port}}
+  address: 127.0.0.1
+
+mempool:
+  capacity_per_user: 20000
+
+logger:
+  level: INFO

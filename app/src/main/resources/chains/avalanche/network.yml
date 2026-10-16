@@ -1,0 +1,98 @@
+# Avalanche (P/X/C chains via avalanchego). Snapshot never — the C-Chain bootstraps with state sync (full) or from genesis (archive).
+# Directory name is the network id. Ports live in clients.yml beside this file.
+label: Avalanche
+diskRoles:
+  - id: blockchain
+    label: Chain DB (P / X / C)
+    media: nvme
+diskNotes:
+  - "db-dir is the blockchain role; staking keys, chain configs and logs live under the node_dir."
+  - "Full (default): pruned C-Chain, state sync — hours, not days. Archive: pruning off, replays from genesis — weeks, multi-TiB."
+  - "Staking keys (node identity) are generated on the first start under the node_dir and are never touched by a restart."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Avalanche Mainnet
+    diskHintGiB: 1536
+    fullNodeGiB: 1536
+    archiveGiB: 8192
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: never
+    publicTip:
+      urls:
+        - https://api.avax.network/ext/bc/C/rpc
+        - https://avalanche-c-chain-rpc.publicnode.com
+  - id: fuji
+    label: Avalanche Fuji
+    diskHintGiB: 512
+    fullNodeGiB: 512
+    archiveGiB: 1536
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://api.avax-test.network/ext/bc/C/rpc
+        - https://avalanche-fuji-c-chain-rpc.publicnode.com
+
+# Flags of avalanchego + the C-Chain config.json written on Start (chains/avalanche). format: flags — no conf patch.
+# Capacity literals mirror AvalancheUnitBodies and the unit LimitNOFILE.
+clientConfig:
+  program: avalanchego
+  format: flags
+  bindings:
+    - key: node
+      source: install_option
+      option: node
+      default: "full"
+      description: C-Chain mode — full (pruned, state sync) or archive (pruning off)
+    - key: db-dir
+      source: disk_role_dir
+      role: blockchain
+      relative: db
+      description: avalanchego --db-dir (Disks blockchain role)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: HTTP API / C-Chain RPC port
+    - key: staking-port
+      source: catalog_port
+      role: p2p
+      description: Staking P2P port (TCP)
+    - key: http-host
+      source: literal
+      value: "0.0.0.0"
+      description: HTTP API bind address
+    - key: http-allowed-hosts
+      source: literal
+      value: "*"
+      description: Accepted Host headers (needed for RPC clients that are not localhost)
+    - key: api-admin-enabled
+      source: literal
+      value: "false"
+      description: Admin API (node control) stays off
+    - key: index-enabled
+      source: literal
+      value: "false"
+      description: Indexer API (tx/vertex index) off
+    - key: eth-apis
+      source: literal
+      value: "eth,eth-filter,net,web3,internal-eth,internal-blockchain,internal-transaction,internal-tx-pool,debug"
+      description: C-Chain APIs enabled in config.json
+    - key: rpc-gas-cap
+      source: literal
+      value: "50000000"
+      description: C-Chain eth_call / estimateGas gas cap (config.json)
+    - key: rpc-tx-fee-cap
+      source: literal
+      value: "100"
+      description: C-Chain tx fee cap in AVAX for sendTransaction (config.json)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for avalanchego
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

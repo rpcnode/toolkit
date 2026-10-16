@@ -1,0 +1,119 @@
+# Stacks follower node (stacks-node). Mainnet is only practical from the Hiro snapshot (~275 GB .tar.zst, streamed into the node dir);
+# it follows Bitcoin through a Bitcoin Core node you provide (burnchain_* options). Testnet (krypton) uses Hiro's hosted regtest.
+label: Stacks
+hostPackages:
+  - unzip
+  - zstd
+diskRoles:
+  - id: state
+    label: Chainstate (working_dir)
+    media: nvme
+diskNotes:
+  - "working_dir is the state role leaf; the node keeps its data in <working_dir>/mainnet (testnet: <working_dir>/krypton) - the same top directory the Hiro snapshot extracts to."
+  - "The snapshot restore is destructive: it clears the node dir (client files stay) and must run before the first Start, with the node stopped."
+  - "Mainnet needs a Bitcoin Core node reachable on its P2P (8333) AND RPC ports. stacks-node cannot use bitcoind's .cookie, so by default it uses the Bitcoin node's login-free RPC proxy (rpc_public, 8432); a follower sends no credentials (they are only relevant for a miner). Point burnchain_rpc_port at 8332 and set burnchain_user/burnchain_password only for a bitcoind that has its own rpcauth user. Start refuses to run when it is not reachable. A from-genesis sync needs a non-pruned Bitcoin; after the Hiro snapshot a pruned Bitcoin works."
+  - "The Bitcoin password is stored in the panel with the node's install options (like other credentials) and written 0600 into stacks.toml; it never goes into argv or the unit."
+  - "Hardware (4 cores / 16 GB, extracted size under ~700 GB) is an estimate; the archive alone is ~275 GB."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Stacks Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 1024
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: required
+    tipLagBlocks: 10
+    publicTip:
+      urls:
+        - https://api.hiro.so/v2/info
+        - https://api.mainnet.hiro.so/v2/info
+    snapshotTypes:
+      - id: full
+        kind: full
+        label: Hiro chainstate archive
+        hint: archive.hiro.so mainnet-stacks-blockchain-latest.tar.zst (~275 GB), zstd stream unpack into the node dir
+        diskGiB: 1024
+        default: true
+  - id: testnet
+    label: Stacks Testnet (krypton)
+    diskHintGiB: 64
+    fullNodeGiB: 64
+    cpuCores: 2
+    memoryGiB: 8
+    snapshot: optional
+    tipLagBlocks: 10
+    publicTip:
+      urls:
+        - https://api.testnet.hiro.so/v2/info
+    snapshotTypes:
+      - id: full
+        kind: full
+        label: Hiro chainstate archive
+        hint: archive.hiro.so testnet-stacks-blockchain-latest.tar.zst (~6 GB)
+        diskGiB: 64
+        default: true
+
+# stacks.toml keys Start writes (StacksConfigToml); everything else is the tag's sample follower config. format: flags.
+# Literals equal StacksSettings (StacksCatalogTest). The burnchain rows are mainnet only.
+clientConfig:
+  program: stacks-node
+  format: flags
+  bindings:
+    - key: node.working_dir
+      source: disk_role_dir
+      role: state
+      description: "[node] working_dir (Disks state role)"
+    - key: node.rpc_bind
+      source: catalog_port
+      role: http
+      description: "[node] rpc_bind = 0.0.0.0:<port>; also /v2/info"
+    - key: node.p2p_bind
+      source: catalog_port
+      role: p2p
+      description: "[node] p2p_bind = 0.0.0.0:<port>"
+    - key: node.prometheus_bind
+      source: catalog_port
+      role: metrics
+      description: "[node] prometheus_bind = 127.0.0.1:<port> (loopback)"
+    - key: burnchain.peer_host
+      source: install_option
+      option: burnchain_host
+      default: "127.0.0.1"
+      onlyEnv: [mainnet]
+      description: Bitcoin node host (same host by default; a Bitcoin node of this panel on another host works too)
+    - key: burnchain.rpc_port
+      source: install_option
+      option: burnchain_rpc_port
+      default: "8432"
+      onlyEnv: [mainnet]
+      description: Bitcoin RPC port — default 8432 is the login-free RPC proxy of this toolkit's Bitcoin node (no credentials needed)
+    - key: burnchain.peer_port
+      source: install_option
+      option: burnchain_p2p_port
+      default: "8333"
+      onlyEnv: [mainnet]
+      description: Bitcoin P2P port
+    - key: burnchain.username
+      source: install_option
+      option: burnchain_user
+      default: ""
+      onlyEnv: [mainnet]
+      description: Bitcoin rpcuser — leave empty for the login-free proxy (default); only for a bitcoind with its own rpcauth user
+    - key: burnchain.password
+      source: install_option
+      option: burnchain_password
+      default: ""
+      onlyEnv: [mainnet]
+      description: Bitcoin rpcpassword — leave empty for the login-free proxy; written 0600 into stacks.toml when set
+    - key: connection_options.max_http_clients
+      source: literal
+      value: "3000"
+      description: "[connection_options] max HTTP clients (vendor default 1000; judgement value for a public node)"
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for stacks-node
+
+diagnostics:
+  - id: path_mtu

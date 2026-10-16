@@ -1,0 +1,150 @@
+#!/bin/bash
+# RpcNode Circle Arc node: snapshot bootstrap (once), consensus key (once), then the execution layer and the consensus
+# layer as two supervised processes. The execution layer must be up first: it creates the IPC sockets the CL uses.
+set -uo pipefail
+ENV_ID={{env}}
+CHAIN={{chain}}
+EXEC={{exec_dir}}
+CONS={{cons_dir}}
+BIN={{bin_dir}}
+STATE={{state_dir}}
+LOG={{log_file}}
+RUN={{run_dir}}
+MODE={{mode}}
+HTTP_ADDR={{http_addr}}
+HTTP_PORT={{http_port}}
+HTTP_API={{http_api}}
+WS_PORT={{ws_port}}
+EL_METRICS={{el_metrics}}
+CL_RPC={{cl_rpc}}
+CL_METRICS={{cl_metrics}}
+MAX_CONN={{max_connections}}
+MAX_SUBS={{max_subscriptions}}
+BACKPRESSURE={{backpressure}}
+FORWARDER={{forwarder}}
+RELAYS=({{relays}})
+mkdir -p "$(dirname "$LOG")" "$STATE" "$EXEC" "$CONS"
+exec >>"$LOG" 2>&1
+
+# Operator flag overrides (Node config → Flag overrides): <node_dir>/.toolkit/extra_flags, one key=value per line, already
+# validated by the panel host. A flag the array already has is replaced (clap rejects duplicates), a new one is appended.
+EXTRA_FLAGS_FILE="$(dirname "$LOG")/../.toolkit/extra_flags"
+apply_extra_flags() {
+  local -n _arr=$1
+  [[ -s "$EXTRA_FLAGS_FILE" ]] || return 0
+  local _line _key _val _new _x _i
+  while IFS= read -r _line || [[ -n "$_line" ]]; do
+    [[ -z "$_line" || "$_line" == \#* ]] && continue
+    _key="${_line%%=*}"; _val=""
+    [[ "$_line" == *=* ]] && _val="${_line#*=}"
+    [[ "$_key" =~ ^[a-z][a-z0-9._-]*$ ]] || continue
+    _new=()
+    for ((_i = 0; _i < ${#_arr[@]}; _i++)); do
+      _x="${_arr[_i]}"
+      if [[ "$_x" == "--$_key" ]]; then
+        if ((_i + 1 < ${#_arr[@]})) && [[ "${_arr[_i + 1]}" != -* ]]; then ((_i++)); fi
+        continue
+      fi
+      [[ "$_x" == "--$_key="* ]] && continue
+      _new+=("$_x")
+    done
+    _arr=("${_new[@]}")
+    if [[ -n "$_val" ]]; then _arr+=("--$_key=$_val"); else _arr+=("--$_key"); fi
+  done <"$EXTRA_FLAGS_FILE"
+}
+# arc-snapshots runs arc-node-execution itself (storage v2 manifests); the bundled binaries are not on PATH
+export PATH="$BIN:$PATH"
+export ARC_EXECUTION_BINARY="$BIN/arc-node-execution"
+
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [arc] $*"; }
+EL_PID=""; CL_PID=""
+
+stop_all() {
+  log "stopping"
+  [[ -n "$CL_PID" ]] && kill -TERM "$CL_PID" 2>/dev/null
+  for _ in $(seq 1 60); do kill -0 "$CL_PID" 2>/dev/null || break; sleep 1; done
+  [[ -n "$EL_PID" ]] && kill -TERM "$EL_PID" 2>/dev/null
+  for _ in $(seq 1 120); do kill -0 "$EL_PID" 2>/dev/null || break; sleep 1; done
+  kill -KILL "$CL_PID" "$EL_PID" 2>/dev/null || true
+}
+trap 'stop_all; exit 0' TERM INT
+
+# 1. snapshot: a node cannot sync from genesis. Re-runs of the tool are safe (it leaves a layer that already holds the snapshot alone).
+SNAP_MARK="$STATE/arc-snapshot-$MODE.done"
+if [[ ! -f "$SNAP_MARK" ]]; then
+  snap_args=(download --chain="$CHAIN" --execution-path "$EXEC" --consensus-path "$CONS")
+  # full = the Arc tutorial path (the tool's default preset); archive = the archive preset
+  [[ "$MODE" == archive ]] && snap_args+=(--el-profile archive)
+  until "$BIN/arc-snapshots" "${snap_args[@]}"; do
+    log "snapshot download failed — retrying in 60 s"
+    sleep 60
+  done
+  touch "$SNAP_MARK"
+  log "snapshot restored ($MODE)"
+fi
+
+# 2. consensus-layer key, once (after the snapshot: the consensus dir is restored there)
+if [[ ! -f "$STATE/arc-cl-init.done" ]]; then
+  "$BIN/arc-node-consensus" init --home "$CONS" || { log "consensus init failed"; exit 1; }
+  touch "$STATE/arc-cl-init.done"
+fi
+
+el_args() {
+  local a=(node --chain "$CHAIN" --datadir "$EXEC" --disable-discovery
+    --ipcpath "$RUN/reth.ipc" --auth-ipc --auth-ipc.path "$RUN/auth.ipc"
+    --http --http.addr "$HTTP_ADDR" --http.port "$HTTP_PORT" --http.api "$HTTP_API"
+    --ws --ws.addr "$HTTP_ADDR" --ws.port "$WS_PORT" --ws.api "$HTTP_API"
+    --metrics "0.0.0.0:$EL_METRICS" --enable-arc-rpc --rpc.forwarder "$FORWARDER"
+    --rpc.max-connections "$MAX_CONN" --rpc.max-subscriptions-per-connection "$MAX_SUBS")
+  [[ "$MODE" == archive ]] || a+=(--full)
+  apply_extra_flags a
+  printf '%s\0' "${a[@]}"
+}
+
+cl_args() {
+  local a=(start --home "$CONS" --eth-socket "$RUN/reth.ipc" --execution-socket "$RUN/auth.ipc"
+    --rpc.addr "0.0.0.0:$CL_RPC" --follow
+    --execution-persistence-backpressure --execution-persistence-backpressure-threshold="$BACKPRESSURE"
+    --metrics "0.0.0.0:$CL_METRICS")
+  [[ "$MODE" == archive ]] || a+=(--full)
+  local r
+  for r in "${RELAYS[@]}"; do a+=(--follow.endpoint "$r"); done
+  printf '%s\0' "${a[@]}"
+}
+
+start_el() {
+  mapfile -d '' -t args < <(el_args)
+  rm -f "$RUN/reth.ipc" "$RUN/auth.ipc"
+  "$BIN/arc-node-execution" "${args[@]}" &
+  EL_PID=$!
+  log "execution layer started (pid $EL_PID, mode $MODE)"
+}
+
+start_cl() {
+  mapfile -d '' -t args < <(cl_args)
+  "$BIN/arc-node-consensus" "${args[@]}" &
+  CL_PID=$!
+  log "consensus layer started (pid $CL_PID)"
+}
+
+# 3. supervise: EL first, wait for its sockets, then CL; a dead process is restarted (CL after a restarted EL too)
+log "Arc $ENV_ID starting ($CHAIN, $MODE)"
+start_el
+for _ in $(seq 1 120); do [[ -S "$RUN/auth.ipc" ]] && break; sleep 1; done
+start_cl
+while true; do
+  if ! kill -0 "$EL_PID" 2>/dev/null; then
+    log "execution layer exited — restarting both layers in 10 s"
+    kill -TERM "$CL_PID" 2>/dev/null; wait "$CL_PID" 2>/dev/null
+    sleep 10
+    start_el
+    for _ in $(seq 1 120); do [[ -S "$RUN/auth.ipc" ]] && break; sleep 1; done
+    start_cl
+  elif ! kill -0 "$CL_PID" 2>/dev/null; then
+    log "consensus layer exited — restarting in 10 s"
+    sleep 10
+    start_cl
+  fi
+  sleep 5 &
+  wait $!
+done

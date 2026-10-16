@@ -1,0 +1,44 @@
+# XRPL EVM Sidechain: exrpd from upstream GitHub releases (no Docker). Draft, see specs/cosmos/networks.md for verification.
+programs:
+  - env: mainnet
+    id: exrpd
+    source: { type: github, repo: xrplevm/node }
+    artifacts:
+      - name: "exrpd-linux-amd64.tar.gz"   # contains bin/exrpd
+        nameAarch64: "exrpd-linux-arm64.tar.gz"
+        urlTemplate: "https://github.com/xrplevm/node/releases/download/{tag}/node_{version}_Linux_amd64.tar.gz"
+        urlTemplateAarch64: "https://github.com/xrplevm/node/releases/download/{tag}/node_{version}_Linux_arm64.tar.gz"
+    configs:
+      - name: genesis.json
+        urlTemplate: "https://raw.githubusercontent.com/xrplevm/networks/refs/heads/main/mainnet/genesis.json"
+    requirements: { logFile: logs/xrplevm.log }
+    ports:
+      - { role: http, port: 42770, label: "EVM JSON-RPC", config: required }
+      - { role: ws, port: 42771, label: "EVM WebSocket", config: required }
+      - { role: p2p, port: 42772, label: "CometBFT P2P", config: required }
+      - { role: metrics, port: 42774, label: "CometBFT Prometheus (127.0.0.1)", config: required }
+      - { role: cl_rpc, port: 42775, label: "CometBFT RPC (/status)", config: required }
+      - { role: grpc, port: 42777, label: "Cosmos gRPC", config: required }
+      - { role: api, port: 42778, label: "Cosmos REST (LCD)", config: required }
+      - { role: json_rpc_metrics, port: 42779, label: "EVM JSON-RPC metrics (127.0.0.1)", config: optional }
+  - env: testnet
+    id: exrpd
+    source: { type: github, repo: xrplevm/node }
+    artifacts:
+      - name: "exrpd-linux-amd64.tar.gz"   # contains bin/exrpd
+        nameAarch64: "exrpd-linux-arm64.tar.gz"
+        urlTemplate: "https://github.com/xrplevm/node/releases/download/{tag}/node_{version}_Linux_amd64.tar.gz"
+        urlTemplateAarch64: "https://github.com/xrplevm/node/releases/download/{tag}/node_{version}_Linux_arm64.tar.gz"
+    configs:
+      - name: genesis.json
+        urlTemplate: "https://raw.githubusercontent.com/xrplevm/networks/refs/heads/main/testnet/genesis.json"
+    requirements: { logFile: logs/xrplevm.log }
+    ports:
+      - { role: http, port: 42780, label: "EVM JSON-RPC", config: required }
+      - { role: ws, port: 42781, label: "EVM WebSocket", config: required }
+      - { role: p2p, port: 42782, label: "CometBFT P2P", config: required }
+      - { role: metrics, port: 42784, label: "CometBFT Prometheus (127.0.0.1)", config: required }
+      - { role: cl_rpc, port: 42785, label: "CometBFT RPC (/status)", config: required }
+      - { role: grpc, port: 42787, label: "Cosmos gRPC", config: required }
+      - { role: api, port: 42788, label: "Cosmos REST (LCD)", config: required }
+      - { role: json_rpc_metrics, port: 42789, label: "EVM JSON-RPC metrics (127.0.0.1)", config: optional }

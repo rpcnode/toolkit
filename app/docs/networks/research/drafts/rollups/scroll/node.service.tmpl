@@ -1,0 +1,49 @@
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+ExecStart={{bin}} \
+  {{network_flag}} \
+  --scroll-mpt \
+  --datadir={{datadir}} \
+  --gcmode=archive \
+  --snapshot=false \
+  --cache.snapshot=0 \
+  --cache.noprefetch \
+  --cache={{cache_mb}} \
+  --maxpeers={{maxpeers}} \
+  --port={{p2p_port}} \
+  --http \
+  --http.addr=0.0.0.0 \
+  --http.port={{http_port}} \
+  --http.api={{http_api}} \
+  --http.vhosts=* \
+  --http.corsdomain=* \
+  --ws \
+  --ws.addr=0.0.0.0 \
+  --ws.port={{ws_port}} \
+  --ws.api={{http_api}} \
+  --ws.origins=* \
+  --rpc.gascap={{rpc_gascap}} \
+  --rpc.evmtimeout={{rpc_evmtimeout}} \
+  --rpc.getlogs.maxrange={{rpc_getlogs_maxrange}} \
+  --metrics \
+  --metrics.addr=127.0.0.1 \
+  --metrics.port={{metrics_port}} \
+  --l1.endpoint={{l1_rpc}} \
+  --da.blob.beaconnode={{l1_beacon}} \
+  --da.blob.awss3={{blob_s3}}
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=600
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE={{limit_nofile}}
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

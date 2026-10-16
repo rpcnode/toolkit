@@ -1,0 +1,117 @@
+# DATA Network = the former Story Protocol L1 (rebranded 2026; mainnet chain id 1514, Aeneid testnet 1315). VERIFIED: mainnet.datarpc.io and mainnet.storyrpc.io answer
+# the same height; clients are still piplabs/story (CometBFT consensus) + piplabs/story-geth (execution), flags still `--story` / `--aeneid`.
+# Snapshot never (no official snapshot found; Polkachu-style community bundles exist but none was reachable on 2026-10-13 — use the custom-URL option).
+# Sizing: story README says 4 cores / 32 GB / 200 GB for the CL host; execution disk figures are INFERRED.
+label: DATA Network
+diskRoles:
+  - id: execution
+    label: Execution Client DB (story-geth)
+    media: nvme
+  - id: consensus
+    label: Consensus Client DB (story home)
+    media: ssd
+diskNotes:
+  - "story-geth --datadir is <execution>/datadir; story --home is the consensus role leaf (config/ + data/, node key + priv_validator_key.json are created by `story init`)."
+  - "Both clients are required: story drives story-geth over the Engine API (shared JWT under <node_dir>/.toolkit/jwt.hex)."
+  - "Story docs name the product 'Story'; env ids stay mainnet / aeneid, the CLI network names are `story` and `aeneid`."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: DATA Network Mainnet
+    diskHintGiB: 1536
+    fullNodeGiB: 800
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: never
+    tipLagBlocks: 5
+    publicTip:
+      urls:
+        - https://mainnet.datarpc.io
+        - https://mainnet.storyrpc.io
+        - https://story-rpc.publicnode.com
+  - id: aeneid
+    label: DATA Network Aeneid Testnet
+    diskHintGiB: 1024
+    fullNodeGiB: 400
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    tipLagBlocks: 5
+    publicTip:
+      urls:
+        - https://aeneid.datarpc.io
+        - https://aeneid.storyrpc.io
+
+# CLI flags live in the systemd units (chains/data); story config.toml / story.toml keys are patched after `story init`.
+clientConfig:
+  program: story-geth
+  format: flags
+  bindings:
+    - key: datadir
+      source: disk_role_dir
+      role: execution
+      relative: datadir
+      description: story-geth --datadir (Disks execution role)
+    - key: story-home
+      source: disk_role_dir
+      role: consensus
+      description: story --home (Disks consensus role)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: JSON-RPC WebSocket port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: story-geth P2P port (tcp + udp)
+    - key: engine-port
+      source: catalog_port
+      role: engine
+      description: Engine API (JWT) port, 127.0.0.1
+    - key: metrics-port
+      source: catalog_port
+      role: metrics
+      description: story-geth metrics port, 127.0.0.1
+    - key: cl-rpc-port
+      source: catalog_port
+      role: cl_rpc
+      description: story CometBFT RPC port, 127.0.0.1 (/status for the CL height)
+    - key: cl-p2p-port
+      source: catalog_port
+      role: consensus_p2p
+      description: story P2P port (tcp)
+    - key: cl-api-port
+      source: catalog_port
+      role: cl_api
+      description: story REST api port, 127.0.0.1
+    - key: cl-metrics-port
+      source: catalog_port
+      role: cl_metrics
+      description: story prometheus port, 127.0.0.1
+    - key: cl-proxy-port
+      source: catalog_port
+      role: cl_proxy
+      description: story proxy_app (ABCI) port, 127.0.0.1
+    - key: http-api
+      source: literal
+      value: "eth,net,web3"
+      description: "--http.api / --ws.api (README example also has debug,txpool: not public)"
+    - key: maxpeers
+      source: literal
+      value: "50"
+      description: story-geth --maxpeers (README example 100)
+    - key: rpc-batch-request-limit
+      source: literal
+      value: "1000"
+      description: --rpc.batch-request-limit
+    - key: limit-nofile
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE of both units
+
+diagnostics:
+  - id: path_mtu

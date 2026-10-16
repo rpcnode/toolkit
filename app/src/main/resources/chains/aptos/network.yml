@@ -1,0 +1,164 @@
+# Aptos public fullnode (aptos-node). Snapshot never: no official or live community DB snapshot exists (see intake §7);
+# the node bootstraps over p2p (fast = latest state, genesis = full history from version 0).
+# Directory name is the network id. Ports live in clients.yml beside this file.
+label: Aptos
+diskRoles:
+  - id: state
+    label: State DB
+    media: nvme
+diskNotes:
+  - "base.data_dir is the state role dir; RocksDB (ledger / state KV / state merkle) lives in <state>/db. Genesis, waypoint, fullnode.yaml and logs stay under the node_dir."
+  - "Fast (default): downloads the latest state, ledger history is pruned (150M-transaction window) - hundreds of GB, hours to sync. Genesis: all history from version 0, pruners off - mainnet needs ~8+ TiB and archival seed peers (public peers have pruned)."
+  - "Disk estimates for the archive mode come from the size of Aptos' public backup (~1 GiB per 1M versions, 7.6B versions); measure before buying disks."
+  - "Intended for NVMe with at least 60K IOPS (Aptos reference spec for production PFNs)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Aptos Mainnet
+    diskHintGiB: 3072
+    fullNodeGiB: 1024
+    archiveGiB: 12288
+    cpuCores: 16
+    memoryGiB: 64
+    snapshot: never
+    publicTip:
+      urls:
+        - https://fullnode.mainnet.aptoslabs.com/v1
+        - https://api.mainnet.aptoslabs.com/v1
+        - https://aptos-rest.publicnode.com/v1
+  - id: testnet
+    label: Aptos Testnet
+    diskHintGiB: 512
+    fullNodeGiB: 256
+    archiveGiB: 512
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: never
+    publicTip:
+      urls:
+        - https://fullnode.testnet.aptoslabs.com/v1
+        - https://api.testnet.aptoslabs.com/v1
+
+# fullnode.yaml written on Start (chains/aptos). format: flags - no conf patch; the keys below are the YAML paths.
+# Every literal mirrors AptosUnitBodies and the unit LimitNOFILE. Vendor-default capacity values are written
+# explicitly so they are visible on Start; the operator raises them with the Aptos prod preset (extra flags).
+clientConfig:
+  program: aptos-node
+  format: flags
+  bindings:
+    - key: bootstrap
+      source: install_option
+      option: bootstrap
+      default: "fast"
+      description: Sync mode - fast (latest state, pruned) or genesis (full history from version 0, pruners off)
+    - key: base.data_dir
+      source: disk_role_dir
+      role: state
+      description: aptos-node base.data_dir (Disks state role); RocksDB is <data_dir>/db
+    - key: api.address (port)
+      source: catalog_port
+      role: http
+      description: REST API port; also the local height source (GET /v1)
+    - key: api.address (host)
+      source: literal
+      value: "0.0.0.0"
+      description: REST API bind address (Aptos advises auth / rate limiting in front of a public REST API)
+    - key: full_node_networks[public].listen_address (port)
+      source: catalog_port
+      role: p2p
+      description: Public network P2P port (TCP, /ip4/0.0.0.0/tcp/<port>)
+    - key: inspection_service.port
+      source: catalog_port
+      role: metrics
+      description: Inspection service / Prometheus metrics port
+    - key: inspection_service.address
+      source: literal
+      value: "127.0.0.1"
+      description: Inspection service bind address (peer / identity / system info - never public)
+    - key: admin_service.port
+      source: catalog_port
+      role: admin
+      description: Admin service port (aptos-node binds it even when disabled)
+    - key: admin_service.address
+      source: literal
+      value: "127.0.0.1"
+      description: Admin service bind address
+    - key: admin_service.enabled
+      source: literal
+      value: "false"
+      description: Admin service stays off
+    - key: storage.backup_service_address (port)
+      source: catalog_port
+      role: backup
+      description: Storage backup service port (loopback; stock 6186 would clash between envs)
+    - key: base.role
+      source: literal
+      value: "full_node"
+      description: Node role
+    - key: full_node_networks[public].network_id
+      source: literal
+      value: "public"
+      description: Public fullnode network with on-chain discovery
+    - key: state_sync.state_sync_driver.bootstrapping_mode
+      source: install_option
+      option: bootstrap
+      default: "fast"
+      description: "fast = DownloadLatestStates (skips history), genesis = ExecuteOrApplyFromGenesis (full history)"
+    - key: state_sync.state_sync_driver.continuous_syncing_mode
+      source: literal
+      value: "ExecuteTransactionsOrApplyOutputs"
+      description: Continuous syncing after bootstrap (whichever of execute / apply is faster)
+    - key: storage.storage_pruner_config.ledger_pruner_config.enable
+      source: literal
+      value: "false"
+      whenInstallOption: bootstrap
+      whenInstallOptionValue: genesis
+      description: Ledger pruner off for full history (fast mode keeps the vendor default - enabled, 150M versions)
+    - key: storage.storage_pruner_config.state_merkle_pruner_config.enable
+      source: literal
+      value: "false"
+      whenInstallOption: bootstrap
+      whenInstallOptionValue: genesis
+      description: State merkle pruner off for full history (fast mode keeps the vendor default)
+    - key: storage.storage_pruner_config.epoch_snapshot_pruner_config.enable
+      source: literal
+      value: "false"
+      whenInstallOption: bootstrap
+      whenInstallOptionValue: genesis
+      description: Epoch snapshot pruner off for full history (fast mode keeps the vendor default)
+    - key: api.runtime_worker_multiplier
+      source: literal
+      value: "2"
+      description: REST API worker threads = multiplier x CPU cores (vendor default)
+    - key: api.max_gas_view_function
+      source: literal
+      value: "2000000"
+      description: Gas ceiling of one view function call (vendor default)
+    - key: api.wait_by_hash_max_active_connections
+      source: literal
+      value: "100"
+      description: Concurrent wait_by_hash requests (vendor default)
+    - key: api.content_length_limit
+      source: literal
+      value: "8388608"
+      description: Max POST body in bytes (vendor default 8 MiB)
+    - key: api.transaction_submission_enabled
+      source: literal
+      value: "true"
+      description: Transaction submission through the REST API
+    - key: full_node_networks[public].max_inbound_connections
+      source: literal
+      value: "50"
+      description: Max inbound P2P connections (vendor default)
+    - key: full_node_networks[public].max_outbound_connections
+      source: literal
+      value: "5"
+      description: Max outbound P2P connections (vendor default for fullnodes)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for aptos-node (Aptos asks for an open file limit above 999999)
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

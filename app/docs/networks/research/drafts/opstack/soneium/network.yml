@@ -1,0 +1,112 @@
+# Soneium — OP Stack. Soneium (Sony/Startale OP Stack, Superchain Registry `soneium` + `soneium-minato`): op-reth + op-node. No official operator docs found; Alchemy publishes the reth datadir.
+# Snapshots are restored by the node's own run script on first start (chains/opstack/run.sh.tmpl); the toolkit snapshot machinery is not used (snapshot: never), like chains/optimism.
+label: Soneium
+diskRoles:
+  - id: execution
+    label: Execution DB (op-reth)
+    media: nvme
+  - id: consensus
+    label: Consensus (op-node keys, peerstore)
+    media: ssd
+  - id: snapshots
+    label: Snapshot download workspace
+    media: ssd
+diskNotes:
+  - "op-reth and op-node are compiled once per pinned tag (Rust + Go, a long first start) unless the panel synced prebuilt binaries; op-geth is end-of-support."
+  - "Full (default) prunes state/receipts to ~30 days (block bodies are kept); archive never prunes. Available snapshots are archive-style datadirs: a Full node restores one and prunes while running, so plan archive-size disk first."
+  - "The snapshot archive is downloaded into the snapshots role and deleted after extraction (streamed instead when it does not fit) — plan for archive + extracted size."
+  - "Soneium Mainnet snapshot: Alchemy R2 reth datadir ~715 GB (.tar.gz, archive pruning)."
+  - "Soneium Minato (Sepolia) snapshot: no public checksummed source (publicnode base+part ~22 GB needs signed-URL handling) — sync from L1, or custom snapshot_url."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Soneium Mainnet
+    diskHintGiB: 3072
+    fullNodeGiB: 1200
+    archiveGiB: 1600
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc.soneium.org
+        - https://soneium-rpc.publicnode.com
+    l1Parent:
+      rpc: https://ethereum-rpc.publicnode.com
+      beacon: https://ethereum-beacon-api.publicnode.com
+      pickHelp: |
+        Soneium Mainnet derives from Ethereum mainnet. Click Public for the default publicnode L1, or an active
+        Ethereum mainnet node from this panel (same-host uses 127.0.0.1).
+  - id: sepolia
+    label: Soneium Minato (Sepolia)
+    diskHintGiB: 512
+    fullNodeGiB: 160
+    archiveGiB: 300
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc.minato.soneium.org
+        - https://soneium-minato-rpc.publicnode.com
+    l1Parent:
+      rpc: https://ethereum-sepolia-rpc.publicnode.com
+      beacon: https://ethereum-sepolia-beacon-api.publicnode.com
+      pickHelp: |
+        Soneium Minato (Sepolia) derives from Ethereum Sepolia. Click Public for the default publicnode L1, or an active
+        Ethereum Sepolia node from this panel (same-host uses 127.0.0.1).
+
+# Flags of op-reth / op-node (chains/opstack run script). format: flags — no conf patch.
+# Literals mirror OpstackUnitBodies (per-network constants) and the unit LimitNOFILE.
+clientConfig:
+  program: op-reth
+  format: flags
+  bindings:
+    - { key: node, source: install_option, option: node, default: "full", description: "Node type — full (pruned to ~30 days) or archive (no pruning)" }
+    - { key: snapshot, source: install_option, option: snapshot, default: "restore", description: "restore = download the datadir snapshot on first start when one exists; none = sync from L1 / P2P" }
+    - { key: snapshot-url, source: install_option, option: snapshot_url, default: "", description: "Optional custom datadir snapshot URL (.tar / .tar.gz / .tar.lz4 / .tar.zst); overrides the built-in source" }
+    - { key: datadir, source: disk_role_dir, role: execution, description: "op-reth --datadir (Disks execution role)" }
+    - { key: consensus-dir, source: disk_role_dir, role: consensus, description: "op-node p2p keys / peerstore dir (Disks consensus role)" }
+    - { key: snapshots, source: disk_role_dir, role: snapshots, description: "Snapshot archive workspace (SSD)" }
+    - { key: http.port, source: catalog_port, role: http, description: "op-reth JSON-RPC port" }
+    - { key: ws.port, source: catalog_port, role: ws, description: "op-reth WebSocket port" }
+    - { key: authrpc.port, source: catalog_port, role: engine, description: "op-reth Engine API port (127.0.0.1)" }
+    - { key: metrics, source: catalog_port, role: metrics, description: "op-reth Prometheus port (0.0.0.0)" }
+    - { key: port, source: catalog_port, role: p2p, description: "op-reth P2P port (TCP + UDP)" }
+    - { key: discovery.v5.port, source: catalog_port, role: discv5, description: "op-reth discv5 UDP port (default 9200 would clash between nodes)" }
+    - { key: rpc.port, source: catalog_port, role: cl_rpc, description: "op-node RPC port (0.0.0.0)" }
+    - { key: metrics.port, source: catalog_port, role: cl_metrics, description: "op-node Prometheus port (0.0.0.0)" }
+    - { key: p2p.listen, source: catalog_port, role: cl_p2p, description: "op-node P2P port (TCP + UDP)" }
+    - { key: http.addr, source: literal, value: "0.0.0.0", description: "JSON-RPC / WebSocket bind address" }
+    - { key: http.api, source: literal, value: "eth,net,web3,txpool,debug,trace", description: "RPC namespaces (narrow to eth,net,web3,rpc with the prod preset)" }
+    - { key: ipcdisable, source: literal, value: "true", description: "No IPC socket (default /tmp/reth.ipc is shared by every reth on the host)" }
+    - { key: rollup.disable-tx-pool-gossip, source: literal, value: "true", description: "Forward-only to the sequencer; no tx gossip" }
+    - { key: prune.distance, source: literal, value: "1296000", description: "Full mode only — blocks of state/receipts kept (~30 days at 2 s); block bodies are never pruned" }
+    - { key: syncmode, source: literal, value: "consensus-layer", description: "op-node --syncmode (derive from L1 + gossip; robust without EL peers)" }
+    - { key: LimitNOFILE, source: literal, value: "1048576", description: "systemd LimitNOFILE for the node" }
+    - key: l1-rpc
+      source: install_option
+      option: l1_rpc
+      default: ""
+      description: Ethereum L1 execution RPC for op-node (public default; override with your own or local eth)
+      testConnect:
+        kind: eth_rpc
+        label: Test connect
+        help: |
+          Panel POSTs eth_blockNumber to this URL. Expect JSON-RPC result with a hex block height.
+          op-node needs a reachable Ethereum L1 execution RPC (mainnet for Soneium Mainnet, Sepolia for the testnet).
+    - key: l1-beacon
+      source: install_option
+      option: l1_beacon
+      default: ""
+      description: Ethereum L1 beacon / blob API for op-node (public default)
+      testConnect:
+        kind: beacon_genesis
+        label: Test connect
+        help: |
+          Panel GETs {url}/eth/v1/beacon/genesis. Expect JSON with data.genesis_time.
+          The beacon / blob API is required since Ecotone.
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

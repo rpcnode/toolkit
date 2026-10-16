@@ -96,7 +96,7 @@ class DownloadClientProgramUseCase(
 
         val installedPin = versionRepository.find(spec.network, spec.env, spec.programId)
         val installed = installedVersionFor(spec, installedPin?.currentVersion.orEmpty(), installedPin?.currentTag.orEmpty())
-        val resolved = resolveClientRelease(spec, githubReleaseClient, clientReleaseResolvers, installed)
+        val resolved = resolveClientRelease(spec, githubReleaseClient, clientReleaseResolvers, installed, installedPin?.currentTag.orEmpty())
         if (resolved.error != null)
         {
             tracker.set(key, ClientDownloadProgress(ClientDownloadPhase.FAIL, error = resolved.error))

@@ -1,0 +1,83 @@
+# bera-reth + beacond from GitHub releases (no Docker). VERIFIED 2026-10-13 (HTTP 200):
+#   berachain/bera-reth v1.4.4 : bera-reth-<tag>-x86_64-unknown-linux-gnu.tar.gz (44.7 MB) / -aarch64-unknown-linux-gnu.tar.gz (43.3 MB)
+#   berachain/beacon-kit v1.4.1: beacond-<tag>-linux-amd64.tar.gz (24.3 MB) / -linux-arm64.tar.gz (21.1 MB); v1.4.2-rc.0 is a prerelease and is the version bepolia needs
+# Chain files are NOT release assets: genesis.json / kzg-trusted-setup.json / app.toml / config.toml / el-peers.txt live in beacon-kit testing/networks/<chain id>/ at the tag (all HTTP 200 at v1.4.1).
+# Ports come from specs/PORTS.md (berachain base 41150): mainnet 41150-41159, bepolia 41160-41169. Upstream defaults (8545/8551/30303/26656/26657/26658/26660/9101/9102) are not used.
+programs:
+  - env: mainnet
+    id: bera-reth
+    source: { type: github, repo: berachain/bera-reth }
+    artifacts:
+      - name: "bera-reth-x86_64.tar.gz"
+        nameAarch64: "bera-reth-aarch64.tar.gz"
+        urlTemplate: "https://github.com/berachain/bera-reth/releases/download/{tag}/bera-reth-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/berachain/bera-reth/releases/download/{tag}/bera-reth-{tag}-aarch64-unknown-linux-gnu.tar.gz"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 41150, label: "HTTP RPC", config: required }
+      - { role: ws, port: 41151, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 41152, label: "Execution P2P", config: required, protocol: both }
+      - { role: engine, port: 41153, label: "Engine API", config: required }
+      - { role: metrics, port: 41154, label: "Execution metrics", config: required }
+      - { role: cl_rpc, port: 41155, label: "Consensus RPC", config: required }
+      - { role: consensus_p2p, port: 41156, label: "Consensus P2P", config: required }
+      - { role: cl_metrics, port: 41157, label: "Consensus metrics", config: required }
+      - { role: cl_proxy, port: 41158, label: "Consensus proxy_app (ABCI)", config: required }
+  - env: mainnet
+    id: beacond
+    source: { type: github, repo: berachain/beacon-kit }
+    artifacts:
+      - name: "beacond-linux-amd64.tar.gz"
+        nameAarch64: "beacond-linux-arm64.tar.gz"
+        urlTemplate: "https://github.com/berachain/beacon-kit/releases/download/{tag}/beacond-{tag}-linux-amd64.tar.gz"
+        urlTemplateAarch64: "https://github.com/berachain/beacon-kit/releases/download/{tag}/beacond-{tag}-linux-arm64.tar.gz"
+    configs:
+      - name: "genesis.json"
+        urlTemplate: "https://raw.githubusercontent.com/berachain/beacon-kit/{tag}/testing/networks/80094/genesis.json"
+      - name: "kzg-trusted-setup.json"
+        urlTemplate: "https://raw.githubusercontent.com/berachain/beacon-kit/{tag}/testing/networks/80094/kzg-trusted-setup.json"
+      - name: "app.toml"
+        urlTemplate: "https://raw.githubusercontent.com/berachain/beacon-kit/{tag}/testing/networks/80094/app.toml"
+      - name: "config.toml"
+        urlTemplate: "https://raw.githubusercontent.com/berachain/beacon-kit/{tag}/testing/networks/80094/config.toml"
+      - name: "el-peers.txt"
+        urlTemplate: "https://raw.githubusercontent.com/berachain/beacon-kit/{tag}/testing/networks/80094/el-peers.txt"
+  - env: bepolia
+    id: bera-reth
+    source: { type: github, repo: berachain/bera-reth }
+    artifacts:
+      - name: "bera-reth-x86_64.tar.gz"
+        nameAarch64: "bera-reth-aarch64.tar.gz"
+        urlTemplate: "https://github.com/berachain/bera-reth/releases/download/{tag}/bera-reth-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/berachain/bera-reth/releases/download/{tag}/bera-reth-{tag}-aarch64-unknown-linux-gnu.tar.gz"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 41160, label: "HTTP RPC", config: required }
+      - { role: ws, port: 41161, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 41162, label: "Execution P2P", config: required, protocol: both }
+      - { role: engine, port: 41163, label: "Engine API", config: required }
+      - { role: metrics, port: 41164, label: "Execution metrics", config: required }
+      - { role: cl_rpc, port: 41165, label: "Consensus RPC", config: required }
+      - { role: consensus_p2p, port: 41166, label: "Consensus P2P", config: required }
+      - { role: cl_metrics, port: 41167, label: "Consensus metrics", config: required }
+      - { role: cl_proxy, port: 41168, label: "Consensus proxy_app (ABCI)", config: required }
+  - env: bepolia
+    id: beacond
+    # docs.berachain.com/nodes/architecture/evm-execution: bepolia = beacon-kit v1.4.2-rc.0 (prerelease) — follows it and moves to the stable by itself.
+    source: { type: github, repo: berachain/beacon-kit, prerelease: true }
+    artifacts:
+      - name: "beacond-linux-amd64.tar.gz"
+        nameAarch64: "beacond-linux-arm64.tar.gz"
+        urlTemplate: "https://github.com/berachain/beacon-kit/releases/download/{tag}/beacond-{tag}-linux-amd64.tar.gz"
+        urlTemplateAarch64: "https://github.com/berachain/beacon-kit/releases/download/{tag}/beacond-{tag}-linux-arm64.tar.gz"
+    configs:
+      - name: "genesis.json"
+        urlTemplate: "https://raw.githubusercontent.com/berachain/beacon-kit/{tag}/testing/networks/80069/genesis.json"
+      - name: "kzg-trusted-setup.json"
+        urlTemplate: "https://raw.githubusercontent.com/berachain/beacon-kit/{tag}/testing/networks/80069/kzg-trusted-setup.json"
+      - name: "app.toml"
+        urlTemplate: "https://raw.githubusercontent.com/berachain/beacon-kit/{tag}/testing/networks/80069/app.toml"
+      - name: "config.toml"
+        urlTemplate: "https://raw.githubusercontent.com/berachain/beacon-kit/{tag}/testing/networks/80069/config.toml"
+      - name: "el-peers.txt"
+        urlTemplate: "https://raw.githubusercontent.com/berachain/beacon-kit/{tag}/testing/networks/80069/el-peers.txt"

@@ -1,0 +1,108 @@
+# Robinhood Chain (Arbitrum Orbit, Nitro) — mainnet + Sepolia testnet. Snapshot: Nitro restores the latest one itself on the
+# first start (--init.latest, no toolkit aria2). Directory name is the network id. Ports live in clients.yml beside this file.
+label: Robinhood Chain
+diskRoles:
+  - id: execution
+    label: Execution DB
+    media: nvme
+diskNotes:
+  - "Nitro --persistent.chain is the execution role leaf."
+  - "First start restores the latest Robinhood snapshot (pruned, or archive) with --init.latest — hundreds of GiB, no toolkit download step."
+  - "Mainnet archive uses the PathDB archive snapshot (--execution.caching.state-scheme=path); the testnet archive snapshot is hash-scheme."
+  - "Submitted transactions are forwarded to the chain's public RPC (--execution.forwarding-target); Nitro will not start without a target."
+  - "Nitro needs an Ethereum L1 execution RPC + beacon API (mainnet L1 for mainnet, Sepolia for the testnet)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Robinhood Chain Mainnet
+    diskHintGiB: 2048
+    fullNodeGiB: 2048
+    archiveGiB: 3072
+    cpuCores: 8
+    memoryGiB: 64
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc.mainnet.chain.robinhood.com
+    l1Parent:
+      rpc: https://ethereum-rpc.publicnode.com
+      beacon: https://ethereum-beacon-api.publicnode.com
+      pickHelp: |
+        Robinhood Chain posts to Ethereum mainnet. Click Public for the default publicnode L1, or an active Ethereum node
+        from this panel (same-host uses 127.0.0.1).
+  - id: testnet
+    label: Robinhood Chain Testnet (Sepolia)
+    diskHintGiB: 768
+    fullNodeGiB: 768
+    archiveGiB: 6144
+    cpuCores: 8
+    memoryGiB: 64
+    snapshot: never
+    publicTip:
+      urls:
+        - https://rpc.testnet.chain.robinhood.com
+    l1Parent:
+      rpc: https://ethereum-sepolia-rpc.publicnode.com
+      beacon: https://ethereum-sepolia-beacon-api.publicnode.com
+      pickHelp: |
+        The testnet posts to Ethereum Sepolia. Click Public for the default publicnode L1, or an active Ethereum Sepolia node
+        from this panel (same-host uses 127.0.0.1).
+
+# CLI flags live in systemd (chains/robinhood). No conf patch on Start.
+clientConfig:
+  program: nitro
+  format: flags
+  bindings:
+    - key: snapshot
+      source: install_option
+      option: snapshot
+      default: "pruned"
+      description: Nitro init snapshot — pruned (--init.latest pruned) or archive (--init.latest archive + archive caching)
+    - key: datadir
+      source: disk_role_dir
+      role: execution
+      description: Nitro --persistent.chain (Disks execution role)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: JSON-RPC WebSocket port
+    - key: init-latest-base
+      source: literal
+      value: "https://robinhood-snapshots.offchainlabs.com/"
+      description: Snapshot mirror for --init.latest
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd open-file limit for Nitro
+    - key: l1-rpc
+      source: install_option
+      option: l1_rpc
+      default: ""
+      description: Ethereum L1 execution RPC (public default; override with your own or local eth)
+      testConnect:
+        kind: eth_rpc
+        label: Test connect
+        help: |
+          Panel POSTs eth_blockNumber to this URL. Expect JSON-RPC result with a hex block height.
+          Nitro needs a reachable Ethereum L1 execution RPC (Sepolia for the testnet, mainnet for mainnet).
+    - key: l1-beacon
+      source: install_option
+      option: l1_beacon
+      default: ""
+      description: Ethereum L1 beacon / blob API (public default; required for Nitro)
+      testConnect:
+        kind: beacon_genesis
+        label: Test connect
+        help: |
+          Panel GETs {url}/eth/v1/beacon/genesis. Expect JSON with data.genesis_time.
+          The beacon / blob API is required for Nitro parent-chain data.
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu
+  # Nitro reads batches from the parent chain RPC; a pruned / rate-limited public L1 stalls the sync with no error in the UI.
+  - id: arb_l1

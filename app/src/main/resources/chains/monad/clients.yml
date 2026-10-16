@@ -1,0 +1,41 @@
+# Monad (category-labs/monad + monad-bft) from the vendor apt repository https://pkg.category.xyz (noble, amd64 only), downloaded as a plain
+# .deb and unpacked under node_dir (`dpkg-deb --fsys-tarfile`, no apt source, no `apt install`, no /home/monad, no /opt/monad). The package
+# is 737 MB (debug build, 3.1 GB unpacked): the toolkit keeps monad, monad-node, monad-rpc, monad-mpt, monad-cli, monad-keystore and
+# monad-sign-name-record (~1.2 GB) plus usr/local/lib (units set LD_LIBRARY_PATH to <node_dir>/lib; the ELF files carry no usable RPATH).
+# Versions are PINNED to what the Monad docs require per network (docs.monad.xyz full-node-installation, 2026-10-14: mainnet 0.16.4, testnet
+# 0.16.3; 0.16.5 exists but the docs do not name it). The file name is deterministic: pool/main/monad_<version>_amd64.deb. Bump here by hand.
+# configs: the vendor full-node node.toml of the network (peer / bootstrap lists), patched on Start (name, own address, ports, name record).
+# Ports: central plan (monad block 42020): env0 mainnet 42020-42029, env1 testnet 42030-42039.
+programs:
+  - env: mainnet
+    id: monad
+    source: { type: pinned, version: "0.16.4", tag: "0.16.4", label: "category-labs/monad (pkg.category.xyz)" }
+    artifacts:
+      - name: "monad-amd64.deb"
+        urlTemplate: "https://pkg.category.xyz/pool/main/monad_{version}_amd64.deb"
+    configs:
+      - name: "monad-full-node.toml"
+        urlTemplate: "https://bucket.monadinfra.com/config/mainnet/latest/full-node-node.toml"
+    requirements: { logFile: logs/monad.log }
+    ports:
+      - { role: http, port: 42020, label: "JSON-RPC HTTP (monad-rpc)", config: required }
+      - { role: ws, port: 42021, label: "JSON-RPC WebSocket (monad-rpc)", config: required }
+      - { role: p2p, port: 42022, label: "MonadBFT P2P (tcp + udp)", config: required, protocol: both }
+      - { role: auth_udp, port: 42023, label: "Authenticated UDP (raptorcast)", config: required }
+      - { role: direct_udp, port: 42024, label: "Direct UDP (testnet only)", config: required }
+  - env: testnet
+    id: monad
+    source: { type: pinned, version: "0.16.3", tag: "0.16.3", label: "category-labs/monad (pkg.category.xyz)" }
+    artifacts:
+      - name: "monad-amd64.deb"
+        urlTemplate: "https://pkg.category.xyz/pool/main/monad_{version}_amd64.deb"
+    configs:
+      - name: "monad-full-node.toml"
+        urlTemplate: "https://bucket.monadinfra.com/config/testnet/latest/full-node-node.toml"
+    requirements: { logFile: logs/monad.log }
+    ports:
+      - { role: http, port: 42030, label: "JSON-RPC HTTP (monad-rpc)", config: required }
+      - { role: ws, port: 42031, label: "JSON-RPC WebSocket (monad-rpc)", config: required }
+      - { role: p2p, port: 42032, label: "MonadBFT P2P (tcp + udp)", config: required, protocol: both }
+      - { role: auth_udp, port: 42033, label: "Authenticated UDP (raptorcast)", config: required }
+      - { role: direct_udp, port: 42034, label: "Direct UDP (testnet only)", config: required }

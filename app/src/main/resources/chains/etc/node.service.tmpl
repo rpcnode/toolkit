@@ -1,0 +1,45 @@
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+ExecStart={{bin}} \
+  {{chain_flag}} \
+  --datadir {{datadir}} \
+  --port {{p2p_port}} \
+  --syncmode {{syncmode}} \
+  --gcmode {{gcmode}} \
+  --ipcdisable \
+  --http \
+  --http.addr {{http_host}} \
+  --http.port {{http_port}} \
+  --http.api {{http_api}} \
+  --http.vhosts {{http_vhosts}} \
+  --ws \
+  --ws.addr {{http_host}} \
+  --ws.port {{ws_port}} \
+  --ws.api {{ws_api}} \
+  --ws.origins {{ws_origins}} \
+  --cache {{cache_mb}} \
+  --maxpeers {{maxpeers}} \
+  --history.transactions {{history_transactions}} \
+  --mess={{mess}} \
+  --rpc.gascap {{rpc_gascap}} \
+  --rpc.evmtimeout {{rpc_evmtimeout}} \
+  --rpc.batch-request-limit {{rpc_batch_request_limit}} \
+  --rpc.batch-response-max-size {{rpc_batch_response_max_size}} \
+  --rpc.txfeecap {{rpc_txfeecap}} \
+  --txpool.globalslots {{txpool_globalslots}} \
+  --txpool.globalqueue {{txpool_globalqueue}}
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec={{stop_timeout_sec}}
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE={{nofile}}
+
+[Install]
+WantedBy=multi-user.target

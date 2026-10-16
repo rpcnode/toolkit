@@ -1,0 +1,232 @@
+# Injective — CometBFT / Cosmos SDK family recipe (chains/cometbft shared code, chains/injective thin classes).
+# Snapshot: see snapshotTypes per env. Ports live in clients.yml beside this file. Draft — see specs/cosmos/FAMILY.md.
+label: Injective
+hostPackages:
+  - lz4
+  - unzip
+diskRoles:
+  - id: home
+    label: Node home (config + data)
+    media: nvme
+diskNotes:
+  - "--home is the home role leaf: config/ (config.toml, app.toml, genesis.json, node_key.json) and data/ live there; snapshots extract into it."
+  - "Pruned RPC node by default (pruning=default, min-retain-blocks=100000). Archive history is not offered."
+  - "The binary, logs and .toolkit state live under the node_dir."
+  - "linux/amd64 only. libwasmvm.x86_64.so ships beside injectived and must be on LD_LIBRARY_PATH (unit sets it)."
+  - "State sync is NOT offered: it does not restore wasm/ and ends in an AppHash mismatch (docs.injective.network)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Injective Mainnet (injective-1)
+    diskHintGiB: 2048
+    fullNodeGiB: 2048
+    cpuCores: 16
+    memoryGiB: 128
+    snapshot: required
+    tipLagBlocks: 15
+    publicTip:
+      urls:
+        - https://sentry.tm.injective.network
+        - https://injective-rpc.publicnode.com
+        - https://injective-rpc.polkachu.com
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: "Pruned · Injective official (lz4, goleveldb)"
+        hint: "Official snapshot, OVH EU (status.json); ~27 GB lz4 incl. wasm/. Default."
+        diskGiB: 150
+        default: true
+      - id: polkachu
+        kind: full
+        label: "Pruned · Polkachu (lz4)"
+        hint: "Community snapshot (~16 GB lz4)."
+        diskGiB: 100
+# config.toml / app.toml are patched on every Start (chains/cometbft CometbftTomlPatch); literals below equal CometbftConfigDefaults + the unit.
+clientConfig:
+  program: injectived
+  format: flags
+  bindings:
+    - key: home
+      source: disk_role_dir
+      role: home
+      description: "injectived --home (Disks home role)"
+    - key: rpc.laddr
+      source: catalog_port
+      role: cl_rpc
+      description: CometBFT RPC port (0.0.0.0)
+    - key: p2p.laddr
+      source: catalog_port
+      role: p2p
+      description: CometBFT P2P port (0.0.0.0, TCP)
+    - key: instrumentation.prometheus_listen_addr
+      source: catalog_port
+      role: metrics
+      description: Prometheus port (bound to 127.0.0.1)
+    - key: api.address
+      source: catalog_port
+      role: api
+      description: Cosmos REST (LCD) port (0.0.0.0)
+    - key: grpc.address
+      source: catalog_port
+      role: grpc
+      description: Cosmos gRPC port (0.0.0.0)
+    - key: json-rpc.address
+      source: catalog_port
+      role: http
+      description: EVM JSON-RPC HTTP port (0.0.0.0)
+    - key: json-rpc.ws-address
+      source: catalog_port
+      role: ws
+      description: EVM JSON-RPC WebSocket port (0.0.0.0)
+    - key: rpc.unsafe
+      source: literal
+      value: "false"
+      description: CometBFT unsafe RPC routes stay off
+    - key: rpc.pprof_laddr
+      source: literal
+      value: ""
+      description: pprof disabled (default localhost:6060 collides between nodes)
+    - key: rpc.max_open_connections
+      source: literal
+      value: "2000"
+      description: RPC + WebSocket connection cap (CometBFT default 900)
+    - key: rpc.max_subscription_clients
+      source: literal
+      value: "100"
+      description: Max /subscribe clients
+    - key: rpc.max_subscriptions_per_client
+      source: literal
+      value: "5"
+      description: Max subscriptions per client
+    - key: rpc.timeout_broadcast_tx_commit
+      source: literal
+      value: "10s"
+      description: broadcast_tx_commit timeout
+    - key: rpc.max_body_bytes
+      source: literal
+      value: "1000000"
+      description: Max RPC request body
+    - key: p2p.max_num_inbound_peers
+      source: literal
+      value: "40"
+      description: Inbound peer slots
+    - key: p2p.max_num_outbound_peers
+      source: literal
+      value: "10"
+      description: Outbound peer slots
+    - key: mempool.size
+      source: literal
+      value: "5000"
+      description: Mempool tx count
+    - key: mempool.max_txs_bytes
+      source: literal
+      value: "1073741824"
+      description: Mempool bytes (1 GiB)
+    - key: tx_index.indexer
+      source: literal
+      value: "kv"
+      description: Tx indexer (tx-by-hash and /tx_search)
+    - key: instrumentation.prometheus
+      source: literal
+      value: "true"
+      description: Prometheus on (loopback only)
+    - key: consensus.timeout_commit
+      source: literal
+      value: "300ms"
+      description: CometBFT timeout_commit (Injective docs)
+    - key: minimum-gas-prices
+      source: literal
+      value: "160000000inj"
+      description: app.toml minimum-gas-prices (Polkachu / chain minimum)
+    - key: pruning
+      source: literal
+      value: "default"
+      description: app.toml state pruning (default = last 362880 states)
+    - key: min-retain-blocks
+      source: literal
+      value: "100000"
+      description: app.toml CometBFT block retention (0 = keep all)
+    - key: api.enable
+      source: literal
+      value: "true"
+      description: REST API on
+    - key: api.swagger
+      source: literal
+      value: "false"
+      description: Swagger UI off
+    - key: api.max-open-connections
+      source: literal
+      value: "1000"
+      description: REST connection cap
+    - key: api.rpc-max-body-bytes
+      source: literal
+      value: "1000000"
+      description: REST max body
+    - key: api.enabled-unsafe-cors
+      source: literal
+      value: "false"
+      description: No wildcard CORS on REST
+    - key: grpc.enable
+      source: literal
+      value: "true"
+      description: gRPC on
+    - key: grpc.max-recv-msg-size
+      source: literal
+      value: "10485760"
+      description: gRPC max receive message
+    - key: grpc-web.enable
+      source: literal
+      value: "false"
+      description: grpc-web off
+    - key: state-sync.snapshot-interval
+      source: literal
+      value: "0"
+      description: Do not serve state-sync snapshots
+    - key: json-rpc.enable
+      source: literal
+      value: "true"
+      description: EVM JSON-RPC on
+    - key: json-rpc.api
+      source: literal
+      value: "eth,net,web3"
+      description: Public EVM namespaces (no debug/txpool/personal/admin)
+    - key: json-rpc.gas-cap
+      source: literal
+      value: "25000000"
+      description: eth_call/estimateGas gas cap
+    - key: json-rpc.evm-timeout
+      source: literal
+      value: "5s"
+      description: eth_call timeout
+    - key: json-rpc.logs-cap
+      source: literal
+      value: "10000"
+      description: eth_getLogs result cap
+    - key: json-rpc.block-range-cap
+      source: literal
+      value: "10000"
+      description: eth_getLogs block range cap
+    - key: json-rpc.filter-cap
+      source: literal
+      value: "200"
+      description: Max open filters
+    - key: json-rpc.batch-request-limit
+      source: literal
+      value: "1000"
+      description: JSON-RPC batch size
+    - key: json-rpc.allow-unprotected-txs
+      source: literal
+      value: "false"
+      description: Reject non-EIP-155 txs
+    - key: json-rpc.enable-profiling
+      source: literal
+      value: "false"
+      description: No debug profiling
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for injectived
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

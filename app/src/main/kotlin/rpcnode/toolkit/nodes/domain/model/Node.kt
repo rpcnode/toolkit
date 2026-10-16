@@ -43,6 +43,10 @@ data class Node(
     val liveTestStatus: String = "",
     val liveTestAt: String = "",
     val liveTestError: String = "",
+    /** First time the node left `awaiting_ports` (the install began); blank = not yet. Set by [NodeLifecycleStamps]. */
+    val installStartedAt: String = "",
+    /** First time the node became `active` (caught up with the network); blank = not yet. */
+    val syncedAt: String = "",
     val createdAt: String,
     val updatedAt: String,
 )

@@ -418,6 +418,7 @@ class PolygonNodeProcessStarter : HostNodeProcessStarter
         {
             var text = Files.readString(configToml)
             text = text.replace("/var/lib/heimdall", home.toString())
+            text = PolygonConfigPatch.ensureMoniker(text, defaultMoniker())
             text = rewriteTomlInt(text, "laddr", ports.heimdallP2p)
             // CometBFT p2p.laddr / rpc.laddr often embed the port in a URL
             text = text.replace(Regex("""tcp://0\.0\.0\.0:\d+"""), "tcp://0.0.0.0:${ports.heimdallP2p}")
@@ -436,6 +437,15 @@ class PolygonNodeProcessStarter : HostNodeProcessStarter
             text = rewriteCometRpcUrl(text, ports.heimdallRpc)
             Files.writeString(f, text)
         }
+    }
+
+    /** `rpcnode-<host name>`; the amoy package ships an empty moniker and heimdalld will not start with one. */
+    private fun defaultMoniker(): String
+    {
+        val host = runCatching { Files.readString(Path.of("/etc/hostname")).trim() }.getOrNull()?.takeIf { it.isNotEmpty() }
+            ?: runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull()
+            ?: ""
+        return if (host.isEmpty()) "rpcnode-heimdall" else "rpcnode-$host"
     }
 
     private fun rewriteEthRpc(text: String, ethRpc: String): String

@@ -1,0 +1,242 @@
+# Sei — CometBFT / Cosmos SDK family recipe (chains/cometbft shared code, chains/sei thin classes).
+# Snapshot: see snapshotTypes per env. Ports live in clients.yml beside this file. Draft — see specs/cosmos/FAMILY.md.
+label: Sei
+hostPackages:
+  - lz4
+diskRoles:
+  - id: home
+    label: Node home (config + data)
+    media: nvme
+diskNotes:
+  - "--home is the home role leaf: config/ (config.toml, app.toml, genesis.json, node_key.json) and data/ live there; snapshots extract into it."
+  - "Pruned RPC node by default (pruning=default, min-retain-blocks=100000). Archive history is not offered."
+  - "The binary, logs and .toolkit state live under the node_dir."
+  - "Genesis start crashes (integer divide by zero): a snapshot or state sync is mandatory (docs.sei.io)."
+  - "seid init writes genesis + built-in seeds for pacific-1/atlantic-2 since v6.6.2; no genesis download needed."
+  - "Release assets: linux x86_64 and arm64 tarballs exist; docs call the prebuilt binary amd64-only (arm64 INFERRED working)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Sei Mainnet (pacific-1)
+    diskHintGiB: 2048
+    fullNodeGiB: 2048
+    cpuCores: 16
+    memoryGiB: 256
+    snapshot: required
+    tipLagBlocks: 25
+    publicTip:
+      urls:
+        - https://rpc.sei-apis.com
+        - https://sei-rpc.polkachu.com
+        - https://sei-rpc.publicnode.com
+        - https://rpc.lavenderfive.com/sei
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: "Pruned · Polkachu (lz4, daily)"
+        hint: "Community snapshot, ~234 GB lz4 (PebbleDB; verify provider says PebbleDB)."
+        diskGiB: 1000
+  - id: testnet
+    label: Sei Testnet (atlantic-2)
+    diskHintGiB: 1024
+    fullNodeGiB: 1024
+    cpuCores: 8
+    memoryGiB: 64
+    snapshot: required
+    tipLagBlocks: 25
+    publicTip:
+      urls:
+        - https://rpc-testnet.sei-apis.com
+        - https://sei-testnet-rpc.polkachu.com
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: "Pruned · Polkachu testnet (lz4)"
+        hint: "Community testnet snapshot (Polkachu)."
+        diskGiB: 300
+
+# config.toml / app.toml are patched on every Start (chains/cometbft CometbftTomlPatch); literals below equal CometbftConfigDefaults + the unit.
+clientConfig:
+  program: seid
+  format: flags
+  bindings:
+    - key: home
+      source: disk_role_dir
+      role: home
+      description: "seid --home (Disks home role)"
+    - key: rpc.laddr
+      source: catalog_port
+      role: cl_rpc
+      description: CometBFT RPC port (0.0.0.0)
+    - key: p2p.laddr
+      source: catalog_port
+      role: p2p
+      description: CometBFT P2P port (0.0.0.0, TCP)
+    - key: instrumentation.prometheus-listen-addr
+      source: catalog_port
+      role: metrics
+      description: Prometheus port (bound to 127.0.0.1)
+    - key: api.address
+      source: catalog_port
+      role: api
+      description: Cosmos REST (LCD) port (0.0.0.0)
+    - key: grpc.address
+      source: catalog_port
+      role: grpc
+      description: Cosmos gRPC port (0.0.0.0)
+    - key: evm.http_port
+      source: catalog_port
+      role: http
+      description: EVM JSON-RPC HTTP port
+    - key: evm.ws_port
+      source: catalog_port
+      role: ws
+      description: EVM JSON-RPC WebSocket port
+    - key: rpc.unsafe
+      source: literal
+      value: "false"
+      description: CometBFT unsafe RPC routes stay off
+    - key: rpc.pprof-laddr
+      source: literal
+      value: ""
+      description: pprof disabled (default localhost:6060 collides between nodes)
+    - key: rpc.max-open-connections
+      source: literal
+      value: "2000"
+      description: RPC + WebSocket connection cap (CometBFT default 900)
+    - key: rpc.max-subscription-clients
+      source: literal
+      value: "100"
+      description: Max /subscribe clients
+    - key: rpc.max-subscriptions-per-client
+      source: literal
+      value: "5"
+      description: Max subscriptions per client
+    - key: rpc.timeout-broadcast-tx-commit
+      source: literal
+      value: "10s"
+      description: broadcast_tx_commit timeout
+    - key: rpc.max-body-bytes
+      source: literal
+      value: "1000000"
+      description: Max RPC request body
+    - key: p2p.max-connections
+      source: literal
+      value: "200"
+      description: Total P2P connection cap (the Sei fork has one cap instead of inbound / outbound slots)
+    - key: mempool.size
+      source: literal
+      value: "5000"
+      description: Mempool tx count
+    - key: mempool.max-txs-bytes
+      source: literal
+      value: "1073741824"
+      description: Mempool bytes (1 GiB)
+    - key: tx-index.indexer
+      source: literal
+      value: "kv"
+      description: Tx indexer (tx-by-hash and /tx_search)
+    - key: instrumentation.prometheus
+      source: literal
+      value: "true"
+      description: Prometheus on (loopback only)
+    - key: minimum-gas-prices
+      source: literal
+      value: "0.02usei"
+      description: app.toml minimum-gas-prices (Polkachu / chain minimum)
+    - key: pruning
+      source: literal
+      value: "default"
+      description: app.toml state pruning (default = last 362880 states)
+    - key: min-retain-blocks
+      source: literal
+      value: "100000"
+      description: app.toml CometBFT block retention (0 = keep all)
+    - key: api.enable
+      source: literal
+      value: "true"
+      description: REST API on
+    - key: api.swagger
+      source: literal
+      value: "false"
+      description: Swagger UI off
+    - key: api.max-open-connections
+      source: literal
+      value: "1000"
+      description: REST connection cap
+    - key: api.rpc-max-body-bytes
+      source: literal
+      value: "1000000"
+      description: REST max body
+    - key: api.enabled-unsafe-cors
+      source: literal
+      value: "false"
+      description: No wildcard CORS on REST
+    - key: grpc.enable
+      source: literal
+      value: "true"
+      description: gRPC on
+    - key: grpc.max-recv-msg-size
+      source: literal
+      value: "10485760"
+      description: gRPC max receive message
+    - key: grpc-web.enable
+      source: literal
+      value: "false"
+      description: grpc-web off
+    - key: state-sync.snapshot-interval
+      source: literal
+      value: "0"
+      description: Do not serve state-sync snapshots
+    - key: evm.max_log_no_block
+      source: literal
+      value: "10000"
+      description: eth_getLogs match cap
+    - key: evm.max_blocks_for_log
+      source: literal
+      value: "2000"
+      description: eth_getLogs block range cap
+    - key: evm.max_concurrent_trace_calls
+      source: literal
+      value: "10"
+      description: Concurrent debug_trace*
+    - key: evm.max_subscriptions_new_head
+      source: literal
+      value: "10000"
+      description: newHeads subscriptions
+    - key: evm.max_subscriptions_logs
+      source: literal
+      value: "1000"
+      description: logs subscriptions
+    - key: evm.read_timeout
+      source: literal
+      value: "30s"
+      description: EVM HTTP read timeout
+    - key: evm.cors_origins
+      source: literal
+      value: "*"
+      description: EVM CORS (restrict at the proxy)
+    - key: state-store.ss-backend
+      source: literal
+      value: "pebbledb"
+      description: SeiDB state store backend (RocksDB is being removed)
+    - key: state-store.ss-keep-recent
+      source: literal
+      value: "100000"
+      description: SS versions kept (~28 h on pacific-1)
+    - key: receipt-store.rs-backend
+      source: literal
+      value: "pebbledb"
+      description: Receipt store backend
+    - key: admin_server.admin_enabled
+      source: literal
+      value: "false"
+      description: Admin gRPC server off
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for seid
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

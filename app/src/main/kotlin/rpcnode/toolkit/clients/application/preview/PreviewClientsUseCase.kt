@@ -7,7 +7,7 @@ import rpcnode.toolkit.clients.application.ClientPreviewStore
 import rpcnode.toolkit.clients.application.ClientProgramKey
 import rpcnode.toolkit.clients.application.ClientRowView
 import rpcnode.toolkit.clients.domain.model.ClientVersionPin
-import rpcnode.toolkit.clients.domain.model.sameVersion
+import rpcnode.toolkit.clients.domain.model.isNewerClientRelease
 import rpcnode.toolkit.clients.domain.repository.ClientProgramCatalog
 import rpcnode.toolkit.clients.domain.repository.ClientVersionRepository
 
@@ -71,7 +71,7 @@ class PreviewClientsUseCase(
             // Only mark done when the pin matches latest — stale pins must not look finished
             // (Update modal would flicker 100% and never complete).
             pin.currentVersion.isNotBlank() &&
-                (pin.latestVersion.isBlank() || sameVersion(pin.currentVersion, pin.latestVersion)) ->
+                (pin.latestVersion.isBlank() || !isNewerClientRelease(pin.latestVersion, pin.currentVersion)) ->
                 ClientRowView(pin = pin, downloadPhase = "done", downloadPct = 100.0)
             else -> ClientRowView(pin = pin)
         }

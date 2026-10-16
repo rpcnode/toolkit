@@ -1,0 +1,28 @@
+# fluent node. {{chain}} = fluent-mainnet | fluent-testnet. VERIFIED in docs/10-running-node-locally.md: `fluent node --chain=… --datadir=… --http`, `fluent init`, `fluent download`.
+# --ws/--port/--discovery.port/--metrics/--rpc.* are standard reth flags (the binary is a reth node) — INFERRED to be present; verify with `fluent node --help` at the pinned version.
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={{bin}} node \
+  --chain={{chain}} \
+  --datadir={{datadir}} \
+  --http --http.addr=0.0.0.0 --http.port={{http_port}} --http.api=eth,net,web3,rpc \
+  --ws --ws.addr=0.0.0.0 --ws.port={{ws_port}} --ws.api=eth,net,web3,rpc \
+  --port={{p2p_port}} --discovery.port={{p2p_port}} \
+  --rpc.max-connections=3000 --rpc.max-response-size=64 --rpc.max-blocks-per-filter=50000 \
+  --metrics=127.0.0.1:{{metrics_port}} \
+  --ipcdisable
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=300
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE=1048576
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

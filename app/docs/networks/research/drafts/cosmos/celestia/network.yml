@@ -1,0 +1,207 @@
+# Celestia — CometBFT / Cosmos SDK family recipe (chains/cometbft shared code, chains/celestia thin classes).
+# Snapshot: see snapshotTypes per env. Ports live in clients.yml beside this file. Draft — see specs/cosmos/FAMILY.md.
+label: Celestia
+hostPackages:
+  - lz4
+diskRoles:
+  - id: home
+    label: Node home (config + data)
+    media: nvme
+diskNotes:
+  - "--home is the home role leaf: config/ (config.toml, app.toml, genesis.json, node_key.json) and data/ live there; snapshots extract into it."
+  - "Pruned RPC node by default (pruning=default, min-retain-blocks=3000). Archive history is not offered."
+  - "The binary, logs and .toolkit state live under the node_dir."
+  - "Use the MULTIPLEXER build (celestia-app_Linux_*.tar.gz, ~360 MB), not celestia-app-standalone: mainnet is on app v9 and the multiplexer embeds v9.0.8 and switches to v10 at activation."
+  - "Linux multiplexer binaries need glibc >= 2.38 (Ubuntu 24.04)."
+  - "celestia-appd start needs --rpc.grpc_laddr since v4 (catalog role grpc_laddr)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Celestia Mainnet Beta (celestia)
+    diskHintGiB: 2048
+    fullNodeGiB: 2048
+    cpuCores: 16
+    memoryGiB: 32
+    snapshot: required
+    publicTip:
+      urls:
+        - https://celestia-rpc.polkachu.com
+        - https://celestia-rpc.publicnode.com
+        - https://rpc.celestia.pops.one
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: "Pruned · Polkachu (lz4, daily)"
+        hint: "Community snapshot (~3.2 GB lz4). Default."
+        diskGiB: 250
+        default: true
+      - id: statesync
+        kind: full
+        label: "State sync (no download)"
+        hint: "State sync from Polkachu RPC; ~1 h (docs)."
+        diskGiB: 250
+  - id: testnet
+    label: Celestia Mocha (mocha-5)
+    diskHintGiB: 1024
+    fullNodeGiB: 512
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: required
+    publicTip:
+      urls:
+        - https://rpc-mocha.pops.one
+        - https://celestia-testnet-rpc.polkachu.com
+    snapshotTypes:
+      - id: pruned
+        kind: full
+        label: "Pruned · Polkachu testnet (lz4)"
+        hint: "Community testnet snapshot (Polkachu)."
+        diskGiB: 100
+        default: true
+      - id: statesync
+        kind: full
+        label: "State sync (no download)"
+        hint: "State sync from Polkachu testnet RPC."
+        diskGiB: 100
+
+# config.toml / app.toml are patched on every Start (chains/cometbft CometbftTomlPatch); literals below equal CometbftConfigDefaults + the unit.
+clientConfig:
+  program: celestia-appd
+  format: flags
+  bindings:
+    - key: home
+      source: disk_role_dir
+      role: home
+      description: "celestia-appd --home (Disks home role)"
+    - key: rpc.laddr
+      source: catalog_port
+      role: http
+      description: CometBFT RPC port (0.0.0.0)
+    - key: p2p.laddr
+      source: catalog_port
+      role: p2p
+      description: CometBFT P2P port (0.0.0.0, TCP)
+    - key: instrumentation.prometheus_listen_addr
+      source: catalog_port
+      role: metrics
+      description: Prometheus port (bound to 127.0.0.1)
+    - key: api.address
+      source: catalog_port
+      role: api
+      description: Cosmos REST (LCD) port (0.0.0.0)
+    - key: grpc.address
+      source: catalog_port
+      role: grpc
+      description: Cosmos gRPC port (0.0.0.0)
+    - key: rpc.grpc_laddr
+      source: catalog_port
+      role: grpc_laddr
+      description: celestia-core gRPC (required flag since v4; 127.0.0.1)
+    - key: rpc.unsafe
+      source: literal
+      value: "false"
+      description: CometBFT unsafe RPC routes stay off
+    - key: rpc.pprof_laddr
+      source: literal
+      value: ""
+      description: pprof disabled (default localhost:6060 collides between nodes)
+    - key: rpc.max_open_connections
+      source: literal
+      value: "2000"
+      description: RPC + WebSocket connection cap (CometBFT default 900)
+    - key: rpc.max_subscription_clients
+      source: literal
+      value: "100"
+      description: Max /subscribe clients
+    - key: rpc.max_subscriptions_per_client
+      source: literal
+      value: "5"
+      description: Max subscriptions per client
+    - key: rpc.timeout_broadcast_tx_commit
+      source: literal
+      value: "10s"
+      description: broadcast_tx_commit timeout
+    - key: rpc.max_body_bytes
+      source: literal
+      value: "1000000"
+      description: Max RPC request body
+    - key: p2p.max_num_inbound_peers
+      source: literal
+      value: "40"
+      description: Inbound peer slots
+    - key: p2p.max_num_outbound_peers
+      source: literal
+      value: "10"
+      description: Outbound peer slots
+    - key: mempool.size
+      source: literal
+      value: "5000"
+      description: Mempool tx count
+    - key: mempool.max_txs_bytes
+      source: literal
+      value: "1073741824"
+      description: Mempool bytes (1 GiB)
+    - key: tx_index.indexer
+      source: literal
+      value: "kv"
+      description: Tx indexer (tx-by-hash and /tx_search)
+    - key: instrumentation.prometheus
+      source: literal
+      value: "true"
+      description: Prometheus on (loopback only)
+    - key: minimum-gas-prices
+      source: literal
+      value: "0.002utia"
+      description: app.toml minimum-gas-prices (Polkachu / chain minimum)
+    - key: pruning
+      source: literal
+      value: "default"
+      description: app.toml state pruning (default = last 362880 states)
+    - key: min-retain-blocks
+      source: literal
+      value: "3000"
+      description: app.toml CometBFT block retention (0 = keep all)
+    - key: api.enable
+      source: literal
+      value: "true"
+      description: REST API on
+    - key: api.swagger
+      source: literal
+      value: "false"
+      description: Swagger UI off
+    - key: api.max-open-connections
+      source: literal
+      value: "1000"
+      description: REST connection cap
+    - key: api.rpc-max-body-bytes
+      source: literal
+      value: "1000000"
+      description: REST max body
+    - key: api.enabled-unsafe-cors
+      source: literal
+      value: "false"
+      description: No wildcard CORS on REST
+    - key: grpc.enable
+      source: literal
+      value: "true"
+      description: gRPC on
+    - key: grpc.max-recv-msg-size
+      source: literal
+      value: "10485760"
+      description: gRPC max receive message
+    - key: grpc-web.enable
+      source: literal
+      value: "false"
+      description: grpc-web off
+    - key: state-sync.snapshot-interval
+      source: literal
+      value: "0"
+      description: Do not serve state-sync snapshots
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for celestia-appd
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

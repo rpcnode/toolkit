@@ -177,6 +177,9 @@ class StartNodeSnapshotUseCase(
         EvmProfiles.ALL.firstOrNull { it.network == node.network }?.let { profile ->
             url = EvmSnapshotSentinel.withParams(url, EvmLaunchOptions.extraFrom(node.installOptionsJson, profile.optionKeys))
         }
+        // ... and every scripted restore may need the directory of a disk role besides its own (Polygon: Heimdall's home and Bor's):
+        // `dir_<role id>` parameters, ignored by the scripts that do not read them.
+        url = EvmSnapshotSentinel.withParams(url, diskRoleDirParams(node.diskLayoutJson))
         val server = servers.find(node.serverId) ?: return StartNodeSnapshotResult.ServerNotFound
         val agentUrl = server.agentUrl.trim()
         val agentKey = server.agentKey.trim()
@@ -207,6 +210,12 @@ class StartNodeSnapshotUseCase(
         }
     }
 }
+
+/** `dir_<role id>` → directory for every disk role of the layout that has one. */
+internal fun diskRoleDirParams(diskLayoutJson: String): Map<String, String> =
+    decodeNodeDiskLayout(diskLayoutJson)?.roles.orEmpty()
+        .filter { it.dir.isNotBlank() }
+        .associate { "dir_${it.id}" to it.dir.trim() }
 
 private fun snapshotsRoleDir(diskLayoutJson: String): String?
 {

@@ -1,0 +1,46 @@
+# stacks-node from stacks-network/stacks-core GitHub releases (zip with stacks-node, stacks-signer, stacks-cli, …; no Docker).
+# VERIFIED 2026-10-13 (release 4.0.5): linux-glibc-x64.zip (218 MB), linux-glibc-arm64.zip (202 MB), musl variants, CHECKSUMS.txt
+# (sha512 per asset). Zip content (x64): clarity-cli marf-squash stacks-cli stacks-inspect stacks-node stacks-signer — only
+# stacks-node is run; the host needs unzip (or the agent a zip extractor): the toolkit's other recipes extract tar archives.
+# Asset names are versionless upstream — the stable on-disk names below keep them apart from other zips in node_dir.
+# Release rule: newest non-prerelease tag (bare semver 4.0.5; tags like 3.4.0.0.4 exist). The testnet (krypton, Hiro-hosted
+# regtest) can lag the mainnet release: Hiro's testnet currently reports stacks-node 4.0.1, mainnet 4.0.4 — a newer follower
+# stays compatible with the epoch table in the sample config, but check the sample conf at the tag (sample/conf/testnet-follower-conf.toml).
+# follower-conf.toml = the tag's own sample follower conf (VERIFIED path at 4.0.5); Start copies it to stacks.toml and patches
+# working_dir / rpc_bind / p2p_bind / prometheus_bind / [burnchain] / [connection_options] — the testnet sample carries
+# the whole krypton epoch table and pox_5 keys, which must come from the tag, not from us.
+programs:
+  - env: mainnet
+    id: stacks-node
+    source: { type: github, repo: stacks-network/stacks-core }
+    artifacts:
+      - name: "stacks-linux-glibc-x64.zip"
+        nameAarch64: "stacks-linux-glibc-arm64.zip"
+        urlTemplate: "https://github.com/stacks-network/stacks-core/releases/download/{tag}/linux-glibc-x64.zip"
+        urlTemplateAarch64: "https://github.com/stacks-network/stacks-core/releases/download/{tag}/linux-glibc-arm64.zip"
+    configs:
+      - name: follower-conf.toml
+        urlTemplate: "https://raw.githubusercontent.com/stacks-network/stacks-core/{tag}/sample/conf/mainnet-follower-conf.toml"
+    requirements: { logFile: logs/stacks.log }
+    ports:
+      - { role: http, port: 42500, label: "stacks-node RPC (/v2/*)", config: required }
+      - { role: p2p, port: 42502, label: "P2P", config: required }
+      - { role: metrics, port: 42504, label: "Prometheus", config: required }
+  - env: testnet
+    id: stacks-node
+    source: { type: github, repo: stacks-network/stacks-core }
+    artifacts:
+      - name: "stacks-linux-glibc-x64.zip"
+        nameAarch64: "stacks-linux-glibc-arm64.zip"
+        urlTemplate: "https://github.com/stacks-network/stacks-core/releases/download/{tag}/linux-glibc-x64.zip"
+        urlTemplateAarch64: "https://github.com/stacks-network/stacks-core/releases/download/{tag}/linux-glibc-arm64.zip"
+    configs:
+      - name: follower-conf.toml
+        urlTemplate: "https://raw.githubusercontent.com/stacks-network/stacks-core/{tag}/sample/conf/testnet-follower-conf.toml"
+    requirements: { logFile: logs/stacks.log }
+    ports:
+      - { role: http, port: 42510, label: "stacks-node RPC (/v2/*)", config: required }
+      - { role: p2p, port: 42512, label: "P2P", config: required }
+      - { role: metrics, port: 42514, label: "Prometheus", config: required }
+# snapshots: Hiro archive (archive.hiro.so/<env>/stacks-blockchain/<env>-stacks-blockchain-latest.tar.zst + .sha256) — resolved by
+# StacksSnapshotResolver, not mirrored on the toolkit CDN (275 GB).

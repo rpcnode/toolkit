@@ -2,9 +2,12 @@
 # RpcNode TON indexer — toncenter v3 API, no containers. Built from source and run as plain processes:
 #   ton-index-postgres (reads the node's DB)  +  Redis (own instance, loopback)  +  event classifier (Python)
 #   +  ton-index-go (the v3 API, :{{api_port}}).
-# DATABASE: the host's PostgreSQL is used when there is one (it is not touched, only a separate role, database and
-# tablespace for this node are created); when there is none, `postgresql` is installed from apt and tuned for the load.
-# Removing the node runs bin/rpcnode-on-remove.sh, which drops the role, database and tablespace again.
+# DATABASE: a PostgreSQL CLUSTER of its own for this node (Debian/Ubuntu `pg_createcluster`, no containers): data AND WAL live in
+# <indexer dir>/pgcluster, i.e. on the indexer disk, on a loopback-only catalog port. The host's other PostgreSQL servers are
+# never touched, and a heavy indexer cannot stall anyone else's WAL / checkpoints (and the system disk takes no WAL traffic).
+# A node installed before this (state file ton-indexer/pg.env with PG_TS=) keeps its role/database/tablespace in the host's
+# shared server exactly as it was: nothing is migrated behind the operator's back.
+# Removing the node runs bin/rpcnode-on-remove.sh, which drops the cluster (or, for the old layout, the role/database/tablespace).
 # Flow: wait for the TON bootstrap (that is what installs clang) -> apt packages -> build (long, once per release tag) ->
 # database -> wait until the node is within MAX_LAG seconds of the network -> start everything and keep it running.
 # Indexing starts from the block where the node was synced (RPCNODE_TON_INDEXER_FROM=<seqno> in /etc/rpcnode/ton.env
@@ -18,6 +21,7 @@ BOOT_MARKER={{bootstrap_marker}}
 HTTP_PORT={{http_port}}
 API_PORT={{api_port}}
 REDIS_PORT={{redis_port}}
+CLUSTER_PORT={{pg_port}}
 IS_TESTNET={{is_testnet}}
 MAX_LAG={{max_lag}}
 TAG="${RPCNODE_TON_INDEXER_TAG:-{{release_tag}}}"
@@ -151,7 +155,12 @@ build_classifier() {
 
 # --- 3. database -----------------------------------------------------------------------------------------------------
 PG_ROLE="rpcnode_ton_${ENV_ID}"; PG_DB="rpcnode_ton_${ENV_ID}"; PG_TS="rpcnode_ton_${ENV_ID}_ts"
+PG_CLUSTER="rpcnode-ton-${ENV_ID}"; PG_DATA="$IDX/pgcluster"; PGVER=""
 PG_PORT=""; PG_BY_US=0; PGURL=""
+# "cluster" = this node's own PostgreSQL cluster (default); "shared" = installed before that: role/database/tablespace in the
+# host's server, kept working as it was
+PG_MODE=cluster
+if [[ -f "$PWDIR/pg.env" ]] && grep -q '^PG_TS=' "$PWDIR/pg.env"; then PG_MODE=shared; fi
 if [[ -f "$PWDIR/pg.env" ]] && grep -q '^PG_INSTALLED_BY_US=1' "$PWDIR/pg.env"; then PG_BY_US=1; fi
 
 # runs psql as the postgres OS user on the local socket (superuser on a stock install)
@@ -238,8 +247,9 @@ ensure_password() {
   export PGPASSFILE="$PGPASS"
 }
 
-# a separate role, tablespace (the data goes to the indexer disk) and database for this node; idempotent
-provision_database() {
+# OLD LAYOUT (PG_MODE=shared): a separate role, tablespace (the data goes to the indexer disk) and database for this node in the
+# host's server; idempotent. The WAL stays in that server's own data directory.
+provision_shared_database() {
   ensure_server || return 1
   PGURL="postgresql://$PG_ROLE@127.0.0.1:$PG_PORT/$PG_DB"
   mkdir -p "$TS_DIR"; chown postgres:postgres "$TS_DIR"; chmod 700 "$TS_DIR"
@@ -286,6 +296,111 @@ ENVFILE
     log "cannot log in as $PG_ROLE over 127.0.0.1:$PG_PORT — check listen_addresses and a scram-sha-256/md5 rule for 127.0.0.1 in pg_hba.conf"
     return 1
   fi
+}
+
+# --- NEW LAYOUT (PG_MODE=cluster): a PostgreSQL cluster of this node's own ------------------------------------------------
+# newest installed PostgreSQL major version (Debian/Ubuntu layout), empty = none
+PG_LIB_DIR="${RPCNODE_PG_LIB_DIR:-/usr/lib/postgresql}"; PG_ETC_DIR="${RPCNODE_PG_ETC:-/etc/postgresql}"
+pg_version() { ls "$PG_LIB_DIR" 2>/dev/null | grep -E '^[0-9]+$' | sort -n | tail -1; }
+
+cluster_exists() { pg_lsclusters -h 2>/dev/null | awk -v v="$PGVER" -v n="$PG_CLUSTER" '$1 == v && $2 == n { f = 1 } END { exit !f }'; }
+
+ensure_cluster_packages() {
+  PGVER="$(pg_version)"
+  if [[ -n "$PGVER" ]] && command -v pg_createcluster >/dev/null 2>&1; then return 0; fi
+  command -v apt-get >/dev/null 2>&1 || { log "no PostgreSQL found and apt-get is not available — install postgresql first"; return 1; }
+  # the stock `main` cluster (port 5432) that the package creates is not wanted: this node runs its own. It is dropped again only
+  # when it did not exist before the install (an existing server is never touched).
+  local had_clusters=0
+  command -v pg_lsclusters >/dev/null 2>&1 && [[ -n "$(pg_lsclusters -h 2>/dev/null)" ]] && had_clusters=1
+  log "installing the PostgreSQL packages (this node gets a cluster of its own)"
+  DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql util-linux || return 1
+  PGVER="$(pg_version)"
+  [[ -n "$PGVER" ]] || { log "PostgreSQL packages are installed but no version was found under /usr/lib/postgresql"; return 1; }
+  if (( had_clusters == 0 )) && pg_lsclusters -h 2>/dev/null | awk -v v="$PGVER" '$1 == v && $2 == "main" { f = 1 } END { exit !f }'; then
+    pg_dropcluster --stop "$PGVER" main >/dev/null 2>&1 && log "dropped the stock main cluster that the package had just created"
+  fi
+  PG_BY_US=1
+}
+
+# settings of the cluster of this node (it is ours: tuned for a heavy write/read load from the size of this machine)
+write_cluster_conf() {
+  local conf_dir="$PG_ETC_DIR/$PGVER/$PG_CLUSTER/conf.d" new
+  mkdir -p "$conf_dir" || return 1
+  new="$( { echo "# RpcNode TON indexer cluster — loopback only, data and WAL on the indexer disk"; echo "listen_addresses = '127.0.0.1'"; pg_server_settings; } )"
+  if [[ "$(cat "$conf_dir/90-rpcnode-ton-indexer.conf" 2>/dev/null)" != "$new" ]]; then
+    printf '%s\n' "$new" >"$conf_dir/90-rpcnode-ton-indexer.conf"
+    CLUSTER_CONF_CHANGED=1
+  fi
+}
+
+provision_cluster_database() {
+  local i svc
+  CLUSTER_CONF_CHANGED=0
+  ensure_cluster_packages || return 1
+  svc="postgresql@${PGVER}-${PG_CLUSTER}.service"
+  if ! cluster_exists; then
+    if [[ -e "$PG_DATA" && -n "$(ls -A "$PG_DATA" 2>/dev/null)" ]]; then
+      log "$PG_DATA exists and is not empty but is not a registered cluster — move it away or remove it"; return 1
+    fi
+    chmod 755 "$IDX"
+    log "creating PostgreSQL $PGVER cluster $PG_CLUSTER (port $CLUSTER_PORT, data and WAL in $PG_DATA)"
+    pg_createcluster "$PGVER" "$PG_CLUSTER" -d "$PG_DATA" -p "$CLUSTER_PORT" --start-conf=auto || return 1
+    CLUSTER_CONF_CHANGED=1
+  fi
+  PG_PORT="$CLUSTER_PORT"
+  write_cluster_conf || return 1
+  if ! pg_isready -q -p "$PG_PORT"; then
+    pg_ctlcluster "$PGVER" "$PG_CLUSTER" start || return 1
+  elif (( CLUSTER_CONF_CHANGED == 1 )); then
+    pg_ctlcluster "$PGVER" "$PG_CLUSTER" restart || return 1
+  fi
+  systemctl enable "$svc" >/dev/null 2>&1 || true
+  for i in $(seq 1 90); do pg_isready -q -p "$PG_PORT" && break; sleep 2; done
+  pg_isready -q -p "$PG_PORT" || { log "the PostgreSQL cluster $PG_CLUSTER did not start on port $PG_PORT (pg_lsclusters, /var/log/postgresql)"; return 1; }
+  PGURL="postgresql://$PG_ROLE@127.0.0.1:$PG_PORT/$PG_DB"
+  local pw ram_mb workmem maint
+  pw="$(cat "$PW_FILE")"
+  if psql_su -d postgres -c "select 1 from pg_roles where rolname = '$PG_ROLE'" | grep -q 1; then
+    psql_su -d postgres -c "alter role $PG_ROLE login password '$pw'" || return 1
+  else
+    psql_su -d postgres -c "create role $PG_ROLE login password '$pw'" || return 1
+    log "created role $PG_ROLE"
+  fi
+  if ! psql_su -d postgres -c "select 1 from pg_database where datname = '$PG_DB'" | grep -q 1; then
+    psql_su -d postgres -c "create database $PG_DB owner $PG_ROLE" || return 1
+    log "created database $PG_DB"
+    rm -f "$STATE_DIR/ton-indexer-migrated-$TAG"
+  fi
+  ram_mb="$(awk '/MemTotal/ { printf "%d", $2 / 1024 }' /proc/meminfo)"
+  workmem=$(( ram_mb / 512 )); (( workmem < 16 )) && workmem=16; (( workmem > 128 )) && workmem=128
+  maint=$(( ram_mb / 16 )); (( maint > 4096 )) && maint=4096; (( maint < 128 )) && maint=128
+  psql_su -d postgres -c "alter role $PG_ROLE set work_mem = '${workmem}MB'" \
+    -c "alter role $PG_ROLE set maintenance_work_mem = '${maint}MB'" \
+    -c "alter role $PG_ROLE set random_page_cost = '1.1'" \
+    -c "alter role $PG_ROLE set effective_io_concurrency = '200'" \
+    -c "alter role $PG_ROLE set max_parallel_workers_per_gather = '4'" || return 1
+  # what the removal hook needs to undo all of it
+  cat >"$PWDIR/pg.env" <<ENVFILE
+PG_MODE=cluster
+PG_PORT=$PG_PORT
+PG_ROLE=$PG_ROLE
+PG_DB=$PG_DB
+PG_VERSION=$PGVER
+PG_CLUSTER=$PG_CLUSTER
+PG_DATA=$PG_DATA
+PG_INSTALLED_BY_US=$PG_BY_US
+ENVFILE
+  printf '127.0.0.1:%s:%s:%s:%s\n' "$PG_PORT" "$PG_DB" "$PG_ROLE" "$pw" >"$PGPASS"
+  chmod 600 "$PGPASS"
+  if ! psql "$PGURL" -Atc 'select 1' >/dev/null 2>&1; then
+    log "cannot log in as $PG_ROLE over 127.0.0.1:$PG_PORT — check /etc/postgresql/$PGVER/$PG_CLUSTER/pg_hba.conf (a scram-sha-256/md5 rule for 127.0.0.1)"
+    return 1
+  fi
+}
+
+provision_database() {
+  if [[ "$PG_MODE" == shared ]]; then provision_shared_database; else provision_cluster_database; fi
 }
 
 # --- 4. node state ---------------------------------------------------------------------------------------------------

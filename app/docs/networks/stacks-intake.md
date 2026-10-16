@@ -1,0 +1,16 @@
+# Network intake — Stacks (stacks-node follower)
+
+VERIFIED = read from upstream source / curl at stacks-core 4.0.5 (2026-10-13/14); INFERRED = not checked. Not run on a Linux host.
+
+| Field | Answer |
+|---|---|
+| Network id / envs | `stacks` — `mainnet`, `testnet` (`krypton`, a Hiro-hosted Bitcoin regtest) |
+| Status | **implemented** (`chains/stacks`); mainnet needs a Bitcoin node you provide |
+| Ports | mainnet 42500 RPC / 42502 p2p / 42504 Prometheus (127.0.0.1); testnet 42510 / 42512 / 42514 |
+
+- **Binary:** `linux-glibc-x64.zip` / `linux-glibc-arm64.zip` of `stacks-network/stacks-core` (needs `unzip` on the host — `hostPackages`); `StacksClientReleaseResolver` = highest final numeric tag with the zip (tags have up to five parts; `signer-*` tags are ignored).
+- **Config:** the tag's `sample/conf/<env>-follower-conf.toml` (VERIFIED) is synced and patched into `<node_dir>/stacks.toml` (0600) on every Start: `[node] working_dir, rpc_bind, p2p_bind, prometheus_bind=127.0.0.1`, `[connection_options] max_http_clients=3000` (VERIFIED field, vendor default 1000), and on mainnet `[burnchain] peer_host, rpc_port, peer_port, username, password`. Run: `stacks-node start --config=<stacks.toml>` (pico-args accepts `=`). `auth_token` stays unset (a follower has no signer).
+- **Bitcoin (mainnet):** the Bitcoin chain of this toolkit is not modified. Install options `burnchain_host` (127.0.0.1), `burnchain_rpc_port` (8432 = the Bitcoin node's login-free RPC proxy; no credentials needed, set 8332 + user/password only for a bitcoind with its own `rpcauth`), `burnchain_p2p_port` (8333), `burnchain_user`, `burnchain_password` point at a Bitcoin Core node you run (`rpcuser`/`rpcpassword` — stacks-node cannot read the `.cookie`, VERIFIED `BurnchainConfig`, and the toolkit's Bitcoin node is cookie-only, so the default goes through the login-free proxy port of that Bitcoin node (decided by the user) — nothing to create on the Bitcoin side). Start refuses to run when host:rpc / host:p2p are not reachable. The password is stored with the install options (like other credentials), written 0600 into `stacks.toml`, stripped from the recorded launch, never in argv or the unit. Bitcoin must be non-pruned for a from-genesis sync; after the Hiro snapshot a pruned Bitcoin works (Stacks docs). A generic `parentNode` picker (pick the panel's Bitcoin node) was not built: open decision.
+- **Snapshot:** `archive.hiro.so/<env>/stacks-blockchain/<env>-stacks-blockchain-latest.tar.zst` (mainnet ~275 GB, testnet ~6 GB): `required` on mainnet in practice, `optional` on testnet. Streamed `HTTP → tar -I zstd -x` into the node dir by the existing agent code (needs `zstd` on the host — `hostPackages`; the archive's top directory `mainnet/` / `krypton/` is `<working_dir>/<mode>`, VERIFIED `get_chainstate_path`). The size comes from a ranged GET (HEAD 403s on the signed R2 URL). The restore is destructive: run it before the first Start. No checksum is verified (the `.sha256` names the dated file).
+- **Height / tip:** `GET /v2/info` → `stacks_tip_height` on the node and on `api.hiro.so` / `api.mainnet.hiro.so` / `api.testnet.hiro.so`; `tipLagBlocks: 10` (Nakamoto blocks come every few seconds and the Hiro tip can lead).
+- **INFERRED:** hardware (4 c / 16 GB, extracted size < ~700 GB), that a 4.0.x follower runs on krypton, the 3000 clients value.

@@ -1,0 +1,183 @@
+# Fuel Ignition (fuel-core). Needs an Ethereum RPC for the relayer: mainnet -> Ethereum mainnet, testnet -> Ethereum Sepolia
+# (a wrong-network endpoint makes the relayer fail to start). Same l1Parent picker as optimism (public default or a panel node).
+# No snapshot: sync from genesis over P2P.
+label: Fuel
+diskRoles:
+  - id: state
+    label: Database (RocksDB)
+    media: nvme
+diskNotes:
+  - "--db-path is <state role>/db. Official hardware: 8 cores / 16 GB / 1 TB recommended (2 cores / 8 GB / 500 GB minimum)."
+  - "The node keeps 7 days of rewindable state (--state-rewind-duration 7d default) for historical queries."
+  - "The relayer talks to an Ethereum JSON-RPC (not the beacon API): use a node you control or the public default; heavy eth_getLogs paging."
+  - "The libp2p key (.toolkit/fuel-p2p.key) and the relayer URL (.toolkit/fuel.env, it may carry an API key) are written 0600 and reach fuel-core through the unit's EnvironmentFile, never argv."
+  - "Metrics are served on the GraphQL port at /v1/metrics (no separate port): block that path at the proxy. --debug is never passed."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Fuel Ignition Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 1024
+    cpuCores: 8
+    memoryGiB: 16
+    snapshot: never
+    tipLagBlocks: 10
+    publicTip:
+      urls:
+        - https://mainnet.fuel.network/v1/graphql
+    l1Parent:
+      rpc: https://ethereum-rpc.publicnode.com
+      pickHelp: |
+        Fuel Ignition relays deposits from Ethereum mainnet. Click Public for the default publicnode L1, or an active
+        Ethereum mainnet node from this panel (same-host uses 127.0.0.1).
+  - id: testnet
+    label: Fuel Ignition Testnet
+    diskHintGiB: 1024
+    fullNodeGiB: 1024
+    cpuCores: 8
+    memoryGiB: 16
+    snapshot: never
+    tipLagBlocks: 10
+    publicTip:
+      urls:
+        - https://testnet.fuel.network/v1/graphql
+    l1Parent:
+      rpc: https://ethereum-sepolia-rpc.publicnode.com
+      pickHelp: |
+        Fuel testnet relays from Ethereum Sepolia. Click Public for the default publicnode Sepolia, or an active
+        Ethereum Sepolia node from this panel (same-host uses 127.0.0.1).
+
+# Flags of `fuel-core run` in the systemd unit (chains/fuel, FuelUnitBodies). format: flags - no conf patch.
+# Vendor-default capacity values (VERIFIED against v0.48.3 clap definitions) are written explicitly; the prod preset raises them.
+# Literals equal FuelSettings / FuelChains and the unit LimitNOFILE (FuelCatalogTest). Per-env rows use onlyEnv.
+clientConfig:
+  program: fuel-core
+  format: flags
+  bindings:
+    - key: db-path
+      source: disk_role_dir
+      role: state
+      relative: db
+      description: --db-path (Disks state role, db/ below it)
+    - key: port
+      source: catalog_port
+      role: http
+      description: GraphQL port (--ip 0.0.0.0); also /v1/health and /v1/metrics
+    - key: peering-port
+      source: catalog_port
+      role: p2p
+      description: libp2p P2P port
+    - key: ip
+      source: literal
+      value: "0.0.0.0"
+      description: GraphQL bind address
+    - key: snapshot
+      source: literal
+      value: "chain"
+      description: --snapshot <node_dir>/chain (metadata.json, chain_config.json, state_config.json, state_transition_bytecode.wasm)
+    - key: service-name
+      source: literal
+      value: "rpcnode-fuel"
+      description: Service name
+    - key: relayer
+      source: install_option
+      option: l1_rpc
+      default: ""
+      description: Ethereum JSON-RPC for the relayer (mainnet / Sepolia - must match the env); handed to fuel-core as env RELAYER from a 0600 file
+      testConnect:
+        kind: eth_rpc
+        label: Test connect
+        help: |
+          Panel POSTs eth_blockNumber to this URL. Expect JSON-RPC result with a hex block height.
+          The Fuel relayer needs Ethereum mainnet for Ignition mainnet and Sepolia for the testnet.
+    - key: enable-relayer
+      source: literal
+      value: "true"
+      description: Relayer on (deposits from Ethereum)
+    - key: relayer-v2-listening-contracts
+      source: literal
+      value: "0xAEB0c00D0125A8a788956ade4f4F12Ead9f65DDf"
+      onlyEnv: [mainnet]
+      description: FuelMessagePortal contract
+    - key: relayer-v2-listening-contracts
+      source: literal
+      value: "0x01855B78C1f8868DE70e84507ec735983bf262dA"
+      onlyEnv: [testnet]
+      description: FuelMessagePortal contract
+    - key: relayer-da-deploy-height
+      source: literal
+      value: "20620434"
+      onlyEnv: [mainnet]
+      description: Ethereum height of the portal deployment
+    - key: relayer-da-deploy-height
+      source: literal
+      value: "5827607"
+      onlyEnv: [testnet]
+      description: Ethereum height of the portal deployment
+    - key: relayer-log-page-size
+      source: literal
+      value: "100"
+      onlyEnv: [mainnet]
+      description: eth_getLogs page size (docs.fuel.network mainnet)
+    - key: relayer-log-page-size
+      source: literal
+      value: "500"
+      onlyEnv: [testnet]
+      description: eth_getLogs page size (docs.fuel.network testnet)
+    - key: enable-p2p
+      source: literal
+      value: "true"
+      description: P2P on
+    - key: bootstrap-nodes
+      source: literal
+      value: "/dnsaddr/mainnet.fuel.network"
+      onlyEnv: [mainnet]
+      description: Bootstrap
+    - key: bootstrap-nodes
+      source: literal
+      value: "/dnsaddr/testnet.fuel.network"
+      onlyEnv: [testnet]
+      description: Bootstrap
+    - key: utxo-validation
+      source: literal
+      value: "true"
+      description: Validate UTXOs
+    - key: poa-instant
+      source: literal
+      value: "false"
+      description: Not a dev chain (the upstream default is true)
+    - key: sync-header-batch-size
+      source: literal
+      value: "50"
+      description: Header sync batch (official docs 50; vendor default 10)
+    - key: sync-block-stream-buffer-size
+      source: literal
+      value: "30"
+      description: Block stream buffer (official docs 30; vendor default 10)
+    - key: graphql-number-of-threads
+      source: literal
+      value: "2"
+      description: GraphQL worker threads (vendor default 2; the prod preset raises it)
+    - key: graphql-max-concurrent-queries
+      source: literal
+      value: "1024"
+      description: Concurrent GraphQL queries (vendor default)
+    - key: graphql-request-body-bytes-limit
+      source: literal
+      value: "1048576"
+      description: Max GraphQL request body, bytes (vendor default 1 MiB)
+    - key: api-request-timeout
+      source: literal
+      value: "30s"
+      description: GraphQL request timeout (vendor default)
+    - key: max-peers-connected
+      source: literal
+      value: "50"
+      description: Max P2P peers (vendor default)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for fuel-core (docs ask for ulimit -n >= 32768)
+
+diagnostics:
+  - id: path_mtu

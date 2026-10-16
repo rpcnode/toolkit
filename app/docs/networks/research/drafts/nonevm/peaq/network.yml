@@ -1,0 +1,133 @@
+# peaq (Polkadot parachain 3338, EVM chain id 3338) and the agung testnet (chain id 9990, own private relay chain).
+# No snapshot (peaq publishes none): the parachain syncs over P2P; the embedded relay chain warp-syncs (mainnet).
+label: peaq
+diskRoles:
+  - id: state
+    label: Parachain + embedded relay DB
+    media: nvme
+diskNotes:
+  - "base-path holds the parachain DB (chains/peaq) and the embedded Polkadot relay-chain DB (polkadot/chains/polkadot, pruned 256) — plan ~100 GB for the relay part."
+  - "peaq-node is compiled from the pinned tag on a build agent (Rust, ~1 h); peaq publishes no binary, only a Docker image."
+  - "peaq's public RPC runs the parachain with --state-pruning archive (historical eth_call); pruned is offered for a small full node."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: peaq
+    diskHintGiB: 1024
+    fullNodeGiB: 512
+    archiveGiB: 1024
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: never
+    publicTip:
+      urls:
+        - https://quicknode1.peaq.xyz
+        - https://peaq.api.onfinality.io/public
+        - https://peaq-rpc.publicnode.com
+  - id: agung
+    label: agung Testnet
+    diskHintGiB: 256
+    fullNodeGiB: 128
+    archiveGiB: 256
+    cpuCores: 4
+    memoryGiB: 8
+    snapshot: never
+    publicTip:
+      urls:
+        - https://peaq-agung.api.onfinality.io/public
+
+# Parachain flags before `--`, embedded relay-chain flags after `--` (PeaqUnitBodies, in the unit). format: flags.
+clientConfig:
+  program: peaq-node
+  format: flags
+  bindings:
+    - key: mode
+      source: install_option
+      option: mode
+      default: "archive"
+      description: Parachain state pruning — archive (peaq's own RPC setting) or pruned (--state-pruning 256)
+    - key: relay
+      source: install_option
+      option: relay
+      default: "embedded"
+      description: Relay chain — embedded (own Polkadot light-ish full node, warp sync) or external (--relay-chain-rpc-urls to a Polkadot node of this panel)
+    - key: relay-chain-rpc-urls
+      source: install_option
+      option: relay_rpc
+      default: ""
+      description: ws:// URL of a Polkadot node (same-host uses 127.0.0.1:<polkadot http port>); only for relay=external
+    - key: parachain-id
+      source: literal
+      value: "3338"
+      description: "Parachain id (agung: 2000)"
+    - key: chain
+      source: literal
+      value: "peaq-raw.json"
+      description: "Chain spec file under node_dir (agung: async-agung-parachain-specs.json)"
+    - key: base-path
+      source: disk_role_dir
+      role: state
+      description: --base-path (Disks state role)
+    - key: rpc-port
+      source: catalog_port
+      role: http
+      description: Parachain JSON-RPC port (HTTP + WS, Substrate and eth_*)
+    - key: port
+      source: catalog_port
+      role: p2p
+      description: Parachain P2P port
+    - key: prometheus-port
+      source: catalog_port
+      role: metrics
+      description: Prometheus port (127.0.0.1)
+    - key: relay.rpc-port
+      source: catalog_port
+      role: cl_rpc
+      description: "Embedded relay RPC port, after `--` (127.0.0.1; unused when relay=external)"
+    - key: relay.port
+      source: catalog_port
+      role: cl_p2p
+      description: "Embedded relay P2P port, after `--`"
+    - key: rpc-external
+      source: literal
+      value: "true"
+      description: Listen on all interfaces (safe method set)
+    - key: rpc-methods
+      source: literal
+      value: "safe"
+      description: Only safe RPC methods (peaq's validator guide uses unsafe only on 127.0.0.1)
+    - key: rpc-cors
+      source: literal
+      value: "all"
+      description: CORS origins
+    - key: rpc-max-connections
+      source: literal
+      value: "100"
+      description: Max RPC connections (Substrate default; prod preset raises it)
+    - key: rpc-max-response-size
+      source: literal
+      value: "15"
+      description: Max response MB (Substrate default)
+    - key: runtime-cache-size
+      source: literal
+      value: "64"
+      description: Runtime instance cache (peaq's documented value; Substrate default is 2)
+    - key: in-peers
+      source: literal
+      value: "32"
+      description: Max inbound peers (Substrate default; peaq's validator guide uses 50)
+    - key: out-peers
+      source: literal
+      value: "8"
+      description: Outbound peers (Substrate default; peaq's validator guide uses 50)
+    - key: relay.sync
+      source: literal
+      value: "warp"
+      description: Embedded relay sync mode (mainnet only; agung relay is a private chain and is full-synced)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for peaq-node
+
+diagnostics:
+  - id: path_mtu

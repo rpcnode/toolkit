@@ -1,0 +1,35 @@
+# neard from the official NEAR build bucket (no Docker). near/nearcore GitHub releases carry NO assets; the binary is
+# https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/Linux-<arch>/<version>/neard (VERIFIED 2026-10-14:
+# 2.13.4 x86_64 93.6 MB / aarch64 78.5 MB; 2.14.0-rc.3 x86_64 94.0 MB / aarch64 81.2 MB; no `latest` object, no listing).
+# Version rule (NearClientReleaseResolver): mainnet = highest final release, testnet = highest including -rc.N; a release counts only
+# once its object exists on the bucket. The binary is saved per architecture (neard-x86_64 / neard-aarch64) and Start copies the
+# host's one to bin/neard. The chain files (genesis.json, config.json) are fetched by `neard init` on the first Start.
+programs:
+  - env: mainnet
+    id: neard
+    source: { type: github, repo: near/nearcore }
+    artifacts:
+      - name: "neard-x86_64"
+        nameAarch64: "neard-aarch64"
+        urlTemplate: "https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/Linux-x86_64/{version}/neard"
+        urlTemplateAarch64: "https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/Linux-aarch64/{version}/neard"
+    requirements: { logFile: logs/near.log }
+    ports:
+      - { role: http, port: 42080, label: "JSON-RPC (+ GET /status)", config: required }
+      - { role: p2p, port: 42082, label: "P2P (tcp)", config: required }
+      - { role: metrics, port: 42084, label: "Prometheus (127.0.0.1)", config: required }
+  - env: testnet
+    id: neard
+    source: { type: github, repo: near/nearcore, prerelease: true }
+    artifacts:
+      - name: "neard-x86_64"
+        nameAarch64: "neard-aarch64"
+        urlTemplate: "https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/Linux-x86_64/{version}/neard"
+        urlTemplateAarch64: "https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/Linux-aarch64/{version}/neard"
+    requirements: { logFile: logs/near.log }
+    ports:
+      - { role: http, port: 42090, label: "JSON-RPC (+ GET /status)", config: required }
+      - { role: p2p, port: 42092, label: "P2P (tcp)", config: required }
+      - { role: metrics, port: 42094, label: "Prometheus (127.0.0.1)", config: required }
+# No `snapshots:` - the free nearcore snapshots were deprecated 2025-06-01; bootstrap = epoch sync + state sync from peers
+# (boot nodes refreshed from the public network_info on every Start, the official near-nodes.io recipe).

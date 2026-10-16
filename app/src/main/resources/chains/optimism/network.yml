@@ -1,0 +1,157 @@
+# OP Stack on Optimism (OP Mainnet + OP Sepolia): op-reth + op-node built from source on the host. Snapshot: the OP Labs
+# data directories (datadirs.optimism.io, *.tar.zst) are restored by the node's own run script at the first start —
+# mandatory on OP Mainnet (pre-Bedrock state import), only for archive on OP Sepolia. Directory name = network id.
+label: Optimism
+diskRoles:
+  - id: execution
+    label: Execution DB (op-reth)
+    media: nvme
+  - id: consensus
+    label: Consensus (op-node keys, safedb)
+    media: ssd
+  - id: snapshots
+    label: Snapshot download workspace
+    media: ssd
+diskNotes:
+  - "op-reth and op-node are compiled on the host once per pinned tag (Rust + Go, a long first start); op-geth is end-of-support."
+  - "Full (default) restores the full-storage-v2 snapshot and prunes state/receipts to ~30 days; archive restores the archive-storage-v2 snapshot and never prunes."
+  - "The snapshot archive (.tar.zst) is downloaded into the snapshots role and deleted after extraction — plan for archive + extracted size."
+  - "OP Mainnet cannot start without the snapshot (the pre-Bedrock state import); OP Sepolia full syncs over P2P without one."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: OP Mainnet
+    diskHintGiB: 1536
+    fullNodeGiB: 1024
+    archiveGiB: 6144
+    cpuCores: 8
+    memoryGiB: 64
+    snapshot: never
+    publicTip:
+      urls:
+        - https://mainnet.optimism.io
+    l1Parent:
+      rpc: https://ethereum-rpc.publicnode.com
+      beacon: https://ethereum-beacon-api.publicnode.com
+      pickHelp: |
+        OP Mainnet derives from Ethereum mainnet. Click Public for the default publicnode L1, or an active Ethereum node
+        from this panel (same-host uses 127.0.0.1).
+  - id: sepolia
+    label: OP Sepolia
+    diskHintGiB: 512
+    fullNodeGiB: 256
+    archiveGiB: 2048
+    cpuCores: 4
+    memoryGiB: 32
+    snapshot: never
+    publicTip:
+      urls:
+        - https://sepolia.optimism.io
+    l1Parent:
+      rpc: https://ethereum-sepolia-rpc.publicnode.com
+      beacon: https://ethereum-sepolia-beacon-api.publicnode.com
+      pickHelp: |
+        OP Sepolia derives from Ethereum Sepolia. Click Public for the default publicnode L1, or an active Ethereum Sepolia
+        node from this panel (same-host uses 127.0.0.1).
+
+# Flags of op-reth / op-node (chains/optimism run script). format: flags — no conf patch.
+# Literals mirror OptimismUnitBodies and the unit LimitNOFILE.
+clientConfig:
+  program: op-reth
+  format: flags
+  bindings:
+    - key: node
+      source: install_option
+      option: node
+      default: "full"
+      description: Node type — full (pruned to ~30 days) or archive (no pruning, archive snapshot)
+    - key: datadir
+      source: disk_role_dir
+      role: execution
+      description: op-reth --datadir (Disks execution role)
+    - key: consensus-dir
+      source: disk_role_dir
+      role: consensus
+      description: op-node p2p keys / peerstore / safedb dir (Disks consensus role)
+    - key: snapshots
+      source: disk_role_dir
+      role: snapshots
+      description: Snapshot archive workspace (SSD)
+    - key: http.port
+      source: catalog_port
+      role: http
+      description: op-reth JSON-RPC port
+    - key: ws.port
+      source: catalog_port
+      role: ws
+      description: op-reth WebSocket port
+    - key: authrpc.port
+      source: catalog_port
+      role: engine
+      description: op-reth Engine API port (127.0.0.1)
+    - key: metrics
+      source: catalog_port
+      role: metrics
+      description: op-reth Prometheus port (127.0.0.1)
+    - key: port
+      source: catalog_port
+      role: p2p
+      description: op-reth P2P port (TCP + UDP)
+    - key: discovery.v5.port
+      source: catalog_port
+      role: discv5
+      description: op-reth discv5 UDP port (own port per node, the default 9200 collides between nodes)
+    - key: rpc.port
+      source: catalog_port
+      role: cl_rpc
+      description: op-node RPC port (127.0.0.1)
+    - key: metrics.port
+      source: catalog_port
+      role: cl_metrics
+      description: op-node Prometheus port (127.0.0.1)
+    - key: p2p.listen
+      source: catalog_port
+      role: cl_p2p
+      description: op-node P2P port (TCP + UDP)
+    - key: http.addr
+      source: literal
+      value: "0.0.0.0"
+      description: op-reth JSON-RPC / WebSocket bind address
+    - key: http.api
+      source: literal
+      value: "eth,net,web3"
+      description: op-reth RPC namespaces (debug / trace / txpool are not served on the public port)
+    - key: prune.distance
+      source: literal
+      value: "1296000"
+      description: Full mode only — blocks of state/receipts kept (~30 days at 2 s); block bodies are never pruned
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE for the node
+    - key: l1-rpc
+      source: install_option
+      option: l1_rpc
+      default: ""
+      description: Ethereum L1 execution RPC for op-node (public default; override with your own or local eth)
+      testConnect:
+        kind: eth_rpc
+        label: Test connect
+        help: |
+          Panel POSTs eth_blockNumber to this URL. Expect JSON-RPC result with a hex block height.
+          op-node needs a reachable Ethereum L1 execution RPC (mainnet for OP Mainnet, Sepolia for OP Sepolia).
+    - key: l1-beacon
+      source: install_option
+      option: l1_beacon
+      default: ""
+      description: Ethereum L1 beacon / blob API for op-node (public default)
+      testConnect:
+        kind: beacon_genesis
+        label: Test connect
+        help: |
+          Panel GETs {url}/eth/v1/beacon/genesis. Expect JSON with data.genesis_time.
+          The beacon / blob API is required since Ecotone.
+
+# Node page checks (host agent). path_mtu: PMTU black hole (path < interface MTU) makes peers time out.
+diagnostics:
+  - id: path_mtu

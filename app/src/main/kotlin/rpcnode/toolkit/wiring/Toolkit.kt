@@ -40,6 +40,7 @@ import rpcnode.toolkit.chains.ethereum.infrastructure.http.EthereumClientRelease
 import rpcnode.toolkit.chains.ethereum.infrastructure.http.EthereumGethArtifactUrlResolver
 import rpcnode.toolkit.chains.ethereum.infrastructure.http.EthereumNetworkTipProbe
 import rpcnode.toolkit.chains.ethereum.infrastructure.start.EthereumNodeStart
+import rpcnode.toolkit.chains.polygon.infrastructure.PolygonSnapshot
 import rpcnode.toolkit.chains.polygon.infrastructure.http.PolygonClientReleaseResolver
 import rpcnode.toolkit.chains.polygon.infrastructure.http.PolygonNetworkTipProbe
 import rpcnode.toolkit.chains.polygon.infrastructure.start.PolygonNodeStart
@@ -437,6 +438,7 @@ class Toolkit(
                 NetworkId.CARDANO to CardanoSnapshotResolver(),
                 NetworkId.ARC to ArcSnapshotResolver(),
                 NetworkId.STARKNET to StarknetSnapshotResolver(mirrors = snapshotMirrors),
+                NetworkId.POLYGON to PolygonSnapshot.resolver(),
             )
             val resolveSnapshot = ResolveSnapshotUseCase(catalog, snapshotResolvers)
             val cdnMirrorProbe: CdnMirrorProbe = HttpCdnMirrorProbe()

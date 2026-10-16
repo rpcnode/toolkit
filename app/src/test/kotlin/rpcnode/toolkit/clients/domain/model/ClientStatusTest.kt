@@ -31,6 +31,34 @@ class ClientStatusTest
     }
 
     @Test
+    fun ok_when_installed_build_is_ahead_of_latest()
+    {
+        // bsc/mainnet: installed 1.8.0-alpha, latest release with the config zip is 1.7.8 — not an update
+        assertEquals(ClientStatus.OK, ClientStatus.compute("1.8.0-alpha", "1.7.8", "", ""))
+        assertEquals(ClientStatus.PIN, ClientStatus.compute("1.8.0-alpha", "1.7.8", "pinned", ""))
+        assertEquals(ClientStatus.STALE, ClientStatus.compute("1.7.8", "1.8.0-alpha", "", ""))
+    }
+
+    @Test
+    fun isNewerClientRelease_compares_the_leading_number()
+    {
+        assertEquals(false, isNewerClientRelease("1.7.8", "1.8.0-alpha"))
+        assertEquals(false, isNewerClientRelease("v1.7.8", "1.8.0"))
+        assertEquals(false, isNewerClientRelease("1.8.0", "v1.8.0"))
+        assertEquals(true, isNewerClientRelease("1.8.0", "1.8.0-alpha"))
+        assertEquals(true, isNewerClientRelease("1.10.0", "1.9.9"))
+        assertEquals(true, isNewerClientRelease("1.8.1", "1.8"))
+        assertEquals(false, isNewerClientRelease("1.8", "1.8.1"))
+        assertEquals(true, isNewerClientRelease("nile-v4.8.2.3-pq1-build2", "nile-v4.8.2.3-pq1-build1"))
+        assertEquals(false, isNewerClientRelease("GreatVoyage-v4.8.2", "GreatVoyage-v4.8.2.1"))
+        assertEquals(true, isNewerClientRelease("nightly", "stable"))
+        assertEquals(true, isNewerClientRelease("1.8.0", "1.8.0-alpha2"))
+        assertEquals(false, isNewerClientRelease("1.8.0-rc1", "1.8.0"))
+        assertEquals(true, isNewerClientRelease("1.8.0-rc1", "1.8.0-beta2"))
+        assertEquals(false, isNewerClientRelease("1.8.0.0", "1.8.0"))
+    }
+
+    @Test
     fun fail_when_probe_error_present_regardless_of_versions()
     {
         assertEquals(ClientStatus.FAIL, ClientStatus.compute("1.0", "1.1", "", "boom"))

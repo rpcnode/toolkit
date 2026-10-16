@@ -1,0 +1,14 @@
+[Unit]
+Description={{description}}
+After=network-online.target
+
+[Service]
+Type=oneshot
+Restart=no
+LimitNOFILE={{nofile}}
+{{service_extra}}ExecStart={{exec_start}}
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+
+[Install]
+WantedBy=multi-user.target

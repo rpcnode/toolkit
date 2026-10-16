@@ -1,0 +1,39 @@
+# Kaia Endpoint Node (`ken`) — GitHub kaiachain/kaia only tags the version (releases carry NO assets); binaries live on packages.kaia.io.
+# VERIFIED 2026-10-13 (HTTP 200 + sizes): https://packages.kaia.io/kaia/v2.2.2/ken-v2.2.2-0-linux-amd64.tar.gz (58 MB),
+# ken-v2.2.2-0-linux-arm64.tar.gz (54 MB), kcn-…, darwin builds. The "-0" is the package build number: 0 for v2.0.0 … v2.2.2, but v2.2.1 has NO package at -0/-1/-2
+# (VERIFIED): KaiaPackageUrlResolver probes the candidates and fails with a clear message when none exists.
+# https://packages.kaia.io/kaia/<unknown path> answers 200 with a 1-byte body (SPA fallback), so a 404-based probe is NOT reliable: check Content-Length > 1.
+# Tarball layout (VERIFIED by listing): ken-linux-amd64/{bin/ken, bin/kend, conf/kend.conf}. Run `bin/ken` directly (kend is a daemonising shell wrapper).
+# Mainnet and Kairos use the same `ken` binary: selected with --mainnet / --kairos. (The old kend-baobab package is gone.)
+# Ports come from specs/PORTS.md (kaia base 41810): mainnet 41810-41819, kairos 41820-41829. ken's own defaults (8551/8552/32323/61001) are not used.
+programs:
+  - env: mainnet
+    id: ken
+    source: { type: github, repo: kaiachain/kaia }
+    artifacts:
+      - name: "ken-linux-amd64.tar.gz"
+        nameAarch64: "ken-linux-arm64.tar.gz"
+        urlTemplate: "https://packages.kaia.io/kaia/{tag}/ken-{tag}-0-linux-amd64.tar.gz"
+        urlTemplateAarch64: "https://packages.kaia.io/kaia/{tag}/ken-{tag}-0-linux-arm64.tar.gz"
+    requirements: { logFile: logs/kaia.log }
+    ports:
+      - { role: http, port: 41810, label: "HTTP RPC", config: required }
+      - { role: ws, port: 41811, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 41812, label: "P2P", config: required, protocol: both }
+      - { role: metrics, port: 41814, label: "Prometheus", config: required }
+      - { role: subport, port: 41818, label: "P2P sub-port (multichannel)", config: required, protocol: both }
+  - env: kairos
+    id: ken
+    source: { type: github, repo: kaiachain/kaia }
+    artifacts:
+      - name: "ken-linux-amd64.tar.gz"
+        nameAarch64: "ken-linux-arm64.tar.gz"
+        urlTemplate: "https://packages.kaia.io/kaia/{tag}/ken-{tag}-0-linux-amd64.tar.gz"
+        urlTemplateAarch64: "https://packages.kaia.io/kaia/{tag}/ken-{tag}-0-linux-arm64.tar.gz"
+    requirements: { logFile: logs/kaia.log }
+    ports:
+      - { role: http, port: 41820, label: "HTTP RPC", config: required }
+      - { role: ws, port: 41821, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 41822, label: "P2P", config: required, protocol: both }
+      - { role: metrics, port: 41824, label: "Prometheus", config: required }
+      - { role: subport, port: 41828, label: "P2P sub-port (multichannel)", config: required, protocol: both }

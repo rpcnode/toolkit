@@ -1,0 +1,101 @@
+# Fluent (blended-execution EVM L2, reth-based; mainnet chain id 25363, testnet 20994). One binary `fluent` (fluentlabs-xyz/fluentbase bins/fluent) — no companion consensus client,
+# beyond devp2p it follows Fluent's public websocket endpoint (wss://rpc[.testnet].fluent.xyz; VERIFIED in bins/fluent main.rs), so it depends on it.
+# Snapshots (`fluent download`, cdn.fluent.xyz/snapshots/<chain id>/latest.txt, VERIFIED 2026-10-14): testnet 20.5 GB (lz4, block 26.7 M, May 2026: ~13 M blocks behind) is
+# REQUIRED by the docs; mainnet has a 1 GB archive at block 3 M (optional, still 15 M blocks behind). Sizing is INFERRED (no vendor figures).
+label: Fluent
+diskRoles:
+  - id: data
+    label: Node DB
+    media: nvme
+diskNotes:
+  - "fluent --datadir is the data role leaf (use a separate datadir per network — upstream warns about mixing)."
+  - "Testnet: `fluent init --datadir D --chain fluent-testnet` then `fluent download --datadir D --chain fluent-testnet` (official snapshot), then `fluent node`."
+  - "x86_64 only: v1.5.1 ships no aarch64 build."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Fluent Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 512
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: optional
+    tipLagBlocks: 10
+    publicTip:
+      urls:
+        - https://rpc.fluent.xyz
+    snapshotTypes:
+      - id: official
+        kind: full
+        label: Official mainnet snapshot
+        hint: "`fluent download --chain fluent-mainnet`: ~1 GB archive of block 3 M (June 2026), the node syncs the rest."
+        diskGiB: 512
+        default: true
+  - id: testnet
+    label: Fluent Testnet
+    diskHintGiB: 1024
+    fullNodeGiB: 512
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: required
+    tipLagBlocks: 10
+    publicTip:
+      urls:
+        - https://rpc.testnet.fluent.xyz
+    snapshotTypes:
+      - id: official
+        kind: full
+        label: Official testnet snapshot
+        hint: "`fluent download --chain fluent-testnet`: ~20.5 GB lz4 archive (block ~26.7 M, May 2026); resumable."
+        diskGiB: 512
+        default: true
+
+# CLI flags live in the systemd unit (chains/evmfamily FluentProfile). EvmCatalogTest compares the literals with the rendered unit.
+clientConfig:
+  program: fluent
+  format: flags
+  bindings:
+    - key: datadir
+      source: disk_role_dir
+      role: data
+      relative: data
+      description: fluent --datadir (Disks data role, subfolder data)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: JSON-RPC WebSocket port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: P2P port (tcp + udp)
+    - key: metrics-port
+      source: catalog_port
+      role: metrics
+      description: Prometheus port, 127.0.0.1
+    - key: http-api
+      source: literal
+      value: "eth,net,web3,rpc"
+      description: "--http.api / --ws.api"
+    - key: rpc-max-connections
+      source: literal
+      value: "3000"
+      description: "--rpc.max-connections"
+    - key: rpc-max-response-size
+      source: literal
+      value: "64"
+      description: "--rpc.max-response-size (MB)"
+    - key: rpc-max-blocks-per-filter
+      source: literal
+      value: "50000"
+      description: "--rpc.max-blocks-per-filter"
+    - key: limit-nofile
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE of every unit
+
+diagnostics:
+  - id: path_mtu

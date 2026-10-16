@@ -1,0 +1,34 @@
+# ZKsync Era external node = ONE docker image on Docker Hub (matterlabs/external-node, linux/amd64 + linux/arm64, ~170 MB).
+# No release asset exists (zksync-era GitHub releases carry none). The toolkit packs the needed layers over the registry
+# HTTP API (generalised ArbNitroDockerPack, no Docker daemon) into zksync-external-node-<arch>-linux.tar.gz with:
+#   bin/zksync_external_node  bin/sqlx  contracts/  etc/  migrations/      (layers 2,4,6..13 of the v29.1.2 amd64 manifest, ~80 MB; block_reverter / entrypoint.sh skipped)
+# Pinned version: the tag the official docker-compose example / the chain operator's compose uses (image tag, not a GitHub tag).
+programs:
+  - env: mainnet
+    id: zksync_external_node
+    source: { type: pinned, version: "29.4.0", tag: "v29.4.0", label: "matter-labs/zksync-era docs compose (matterlabs/external-node)" }
+    artifacts:
+      - name: "zksync-external-node-x86_64-linux.tar.gz"
+        nameAarch64: "zksync-external-node-aarch64-linux.tar.gz"
+        urlTemplate: "docker://matterlabs/external-node:{tag}"
+        urlTemplateAarch64: "docker://matterlabs/external-node:{tag}"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 42800, label: "HTTP JSON-RPC", config: required }
+      - { role: ws, port: 42801, label: "WebSocket JSON-RPC", config: required }
+      - { role: metrics, port: 42804, label: "Prometheus (127.0.0.1)", config: required }
+      - { role: health, port: 42805, label: "Healthcheck (127.0.0.1)", config: required }
+  - env: sepolia
+    id: zksync_external_node
+    source: { type: pinned, version: "29.4.0", tag: "v29.4.0", label: "matter-labs/zksync-era docs compose (matterlabs/external-node)" }
+    artifacts:
+      - name: "zksync-external-node-x86_64-linux.tar.gz"
+        nameAarch64: "zksync-external-node-aarch64-linux.tar.gz"
+        urlTemplate: "docker://matterlabs/external-node:{tag}"
+        urlTemplateAarch64: "docker://matterlabs/external-node:{tag}"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 42810, label: "HTTP JSON-RPC", config: required }
+      - { role: ws, port: 42811, label: "WebSocket JSON-RPC", config: required }
+      - { role: metrics, port: 42814, label: "Prometheus (127.0.0.1)", config: required }
+      - { role: health, port: 42815, label: "Healthcheck (127.0.0.1)", config: required }

@@ -1,0 +1,123 @@
+# Kaia (mainnet, chain id 8217) + Kairos (testnet, 1001). Client: kaiachain/kaia `ken` (Endpoint Node). Snapshot required — the only
+# practical bootstrap is the official live-pruned chaindata (snapshots.node.kaia.io): mainnet 2.29 TB download / 2.79 TB extracted,
+# kairos 648 GB / 815 GB (manifest.json 2026-10-12, VERIFIED). Full/archive snapshots are no longer published (docs, Sep 2026).
+# Directory name is the network id. Ports live in clients.yml beside this file.
+label: Kaia
+hostPackages:
+  - zstd
+  - pv
+diskRoles:
+  - id: chaindata
+    label: chaindata
+    media: nvme
+  - id: snapshots
+    label: snapshots / additional
+    media: ssd
+diskNotes:
+  - "ken --datadir is the chaindata role leaf. The tarball unpacks klay/chaindata straight into it (`tar --zstd -xf … -C <datadir>`)."
+  - "Download + extract in one pass (`curl … | tar --zstd -xf -`) is needed on the mainnet disk plan: compressed + extracted would not fit on 4 TB."
+  - "Growth ~2.5 GB/day on a full node (Kaia docs)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Kaia Mainnet
+    diskHintGiB: 4096
+    fullNodeGiB: 2800
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: required
+    tipLagBlocks: 6
+    publicTip:
+      urls:
+        - https://public-en.node.kaia.io
+    snapshotTypes:
+      - id: pruning
+        kind: full
+        label: Live-pruned chaindata
+        hint: "Official live-pruned snapshot (~2.3 TB download, ~2.8 TB on disk). Only flavour published."
+        diskGiB: 2800
+        default: true
+  - id: kairos
+    label: Kaia Kairos Testnet
+    diskHintGiB: 1536
+    fullNodeGiB: 815
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: required
+    tipLagBlocks: 6
+    publicTip:
+      urls:
+        - https://public-en-kairos.node.kaia.io
+    snapshotTypes:
+      - id: pruning
+        kind: full
+        label: Live-pruned chaindata
+        hint: "Official live-pruned snapshot (~650 GB download, ~815 GB on disk)."
+        diskGiB: 815
+        default: true
+
+# CLI flags live in the systemd unit (chains/kaia). Capacity literals mirror node.service.tmpl (defaults of the official kend.conf).
+clientConfig:
+  program: ken
+  format: flags
+  bindings:
+    - key: snapshot
+      source: install_option
+      option: snapshot
+      default: "pruning"
+      description: Official chaindata flavour (live-pruned)
+    - key: datadir
+      source: disk_role_dir
+      role: chaindata
+      description: ken --datadir (Disks chaindata role)
+    - key: snapshots
+      source: disk_role_dir
+      role: snapshots
+      description: Snapshot workspace
+    - key: rpc-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port (--rpcport)
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: JSON-RPC WebSocket port (--wsport)
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: P2P port (--port, tcp + udp)
+    - key: subport
+      source: catalog_port
+      role: subport
+      description: Multichannel sub-port (--subport; ken default is port+1)
+    - key: prometheus-port
+      source: catalog_port
+      role: metrics
+      description: "Prometheus exporter port (--prometheusport), bound by ken on all interfaces: firewall it"
+    - key: rpc-api
+      source: literal
+      value: "klay,eth,net,web3"
+      description: --rpcapi / --wsapi (no debug, admin, personal, txpool, miner)
+    - key: rpc-concurrencylimit
+      source: literal
+      value: "3000"
+      description: --rpc.concurrencylimit
+    - key: rpc-timeouts
+      source: literal
+      value: "read 30 / write 30 / idle 120 / exec 30"
+      description: --rpcreadtimeout / --rpcwritetimeout / --rpcidletimeout / --rpcexecutiontimeout (seconds)
+    - key: maxconnections
+      source: literal
+      value: "10"
+      description: --maxconnections (kend.conf default for an Endpoint Node)
+    - key: txpool-slots
+      source: literal
+      value: "4096"
+      description: --txpool.exec-slots.all / nonexec-slots.all / exec-slots.account / nonexec-slots.account
+    - key: limit-nofile
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE
+
+diagnostics:
+  - id: path_mtu

@@ -1,0 +1,138 @@
+# Monad (chain id 143 mainnet / 10143 testnet). Client category-labs/monad + monad-bft: three processes (monad-node = consensus,
+# monad = execution, monad-rpc = JSON-RPC) around one TrieDB that lives on a RAW BLOCK DEVICE, not in a directory.
+# Public full node (permissionless: it follows upstream validators over secondary raptorcast). Snapshot required: a full node is
+# started from a TrieDB snapshot ("hard reset" procedure of the docs) — mainnet 8.7 GB, testnet 3.1 GB archive (2026-10-14).
+# Directory name is the network id. Ports live in clients.yml beside this file. Facts: docs.monad.xyz node-ops (2026-10-14).
+label: Monad
+# Shared libraries the unpacked monad binaries link against (Ubuntu 24.04 noble names); apt-installed by the host-deps step.
+hostPackages:
+  - libcrypto++8t64
+  - libbrotli1
+  - libgmp10
+  - libboost-context1.83.0
+  - libboost-stacktrace1.83.0
+  - libtbb12
+  - libzstd1
+  - liburing2
+  - libarchive13t64
+  - libssl3t64
+  - zstd
+  - curl
+diskRoles:
+  - id: state
+    label: MonadBFT state (ledger, wal, keys, config)
+    media: nvme
+diskNotes:
+  - "TrieDB is NOT a directory: it needs a dedicated NVMe partition (docs: 2 TB, PCIe Gen4 x4, 512-byte LBA) given as the 'TrieDB block device' option (use /dev/disk/by-partuuid/... or by-id). The toolkit never partitions or formats a drive: create the GPT partition yourself (parted mklabel gpt; mkpart triedb 0% 100%). It refuses a device that is mounted, has a filesystem / partition-table signature, or a sector size other than 512 — and then runs monad-mpt --create / --truncate / --create-empty on it during the Snapshot step, which ERASES the partition."
+  - "The state role (docs: 500 GB NVMe shared with the OS) holds the BFT ledger, WAL, identity keystores, node.toml, sockets and the snapshot staging files (8.7 GB mainnet, deleted after the import)."
+  - "Bare metal only (docs: cloud is not supported — virtualisation misses consensus deadlines). Ubuntu 24.04 x86_64, at least 16 logical CPUs (the units pin execution to CPUs 1-7, consensus to 8-11, RPC to 12-15, like the official units), Hyper-Threading OFF in the BIOS, 32 GB RAM or more, 100 Mbit/s for a full node."
+  - "Identity: keys are generated on the first Start under <state>/config/id-secp and id-bls; the password and a backup of both keys land in <node_dir>/.toolkit/ (0600) — copy them off the host, they are the node identity."
+  - "System tuning the units rely on (also done by the vendor package): sysctl net buffers /etc/sysctl.d/90-monad-network-buffer.conf and huge pages (4 x 1 GiB + 2048 x 2 MiB) by the rpcnode-monad-hugepages unit. Open ports: P2P tcp+udp, authenticated UDP (and direct UDP on testnet); the docs also advise dropping UDP packets shorter than 1400 bytes on the P2P port: iptables -I INPUT -p udp --dport <p2p port> -m length --length 0:1400 -j DROP."
+oneEnvPerHost: true
+envs:
+  - id: mainnet
+    label: Monad Mainnet
+    diskHintGiB: 500
+    fullNodeGiB: 500
+    cpuCores: 16
+    memoryGiB: 32
+    snapshot: required
+    tipLagBlocks: 20
+    publicTip:
+      urls:
+        - https://rpc.monad.xyz
+    snapshotTypes:
+      - id: full
+        kind: full
+        label: Monad Foundation TrieDB snapshot
+        hint: "Latest TrieDB snapshot of bucket.monadinfra.com (8.7 GB download on 2026-10-14), imported into the TrieDB device with monad-cli. Default."
+        diskGiB: 30
+        default: true
+  - id: testnet
+    label: Monad Testnet
+    diskHintGiB: 500
+    fullNodeGiB: 500
+    cpuCores: 16
+    memoryGiB: 32
+    snapshot: required
+    tipLagBlocks: 20
+    publicTip:
+      urls:
+        - https://testnet-rpc.monad.xyz
+    snapshotTypes:
+      - id: full
+        kind: full
+        label: Monad Foundation TrieDB snapshot
+        hint: "Latest TrieDB snapshot of bucket.monadinfra.com (3.1 GB download on 2026-10-14), imported into the TrieDB device with monad-cli. Default."
+        diskGiB: 15
+        default: true
+
+# The three units are written by chains/evmfamily MonadProfile = the packaged unit files of monad 0.16.4 / 0.16.3 (identical) with every
+# path moved under node_dir and the catalog ports. EvmCatalogTest compares the literals below with the rendered units. The vendor units
+# set no limit besides NOFILE / MEMLOCK; monad-rpc keeps its own defaults for batch / response / ws limits (its env names are
+# BATCH_REQUEST_LIMIT, MAX_RESPONSE_SIZE, WS_CONN_LIMIT, ... — not tuned, no documented production values).
+clientConfig:
+  program: monad
+  format: flags
+  bindings:
+    - key: snapshot
+      source: install_option
+      option: snapshot
+      default: "full"
+      description: TrieDB snapshot flavour (one is published)
+    - key: state
+      source: disk_role_dir
+      role: state
+      description: BFT ledger / WAL / keystores / node.toml / sockets (Disks state role)
+    - key: triedb-device
+      source: install_option
+      option: triedb_device
+      default: ""
+      description: TrieDB block device (raw NVMe partition), required — erased by the Snapshot step
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: monad-rpc --rpc-port (bound on 0.0.0.0, public RPC)
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: monad-rpc --ws-port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: node.toml bind port (tcp + udp) and the signed name record
+    - key: auth-udp-port
+      source: catalog_port
+      role: auth_udp
+      description: node.toml authenticated UDP port and the signed name record
+    - key: direct-udp-port
+      source: catalog_port
+      role: direct_udp
+      description: node.toml direct UDP port (testnet only; unused on mainnet)
+    - key: execution-cpus
+      source: literal
+      value: "1-7"
+      description: AllowedCPUs / CPUAffinity of monad (execution) — official unit
+    - key: consensus-cpus
+      source: literal
+      value: "8-11"
+      description: AllowedCPUs / CPUAffinity of monad-node (consensus) — official unit
+    - key: rpc-cpus
+      source: literal
+      value: "12-15"
+      description: AllowedCPUs / CPUAffinity of monad-rpc — official unit
+    - key: statesync-sq-thread-cpu
+      source: literal
+      value: "8"
+      description: "monad-node --statesync-sq-thread-cpu (official unit)"
+    - key: sq-thread-cpu
+      source: literal
+      value: "1"
+      description: "monad --sq_thread_cpu (official unit)"
+    - key: limit-nofile
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE (official units; LimitMEMLOCK=infinity too)
+
+diagnostics:
+  - id: path_mtu

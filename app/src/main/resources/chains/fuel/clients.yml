@@ -1,0 +1,52 @@
+# fuel-core from FuelLabs/fuel-core GitHub releases (tar.gz; no Docker, no fuelup).
+# VERIFIED 2026-10-14 (v0.48.3): fuel-core-0.48.3-x86_64-unknown-linux-gnu.tar.gz and ...-aarch64-unknown-linux-gnu.tar.gz; the tar holds
+# fuel-core, fuel-core-keygen and fuel-core-wasm-executor.wasm (Start puts them in bin/). Release rule (FuelClientReleaseResolver):
+# highest final v<number> release that has both Linux tarballs - by version, not date (v0.47.4 came after v0.48.0).
+# Chain config (--snapshot dir) = FuelLabs/chain-configuration, served by chain-config-assets.fuel.network (VERIFIED 200):
+# <ignition|ignition-test>/{metadata.json,chain_config.json,state_config.json,state_transition_bytecode.wasm}. Synced flat into the node
+# dir; Start copies them into <node_dir>/chain/ (the --snapshot dir).
+# Ports: +0 GraphQL (also /v1/health and /v1/metrics), +2 p2p; +7 stays free (gRPC --rpc-port must stay off).
+programs:
+  - env: mainnet
+    id: fuel-core
+    source: { type: github, repo: FuelLabs/fuel-core, tagPrefix: "v" }
+    artifacts:
+      - name: "fuel-core-linux-x86_64.tar.gz"
+        nameAarch64: "fuel-core-linux-aarch64.tar.gz"
+        urlTemplate: "https://github.com/FuelLabs/fuel-core/releases/download/{tag}/fuel-core-{version}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/FuelLabs/fuel-core/releases/download/{tag}/fuel-core-{version}-aarch64-unknown-linux-gnu.tar.gz"
+    configs:
+      - name: metadata.json
+        urlTemplate: "https://chain-config-assets.fuel.network/ignition/metadata.json"
+      - name: chain_config.json
+        urlTemplate: "https://chain-config-assets.fuel.network/ignition/chain_config.json"
+      - name: state_config.json
+        urlTemplate: "https://chain-config-assets.fuel.network/ignition/state_config.json"
+      - name: state_transition_bytecode.wasm
+        urlTemplate: "https://chain-config-assets.fuel.network/ignition/state_transition_bytecode.wasm"
+    requirements: { logFile: logs/fuel.log }
+    ports:
+      - { role: http, port: 41540, label: "GraphQL (/v1/graphql, /v1/health, /v1/metrics)", config: required }
+      - { role: p2p, port: 41542, label: "P2P (libp2p tcp)", config: required }
+  - env: testnet
+    id: fuel-core
+    source: { type: github, repo: FuelLabs/fuel-core, tagPrefix: "v" }
+    artifacts:
+      - name: "fuel-core-linux-x86_64.tar.gz"
+        nameAarch64: "fuel-core-linux-aarch64.tar.gz"
+        urlTemplate: "https://github.com/FuelLabs/fuel-core/releases/download/{tag}/fuel-core-{version}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/FuelLabs/fuel-core/releases/download/{tag}/fuel-core-{version}-aarch64-unknown-linux-gnu.tar.gz"
+    configs:
+      - name: metadata.json
+        urlTemplate: "https://chain-config-assets.fuel.network/ignition-test/metadata.json"
+      - name: chain_config.json
+        urlTemplate: "https://chain-config-assets.fuel.network/ignition-test/chain_config.json"
+      - name: state_config.json
+        urlTemplate: "https://chain-config-assets.fuel.network/ignition-test/state_config.json"
+      - name: state_transition_bytecode.wasm
+        urlTemplate: "https://chain-config-assets.fuel.network/ignition-test/state_transition_bytecode.wasm"
+    requirements: { logFile: logs/fuel.log }
+    ports:
+      - { role: http, port: 41550, label: "GraphQL (/v1/graphql, /v1/health, /v1/metrics)", config: required }
+      - { role: p2p, port: 41552, label: "P2P (libp2p tcp)", config: required }
+# No `snapshots:` - Fuel publishes no database snapshot (docs, chain-configuration README); the node syncs from genesis over P2P.

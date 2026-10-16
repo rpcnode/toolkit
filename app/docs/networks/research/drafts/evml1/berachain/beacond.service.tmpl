@@ -1,0 +1,21 @@
+# beacond (BeaconKit CL). config.toml / app.toml are the beacon-kit testing/networks/<chain id>/ files patched by beacond-setup.sh.tmpl
+# (ports, moniker, external_address, rpc-dial-url, jwt/kzg paths). CometBFT flag overrides are a possible alternative to the patch (INFERRED, see FAMILY.md).
+[Unit]
+Description={{description}}
+After=network-online.target {{reth_unit}}
+Wants=network-online.target {{reth_unit}}
+Requires={{reth_unit}}
+
+[Service]
+Type=simple
+ExecStart={{bin}} start --home {{home}}
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=300
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE=1048576
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,26 @@
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{node_dir}}
+Environment=CARDANO_NODE_SOCKET_PATH={{socket_path}}
+ExecStart={{exec_start}}
+Restart=on-failure
+RestartSec=15
+# A clean stop writes the ledger snapshot and the `clean` marker; SIGKILL forces a long revalidation on the next start.
+TimeoutStopSec={{stop_timeout}}
+KillMode=control-group
+KillSignal=SIGTERM
+FinalKillSignal=SIGKILL
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+IPAccounting=yes
+CPUAccounting=yes
+MemoryAccounting=yes
+LimitNOFILE={{nofile}}
+
+[Install]
+WantedBy=multi-user.target

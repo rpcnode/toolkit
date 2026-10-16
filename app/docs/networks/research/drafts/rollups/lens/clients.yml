@@ -1,0 +1,30 @@
+# Lens Chain: matterlabs/external-node image at the tag lens-protocol/lens-chain-node compose pins (v29.1.2, repo last pushed 2025-09-18).
+programs:
+  - env: mainnet
+    id: zksync_external_node
+    source: { type: pinned, version: "29.1.2", tag: "v29.1.2", label: "lens-protocol/lens-chain-node (mainnet-external-node.yml)" }
+    artifacts:
+      - name: "zksync-external-node-x86_64-linux.tar.gz"
+        nameAarch64: "zksync-external-node-aarch64-linux.tar.gz"
+        urlTemplate: "docker://matterlabs/external-node:{tag}"
+        urlTemplateAarch64: "docker://matterlabs/external-node:{tag}"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 41840, label: "HTTP JSON-RPC", config: required }
+      - { role: ws, port: 41841, label: "WebSocket JSON-RPC", config: required }
+      - { role: metrics, port: 41844, label: "Prometheus (127.0.0.1)", config: required }
+      - { role: health, port: 41845, label: "Healthcheck (127.0.0.1)", config: required }
+  - env: testnet
+    id: zksync_external_node
+    source: { type: pinned, version: "29.1.2", tag: "v29.1.2", label: "lens-protocol/lens-chain-node (testnet-external-node.yml)" }
+    artifacts:
+      - name: "zksync-external-node-x86_64-linux.tar.gz"
+        nameAarch64: "zksync-external-node-aarch64-linux.tar.gz"
+        urlTemplate: "docker://matterlabs/external-node:{tag}"
+        urlTemplateAarch64: "docker://matterlabs/external-node:{tag}"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 41850, label: "HTTP JSON-RPC", config: required }
+      - { role: ws, port: 41851, label: "WebSocket JSON-RPC", config: required }
+      - { role: metrics, port: 41854, label: "Prometheus (127.0.0.1)", config: required }
+      - { role: health, port: 41855, label: "Healthcheck (127.0.0.1)", config: required }

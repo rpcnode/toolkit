@@ -1,0 +1,61 @@
+#!/bin/bash
+# RpcNode Polkadot history indexer — the ExecStart of the processor and of the GraphQL API (`$1` = processor | api).
+# Waits until the prepare unit has finished (PostgreSQL role/database, Node.js, built project, schema), the processor also until
+# the node is synced, then replaces itself with the Node.js process so systemd tracks and signals the real process.
+# No secret on a command line or in a unit file: the database password is read from the 0600 file written by the prepare unit
+# and passed to the process in its environment.
+set -uo pipefail
+ROLE="${1:-}"
+READY={{ready_marker}}
+PWDIR={{pw_dir}}
+IDX={{idx_dir}}
+RPC_PORT={{rpc_port}}
+
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [history-$ROLE] $*"; }
+
+case "$ROLE" in
+  processor|api) ;;
+  *) log "usage: $0 processor|api"; exit 2 ;;
+esac
+
+n=0
+until [[ -f "$READY" && -s "$PWDIR/postgres_password" && -f "$PWDIR/pg.env" && -f "$IDX/squid/lib/main.js" ]]; do
+  (( n % 20 == 0 )) && log "waiting for the preparation (history-prepare unit: PostgreSQL, Node.js, build)"
+  n=$((n + 1)); sleep 15
+done
+# shellcheck disable=SC1091
+. "$PWDIR/pg.env"
+
+rpc() {
+  curl -fsS -m 10 -H 'Content-Type: application/json' \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"$1\",\"params\":[]}" "http://127.0.0.1:$RPC_PORT/" 2>/dev/null
+}
+
+# synced (not isSyncing) and past genesis: the processor reads the runtime metadata and the finalized head at start
+node_ready() {
+  local health header
+  health="$(rpc system_health)" || return 1
+  header="$(rpc chain_getHeader)" || return 1
+  grep -Eq '"isSyncing": ?false' <<<"$health" && grep -Eq '"number": ?"0x[0-9a-f]*[1-9a-f][0-9a-f]*"' <<<"$header"
+}
+
+if [[ "$ROLE" == processor ]]; then
+  n=0
+  until node_ready; do
+    (( n % 20 == 0 )) && log "waiting for the node on :$RPC_PORT to finish syncing"
+    n=$((n + 1)); sleep 30
+  done
+fi
+
+export PATH="$IDX/node/bin:$PATH"
+export DB_HOST=127.0.0.1 DB_PORT="$PG_PORT" DB_NAME="$PG_DB" DB_USER="$PG_ROLE"
+DB_PASS="$(cat "$PWDIR/postgres_password")"; export DB_PASS
+cd "$IDX/squid" || exit 1
+if [[ "$ROLE" == processor ]]; then
+{{processor_env}}
+  log "starting the processor against $NODE_RPC_URL (START_BLOCK=$START_BLOCK applies to a first run only)"
+  exec node lib/main.js
+fi
+{{api_env}}
+log "starting the GraphQL API on port $GQL_PORT (all interfaces: the server has no bind option; firewall it or put a rate-limiting proxy in front)"
+exec node_modules/.bin/squid-graphql-server {{api_args}}

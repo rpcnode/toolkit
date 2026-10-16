@@ -1,0 +1,34 @@
+#!/bin/bash
+# Prelude of every EVM-family scripted snapshot (chains/evmfamily EvmSnapshotScripts). The body of the network follows.
+# State protocol: {{state}} = {"phase","pct","detail","updated_at"} (+ "error"); marker {{marker}} = restore finished.
+set -uo pipefail
+export LC_ALL=C
+ROOT='{{root}}'
+MARKER='{{marker}}'
+STATE='{{state}}'
+LOG='{{log}}'
+UNITS='{{units}}'
+mkdir -p "$(dirname "$STATE")" "$(dirname "$LOG")" "$(dirname "$MARKER")"
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+# details are plain text: no quotes or newlines
+state() { printf '{"phase":"%s","pct":%s,"detail":"%s","updated_at":"%s"}\n' "$1" "$2" "$3" "$(now)" >"$STATE"; }
+fail() { printf '{"phase":"error","pct":0,"detail":"%s","error":"%s","updated_at":"%s"}\n' "$1" "$1" "$(now)" >"$STATE"; echo "Error: $1" | tee -a "$LOG"; exit 1; }
+trap 'echo "TERM - interrupted, not done" >>"$LOG"; exit 143' TERM
+if [ -f "$MARKER" ]; then state done 100 "Snapshot already restored"; exit 0; fi
+# nothing may write into the data directories while they are restored
+for u in $UNITS; do systemctl stop "$u" 2>/dev/null || true; done
+# download URL DEST LABEL: resumable curl; the state file shows bytes / total (total from HEAD, 0 when unknown)
+download() {
+  local url="$1" dest="$2" label="$3" total have pct cpid
+  total=$(curl -sIL --max-time 30 "$url" | tr -d '\r' | awk 'tolower($1)=="content-length:"{v=$2} END{print v+0}')
+  mkdir -p "$(dirname "$dest")"
+  curl -fL --retry 8 --retry-delay 5 --retry-all-errors -C - -o "$dest" "$url" >>"$LOG" 2>&1 &
+  cpid=$!
+  while kill -0 "$cpid" 2>/dev/null; do
+    have=$(stat -c %s "$dest" 2>/dev/null || echo 0)
+    if [ "$total" -gt 0 ]; then pct=$(( have * 100 / total )); else pct=0; fi
+    state download "$pct" "$label: $(( have / 1048576 )) of $(( total / 1048576 )) MiB"
+    sleep 5
+  done
+  wait "$cpid" || fail "$label download failed (see $LOG)"
+}

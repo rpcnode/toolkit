@@ -1,0 +1,48 @@
+[Unit]
+Description={{description}}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=HOME={{datadir}}
+# The Arbitrum One RPC URL usually carries a provider key: it is read from this 0600 file (NITRO_PARENT__CHAIN_CONNECTION_URL,
+# --conf.env-prefix below), never from argv or this unit.
+EnvironmentFile={{env_file}}
+ExecStart={{bin}} \
+  --conf.env-prefix=NITRO \
+  --chain.info-files={{chain_info}} \
+  --chain.name={{chain_name}} \
+  --http.addr=0.0.0.0 \
+  --http.port={{http_port}} \
+  --http.api={{http_api}} \
+  --http.vhosts=* \
+  --http.corsdomain=* \
+  --ws.addr=0.0.0.0 \
+  --ws.port={{ws_port}} \
+  --ws.api={{ws_api}} \
+  --ws.origins=* \
+  --metrics \
+  --metrics-server.addr=127.0.0.1 \
+  --metrics-server.port={{metrics_port}} \
+  --execution.forwarding-target={{forwarding_target}} \
+  --node.feed.input.url={{feed_url}} \
+  --node.da.anytrust.enable \
+  --node.da.anytrust.rest-aggregator.enable \
+  --node.da.anytrust.rest-aggregator.online-url-list={{das_url_list}} \
+  --rpc.max-batch-response-size={{rpc_max_batch_response_size}} \
+  --execution.rpc.filter-log-cache-size={{filter_log_cache_size}} \
+  --persistent.handles={{persistent_handles}} \
+  --persistent.chain={{datadir}} \
+  --validation.wasm.allowed-wasm-module-roots={{wasm_roots}}
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=infinity
+TimeoutStopSec=600
+StandardOutput=append:{{log_file}}
+StandardError=append:{{log_file}}
+LimitNOFILE={{limit_nofile}}
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,159 @@
+# X Layer (OKX) = OP Stack since the 2025-10 migration (Polygon CDK / cdk-erigon is gone): xlayer-reth (op-reth fork, EL) + op-node
+# (okx/optimism fork, CL). Same two-process shape as chains/optimism; NOT in the OP-family folder's catalog => decide there or here.
+# Container-only upstream (xlayer/xlayer-reth, xlayer/op-node on Docker Hub; GitHub releases carry no assets) -> `build:` like optimism.
+label: X Layer
+dataRoot: xlayer
+diskRoles:
+  - id: execution
+    label: xlayer-reth datadir
+    media: nvme
+  - id: consensus
+    label: op-node data
+    media: ssd
+  - id: snapshots
+    label: snapshots / additional
+    media: ssd
+diskNotes:
+  - "X Layer OP genesis is at L2 block 42,810,021 (rollup-mainnet.json). Older blocks are served by --rpc.legacy-url (OKX's legacy RPC) — the node proxies them, it does not hold them."
+  - "Snapshot (reth archive, static.okx.com) unpacks chaindata/static files directly into the datadir; mainnet ~150 GB, testnet ~76 GB (2026-10-09)."
+  - "op-node and xlayer-reth versions are a tested pair (xlayer-toolkit presets: xlayer-reth v0.0.6.3 + op-node v0.1.5.1 for mainnet). v0.0.7 is TESTNET-ONLY until OKX announces the mainnet hardfork."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: X Layer Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 500
+    archiveGiB: 1024
+    cpuCores: 8
+    memoryGiB: 32
+    snapshot: required
+    publicTip:
+      urls:
+        - https://rpc.xlayer.tech
+        - https://xlayerrpc.okx.com
+    snapshotTypes:
+      - id: archive
+        kind: archive
+        label: Archive (reth) · official OKX
+        hint: static.okx.com/cdn/chain/xlayer/snapshot/reth-mainnet-latest -> xlayer-mainnet-reth-<ts>.tar.gz (~150 GB).
+        diskGiB: 500
+        default: true
+    l1Parent:
+      rpc: https://ethereum-rpc.publicnode.com
+      beacon: https://ethereum-beacon-api.publicnode.com
+      pickHelp: |
+        X Layer posts to Ethereum mainnet. Click Public or pick an active Ethereum node (same-host uses 127.0.0.1).
+  - id: testnet
+    label: X Layer Testnet (Sepolia)
+    diskHintGiB: 512
+    fullNodeGiB: 256
+    archiveGiB: 512
+    cpuCores: 4
+    memoryGiB: 16
+    snapshot: required
+    publicTip:
+      urls:
+        - https://testrpc.xlayer.tech
+    snapshotTypes:
+      - id: archive
+        kind: archive
+        label: Archive (reth) · official OKX
+        hint: reth-testnet-latest -> xlayer-testnet-reth-<ts>.tar.gz (~76 GB). Genesis sync is not offered on testnet.
+        diskGiB: 256
+        default: true
+    l1Parent:
+      rpc: https://ethereum-sepolia-rpc.publicnode.com
+      beacon: https://ethereum-sepolia-beacon-api.publicnode.com
+      pickHelp: |
+        X Layer Testnet posts to Ethereum Sepolia.
+clientConfig:
+  program: xlayer-reth
+  format: flags
+  bindings:
+    - key: snapshot
+      source: install_option
+      option: snapshot
+      default: "archive"
+      description: archive = restore the official OKX reth snapshot
+    - key: datadir
+      source: disk_role_dir
+      role: execution
+      description: xlayer-reth --datadir
+    - key: cl-data
+      source: disk_role_dir
+      role: consensus
+      description: op-node data (peerstore, discovery, safedb)
+    - key: snapshots
+      source: disk_role_dir
+      role: snapshots
+      description: Snapshot workspace
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: --http.port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: --ws.port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: reth --port (EL P2P, trusted peers only)
+    - key: discv5-port
+      source: catalog_port
+      role: discv5
+      description: reth --discovery.v5.port (UDP; op-reth always binds discv5, upstream default would clash)
+    - key: engine-port
+      source: catalog_port
+      role: engine
+      description: --authrpc.port (127.0.0.1)
+    - key: metrics-port
+      source: catalog_port
+      role: metrics
+      description: reth --metrics (127.0.0.1)
+    - key: cl-rpc-port
+      source: catalog_port
+      role: cl_rpc
+      description: op-node --rpc.port (127.0.0.1)
+    - key: cl-p2p-port
+      source: catalog_port
+      role: cl_p2p
+      description: op-node --p2p.listen.tcp/udp
+    - key: cl-metrics-port
+      source: catalog_port
+      role: cl_metrics
+      description: op-node metrics (127.0.0.1)
+    - key: http-api
+      source: literal
+      value: "eth,net,web3,rpc"
+      description: --http.api / --ws.api (upstream script exposes debug,txpool,miner — removed for a public port)
+    - key: max-peers
+      source: literal
+      value: "10"
+      description: --max-outbound-peers / --max-inbound-peers (upstream)
+    - key: rpc-max-connections
+      source: literal
+      value: "3000"
+      description: --rpc.max-connections (reth default 500)
+    - key: rpc-max-response-size
+      source: literal
+      value: "64"
+      description: --rpc.max-response-size MB (reth default 160)
+    - key: LimitNOFILE
+      source: literal
+      value: "1048576"
+      description: systemd open-file limit
+    - key: l1-rpc
+      source: install_option
+      option: l1_rpc
+      default: ""
+      description: op-node --l1
+      testConnect: { kind: eth_rpc, label: Test connect, help: "Panel POSTs eth_blockNumber." }
+    - key: l1-beacon
+      source: install_option
+      option: l1_beacon
+      default: ""
+      description: op-node --l1.beacon
+      testConnect: { kind: beacon_genesis, label: Test connect, help: "Panel GETs {url}/eth/v1/beacon/genesis." }
+diagnostics:
+  - id: path_mtu

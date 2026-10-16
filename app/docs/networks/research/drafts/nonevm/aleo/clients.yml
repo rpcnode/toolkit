@@ -1,0 +1,33 @@
+# snarkOS (Aleo client node) from ProvableHQ/snarkOS GitHub releases.
+# VERIFIED 2026-10-13: v4.12.0 ships aleo-v4.12.0-x86_64-unknown-linux-gnu.zip (36.8 MB; one file inside: `snarkos`, 113 MB,
+# unzip -l), plus aarch64-apple-darwin and windows. NO linux-aarch64 asset on any release. The release workflow
+# (.github/workflows/release.yml) only runs on tags v*.*.* — it is the MAINNET line. Testnet is published as tags
+# testnet-v4.x.y (GitHub prereleases) with ZERO assets and is built against a different snarkVM (testnet-v4.12.0 carries the
+# testnet-only consensus V22 height 20,415,000, already passed): a mainnet binary cannot follow the testnet. So testnet is
+# compiled from the tag by `build:` (plain `cargo build --release`, snarkos.Dockerfile), like xrpld / op-reth.
+# One binary serves --network 0 (mainnet) / 1 (testnet) / 2 (canary); the resolver must pick the newest v* release that carries
+# the linux asset (v4.11.0 has windows+linux only — fine; always check for the asset name).
+programs:
+  - env: mainnet
+    id: snarkos
+    source: { type: github, repo: ProvableHQ/snarkOS, tagPrefix: "v" }
+    artifacts:
+      - name: "snarkos-linux-x86_64.zip"
+        urlTemplate: "https://github.com/ProvableHQ/snarkOS/releases/download/{tag}/aleo-{tag}-x86_64-unknown-linux-gnu.zip"
+    requirements: { logFile: logs/snarkos.log }
+    ports:
+      - { role: http, port: 41030, label: "REST API", config: required }
+      - { role: p2p, port: 41032, label: "P2P (node)", config: required }
+      - { role: metrics, port: 41034, label: "Prometheus (127.0.0.1)", config: required }
+  - env: testnet
+    id: snarkos
+    source: { type: github, repo: ProvableHQ/snarkOS, tagPrefix: "testnet-v", prerelease: true }
+    build: { dockerfile: snarkos.Dockerfile, outputs: [snarkos], platforms: [linux/amd64, linux/arm64] }
+    artifacts: []
+    requirements: { logFile: logs/snarkos.log }
+    ports:
+      - { role: http, port: 41040, label: "REST API", config: required }
+      - { role: p2p, port: 41042, label: "P2P (node)", config: required }
+      - { role: metrics, port: 41044, label: "Prometheus (127.0.0.1)", config: required }
+# No `snapshots:` — snarkOS prefetches blocks from https://cdn.provable.com/v0/blocks/<mainnet|testnet> by itself at start
+# (--cdn default; disabled by --nocdn/--dev/--prover). That is the bootstrap; no Aleo ledger archive is published.

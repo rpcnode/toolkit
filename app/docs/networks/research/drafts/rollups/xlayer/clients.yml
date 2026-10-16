@@ -1,0 +1,76 @@
+# X Layer: xlayer-reth (github okx/xlayer-reth, Rust 1.94, `just build-maxperf`) + op-node (github okx/optimism tag xlayer/vX.Y.Z; Go, same
+# build as chains/optimism/op-node.Dockerfile but the okx fork). Both are compiled by the panel's build fleet (`build:` Dockerfiles to write,
+# modelled on chains/optimism/*.Dockerfile; xlayer-reth ships DockerfileOp) - pinned pair from okx/xlayer-toolkit rpc-setup/presets/network-presets.env.
+# Docker Hub tags exist as well (xlayer/xlayer-reth:v0.0.6.3, xlayer/op-node:v0.1.5.1, amd64+arm64) -> registry-layer pack is the alternative.
+programs:
+  - env: mainnet
+    id: xlayer-reth
+    source: { type: pinned, version: "0.0.6.3", tag: "v0.0.6.3", label: "okx/xlayer-reth (xlayer-toolkit presets)" }
+    build: { dockerfile: xlayer-reth.Dockerfile, outputs: [xlayer-reth], platforms: [linux/amd64, linux/arm64] }
+    artifacts: []
+    configs:
+      - name: op-reth-config-mainnet.toml
+        urlTemplate: "https://raw.githubusercontent.com/okx/xlayer-toolkit/main/rpc-setup/presets/op-reth-config-mainnet.toml"
+    requirements: { logFile: logs/xlayer.log }
+    ports:
+      - { role: http, port: 42740, label: "xlayer-reth JSON-RPC", config: required }
+      - { role: ws, port: 42741, label: "xlayer-reth WebSocket", config: required }
+      - { role: p2p, port: 42742, label: "xlayer-reth P2P", config: required, protocol: both }
+      - { role: engine, port: 42743, label: "Engine API (127.0.0.1)", config: required }
+      - { role: metrics, port: 42744, label: "xlayer-reth metrics (127.0.0.1)", config: required }
+      - { role: discv5, port: 42748, label: "xlayer-reth discv5 (UDP)", config: required, protocol: udp }
+  - env: mainnet
+    id: op-node
+    source: { type: pinned, version: "0.1.5.1", tag: "xlayer/v0.1.5.1", label: "okx/optimism (xlayer-toolkit presets)" }
+    build: { dockerfile: xlayer-op-node.Dockerfile, outputs: [op-node], platforms: [linux/amd64, linux/arm64] }
+    artifacts: []
+    configs:
+      - name: rollup-mainnet.json
+        urlTemplate: "https://raw.githubusercontent.com/okx/xlayer-toolkit/main/rpc-setup/presets/rollup-mainnet.json"
+    requirements: { logFile: logs/xlayer.log }
+    ports:
+      - { role: cl_rpc, port: 42745, label: "op-node RPC (127.0.0.1)", config: required }
+      - { role: cl_p2p, port: 42746, label: "op-node P2P", config: required, protocol: both }
+      - { role: cl_metrics, port: 42747, label: "op-node metrics (127.0.0.1)", config: required }
+  - env: testnet
+    id: xlayer-reth
+    source: { type: pinned, version: "0.0.6.3", tag: "v0.0.6.3", label: "okx/xlayer-reth (xlayer-toolkit presets)" }
+    build: { dockerfile: xlayer-reth.Dockerfile, outputs: [xlayer-reth], platforms: [linux/amd64, linux/arm64] }
+    artifacts: []
+    configs:
+      - name: op-reth-config-testnet.toml
+        urlTemplate: "https://raw.githubusercontent.com/okx/xlayer-toolkit/main/rpc-setup/presets/op-reth-config-testnet.toml"
+    requirements: { logFile: logs/xlayer.log }
+    ports:
+      - { role: http, port: 42750, label: "xlayer-reth JSON-RPC", config: required }
+      - { role: ws, port: 42751, label: "xlayer-reth WebSocket", config: required }
+      - { role: p2p, port: 42752, label: "xlayer-reth P2P", config: required, protocol: both }
+      - { role: engine, port: 42753, label: "Engine API (127.0.0.1)", config: required }
+      - { role: metrics, port: 42754, label: "xlayer-reth metrics (127.0.0.1)", config: required }
+      - { role: discv5, port: 42758, label: "xlayer-reth discv5 (UDP)", config: required, protocol: udp }
+  - env: testnet
+    id: op-node
+    source: { type: pinned, version: "0.1.5.1", tag: "xlayer/v0.1.5.1", label: "okx/optimism (xlayer-toolkit presets)" }
+    build: { dockerfile: xlayer-op-node.Dockerfile, outputs: [op-node], platforms: [linux/amd64, linux/arm64] }
+    artifacts: []
+    configs:
+      - name: rollup-testnet.json
+        urlTemplate: "https://raw.githubusercontent.com/okx/xlayer-toolkit/main/rpc-setup/presets/rollup-testnet.json"
+    requirements: { logFile: logs/xlayer.log }
+    ports:
+      - { role: cl_rpc, port: 42755, label: "op-node RPC (127.0.0.1)", config: required }
+      - { role: cl_p2p, port: 42756, label: "op-node P2P", config: required, protocol: both }
+      - { role: cl_metrics, port: 42757, label: "op-node metrics (127.0.0.1)", config: required }
+
+# Official OKX snapshots: pointer file -> latest tarball name. discover: pointer (new: GET <mirror>/<pointer>, then <mirror>/<name>).
+snapshots:
+  mainnet:
+    archive:
+      mirror: "https://static.okx.com/cdn/chain/xlayer/snapshot/"
+      filename: reth-mainnet-latest
+      discover: pointer
+  testnet:
+    archive:
+      mirror: "https://static.okx.com/cdn/chain/xlayer/snapshot/"
+      filename: reth-testnet-latest
+      discover: pointer

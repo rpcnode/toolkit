@@ -1,0 +1,61 @@
+# Gnosis Chain: Nethermind (execution) from NethermindEth/nethermind GitHub releases + Lighthouse (consensus) from sigp/lighthouse.
+# VERIFIED 2026-10-13: nethermind 2.1.0 is the latest stable; assets are nethermind-<tag>-<8-char commit>-linux-x64.zip / -linux-arm64.zip
+# (the commit hash is not derivable from the tag -> urlTemplate "github-asset:<glob>" is resolved from the release's asset list, see FAMILY.md).
+# The zip is the whole app (nethermind, Nethermind.Runner, dlls, configs/gnosis.json, configs/chiado.json, plugins/, NLog.config): extract everything into <node_dir>/bin.
+# Lighthouse: same release assets as chains/ethereum (v8.2.3 latest stable). Gnosis/Chiado are built in (--network gnosis|chiado).
+# Ports come from specs/PORTS.md (gnosis base 41570): mainnet 41570-41579, chiado 41580-41589.
+programs:
+  - env: mainnet
+    id: nethermind
+    source: { type: github, repo: NethermindEth/nethermind }
+    artifacts:
+      - name: "nethermind-linux-x64.zip"
+        nameAarch64: "nethermind-linux-arm64.zip"
+        urlTemplate: "github-asset:nethermind-*-linux-x64.zip"
+        urlTemplateAarch64: "github-asset:nethermind-*-linux-arm64.zip"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 41570, label: "HTTP RPC", config: required }
+      - { role: ws, port: 41571, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 41572, label: "P2P", config: required, protocol: both }
+      - { role: engine, port: 41573, label: "Engine API", config: required }
+      - { role: metrics, port: 41574, label: "Metrics", config: required }
+      - { role: beacon, port: 41575, label: "Beacon HTTP", config: required }
+      - { role: consensus_p2p, port: 41576, label: "Consensus P2P", config: required, protocol: both }
+      - { role: consensus_quic, port: 41577, label: "Consensus QUIC", config: required, protocol: udp }
+      - { role: consensus_metrics, port: 41578, label: "Consensus metrics", config: required }
+  - env: mainnet
+    id: lighthouse
+    source: { type: github, repo: sigp/lighthouse }
+    artifacts:
+      - name: "lighthouse-x86_64.tar.gz"
+        nameAarch64: "lighthouse-aarch64.tar.gz"
+        urlTemplate: "https://github.com/sigp/lighthouse/releases/download/{tag}/lighthouse-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/sigp/lighthouse/releases/download/{tag}/lighthouse-{tag}-aarch64-unknown-linux-gnu.tar.gz"
+  - env: chiado
+    id: nethermind
+    source: { type: github, repo: NethermindEth/nethermind }
+    artifacts:
+      - name: "nethermind-linux-x64.zip"
+        nameAarch64: "nethermind-linux-arm64.zip"
+        urlTemplate: "github-asset:nethermind-*-linux-x64.zip"
+        urlTemplateAarch64: "github-asset:nethermind-*-linux-arm64.zip"
+    requirements: { logFile: logs/node.out }
+    ports:
+      - { role: http, port: 41580, label: "HTTP RPC", config: required }
+      - { role: ws, port: 41581, label: "WebSocket RPC", config: required }
+      - { role: p2p, port: 41582, label: "P2P", config: required, protocol: both }
+      - { role: engine, port: 41583, label: "Engine API", config: required }
+      - { role: metrics, port: 41584, label: "Metrics", config: required }
+      - { role: beacon, port: 41585, label: "Beacon HTTP", config: required }
+      - { role: consensus_p2p, port: 41586, label: "Consensus P2P", config: required, protocol: both }
+      - { role: consensus_quic, port: 41587, label: "Consensus QUIC", config: required, protocol: udp }
+      - { role: consensus_metrics, port: 41588, label: "Consensus metrics", config: required }
+  - env: chiado
+    id: lighthouse
+    source: { type: github, repo: sigp/lighthouse }
+    artifacts:
+      - name: "lighthouse-x86_64.tar.gz"
+        nameAarch64: "lighthouse-aarch64.tar.gz"
+        urlTemplate: "https://github.com/sigp/lighthouse/releases/download/{tag}/lighthouse-{tag}-x86_64-unknown-linux-gnu.tar.gz"
+        urlTemplateAarch64: "https://github.com/sigp/lighthouse/releases/download/{tag}/lighthouse-{tag}-aarch64-unknown-linux-gnu.tar.gz"

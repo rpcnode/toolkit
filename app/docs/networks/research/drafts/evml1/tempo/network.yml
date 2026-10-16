@@ -1,0 +1,115 @@
+# Tempo (Stripe/Paradigm payments L1, reth-based, chain id 4217) + Moderato testnet (42431). RPC node = `tempo node --follow`
+# (trustless follower: verifies consensus finalization certificates, re-executes every block; no validator keys, no Engine API, no CL companion).
+# Snapshot required — `tempo download --chain <net> --archive|--full|--minimal` restores execution + consensus data together (docs: keep them in lockstep).
+# Sizing: docs system-requirements (RPC node min 16 cores / 32 GB / 1000 GB NVMe, recommended 32 / 64 / 2000 GB) VERIFIED; snapshot sizes from the
+# manifests on https://tempo-node-snapshots.tempoxyz.dev (2026-10-13): mainnet archive 19.7 GB download / 54 GB on disk; moderato archive 472 GB / 1116 GB.
+label: Tempo
+diskRoles:
+  - id: data
+    label: Execution + consensus data
+    media: nvme
+diskNotes:
+  - "tempo --datadir is the data role leaf; consensus state sits in <datadir>/consensus (same volume; docs: restore both from ONE snapshot)."
+  - "Tempo docs: network-attached volumes (EBS, PD, NAS) are NOT supported for execution state — local NVMe only. Also use chrony (not systemd-timesyncd): blocks with future timestamps are rejected."
+  - "BBR + fq sysctls are recommended by the docs (net.core.default_qdisc=fq, net.ipv4.tcp_congestion_control=bbr)."
+oneEnvPerHost: false
+envs:
+  - id: mainnet
+    label: Tempo Mainnet
+    diskHintGiB: 1024
+    fullNodeGiB: 128
+    archiveGiB: 256
+    cpuCores: 16
+    memoryGiB: 32
+    snapshot: required
+    tipLagBlocks: 10
+    publicTip:
+      urls:
+        - https://rpc.tempo.xyz
+    snapshotTypes:
+      - id: archive
+        kind: archive
+        label: Archive (all components)
+        hint: "tempo download --archive: ~20 GB download / ~54 GB on disk (mainnet, 2026-10). RPC providers and indexers. Default."
+        diskGiB: 128
+        default: true
+      - id: full
+        kind: full
+        label: Full node set
+        hint: "tempo download --full."
+        diskGiB: 128
+      - id: minimal
+        kind: pruned
+        label: Minimal (validators)
+        hint: "tempo download --minimal: ~10 GB; no old history, no historical RPC."
+        diskGiB: 64
+  - id: moderato
+    label: Tempo Moderato Testnet
+    diskHintGiB: 2048
+    fullNodeGiB: 1228
+    archiveGiB: 1228
+    cpuCores: 16
+    memoryGiB: 32
+    snapshot: required
+    tipLagBlocks: 10
+    publicTip:
+      urls:
+        - https://rpc.moderato.tempo.xyz
+    snapshotTypes:
+      - id: archive
+        kind: archive
+        label: Archive (all components)
+        hint: "~470 GB download / ~1.1 TB on disk (2026-10). Default."
+        diskGiB: 1228
+        default: true
+      - id: minimal
+        kind: pruned
+        label: Minimal
+        hint: "tempo download --minimal: ~100 GB."
+        diskGiB: 128
+
+# CLI flags live in the systemd unit (chains/tempo). Capacity literals mirror node.service.tmpl.
+clientConfig:
+  program: tempo
+  format: flags
+  bindings:
+    - key: snapshot
+      source: install_option
+      option: snapshot
+      default: "archive"
+      description: tempo download profile — archive, full or minimal
+    - key: datadir
+      source: disk_role_dir
+      role: data
+      description: tempo --datadir (Disks data role)
+    - key: http-port
+      source: catalog_port
+      role: http
+      description: JSON-RPC HTTP port
+    - key: ws-port
+      source: catalog_port
+      role: ws
+      description: JSON-RPC WebSocket port
+    - key: p2p-port
+      source: catalog_port
+      role: p2p
+      description: Execution P2P port (tcp + udp)
+    - key: metrics-port
+      source: catalog_port
+      role: metrics
+      description: Prometheus port (--metrics <PORT>)
+    - key: http-api
+      source: literal
+      value: "eth,net,web3"
+      description: "--http.api / --ws.api (docs example adds txpool,trace: keep those private)"
+    - key: rpc-max-connections
+      source: literal
+      value: "3000"
+      description: --rpc.max-connections (reth flag; default 500). INFERRED to exist in tempo's CLI
+    - key: limit-nofile
+      source: literal
+      value: "1048576"
+      description: systemd LimitNOFILE (docs example uses infinity)
+
+diagnostics:
+  - id: path_mtu

@@ -1,0 +1,49 @@
+# aptos-node (public fullnode) from aptos-labs/aptos-core GitHub releases (no Docker). x86_64 only: the release
+# ships ubuntu-22.04 / ubuntu-24.04 tarballs and NO aarch64 build (verified 2026-10-13), so there is no *Aarch64 field.
+# Tag prefix `aptos-node-v` separates node releases from `aptos-cli-v*` in the same repo (AptosClientReleaseResolver):
+#   mainnet = newest stable tag (the `-rc` / `-hotfix-rc` tags are the testnet candidates), testnet = newest tag of any kind.
+# The tarball is flat: a single 1.9 GB `aptos-node` binary at the archive root (390 MB gz).
+# genesis.blob + waypoint.txt come from aptos-labs/aptos-networks (testnet = `testnet-v2/`, Testnet V2 since 2026-10-06;
+# `testnet/` is a symlink that raw.githubusercontent.com does not resolve, and `testnet-v1/` is the dead old chain).
+# fullnode.yaml is generated on Start under node_dir.
+# Ports (central plan 41060-41089): http = REST API (also the height source), p2p = public network (tcp),
+# metrics = inspection service (127.0.0.1), admin = admin service (binds even when disabled; 127.0.0.1),
+# backup = storage backup service (127.0.0.1). admin/backup are catalog-reserved so the unit's loopback binds never clash;
+# they are `config: required` so Start previews them; the starter writes all five ports into fullnode.yaml.
+programs:
+  - env: mainnet
+    id: aptos-node
+    source: { type: github, repo: aptos-labs/aptos-core, tagPrefix: "aptos-node-v" }
+    artifacts:
+      - name: "aptos-node-performance-ubuntu-22.04.tgz"
+        urlTemplate: "https://github.com/aptos-labs/aptos-core/releases/download/{tag}/aptos-node-performance-ubuntu-22.04.tgz"
+    configs:
+      - name: genesis.blob
+        urlTemplate: "https://raw.githubusercontent.com/aptos-labs/aptos-networks/main/mainnet/genesis.blob"
+      - name: waypoint.txt
+        urlTemplate: "https://raw.githubusercontent.com/aptos-labs/aptos-networks/main/mainnet/waypoint.txt"
+    requirements: { logFile: logs/aptos.log }
+    ports:
+      - { role: http, port: 41060, label: "REST API", config: required }
+      - { role: p2p, port: 41062, label: "Public network P2P", config: required }
+      - { role: metrics, port: 41064, label: "Inspection service (metrics)", config: required }
+      - { role: admin, port: 41067, label: "Admin service (loopback, disabled)", config: required }
+      - { role: backup, port: 41068, label: "Backup service (loopback)", config: required }
+  - env: testnet
+    id: aptos-node
+    source: { type: github, repo: aptos-labs/aptos-core, tagPrefix: "aptos-node-v", prerelease: true }
+    artifacts:
+      - name: "aptos-node-performance-ubuntu-22.04.tgz"
+        urlTemplate: "https://github.com/aptos-labs/aptos-core/releases/download/{tag}/aptos-node-performance-ubuntu-22.04.tgz"
+    configs:
+      - name: genesis.blob
+        urlTemplate: "https://raw.githubusercontent.com/aptos-labs/aptos-networks/main/testnet-v2/genesis.blob"
+      - name: waypoint.txt
+        urlTemplate: "https://raw.githubusercontent.com/aptos-labs/aptos-networks/main/testnet-v2/waypoint.txt"
+    requirements: { logFile: logs/aptos.log }
+    ports:
+      - { role: http, port: 41070, label: "REST API", config: required }
+      - { role: p2p, port: 41072, label: "Public network P2P", config: required }
+      - { role: metrics, port: 41074, label: "Inspection service (metrics)", config: required }
+      - { role: admin, port: 41077, label: "Admin service (loopback, disabled)", config: required }
+      - { role: backup, port: 41078, label: "Backup service (loopback)", config: required }

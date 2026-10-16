@@ -1,0 +1,31 @@
+# Sonic genesis import (the only way to bootstrap a Sonic node: there is no sync from block 0).
+# 1. download the dated genesis file behind latest-<net>-<flavour>.g (resumable) and check its md5
+# 2. sonictool genesis: writes <datadir>/chaindata + <datadir>/carmen (hours; ~75 % of RAM as GOMEMLIMIT, docs: 50 GiB on a 64 GB host)
+TOOL='{{sonictool}}'
+DATA='{{datadir}}'
+FILE='{{genesis_file}}'
+URL='{{genesis_url}}'
+MD5URL='{{genesis_md5_url}}'
+CACHE='{{cache_mb}}'
+MEM_KB=$(awk '/^MemTotal:/{print $2}' /proc/meminfo)
+GIB=$(( MEM_KB * 75 / 100 / 1048576 ))
+[ "$GIB" -lt 8 ] && GIB=8
+export GOMEMLIMIT="${GIB}GiB"
+[ -x "$TOOL" ] || fail "sonictool missing at $TOOL - sync the Sonic clients first"
+state download 0 "genesis file $(basename "$URL")"
+download "$URL" "$FILE" "genesis file"
+# the .md5 file lists the dated name, an empty line and the latest- alias: the first line is the sum
+EXPECT=$(curl -fsSL --retry 5 "$MD5URL" | awk 'NR==1{print $1}')
+GOT=$(md5sum "$FILE" | awk '{print $1}')
+[ -n "$EXPECT" ] && [ "$EXPECT" = "$GOT" ] || fail "genesis md5 mismatch ($GOT, expected $EXPECT)"
+state import 50 "sonictool genesis (hours; progress is not reported)"
+# sonictool refuses a datadir that already has chaindata AND carmen: a half-imported DB is unusable anyway
+rm -rf "$DATA/chaindata" "$DATA/carmen"
+mkdir -p "$DATA"
+"$TOOL" --datadir "$DATA" --cache "$CACHE" genesis "$FILE" 2>&1 | tee -a "$LOG"
+[ "${PIPESTATUS[0]}" -eq 0 ] || fail "sonictool genesis failed (see $LOG)"
+grep -q 'Successfully imported genesis file' "$LOG" || fail "sonictool did not report a successful import"
+grep -q 'stateRoot matches' "$LOG" || fail "sonictool state root check line missing"
+rm -f "$FILE"
+touch "$MARKER"
+state done 100 "Sonic genesis imported"

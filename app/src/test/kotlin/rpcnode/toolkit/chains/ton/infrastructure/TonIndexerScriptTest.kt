@@ -25,6 +25,7 @@ class TonIndexerScriptTest
         assertTrue(script.contains("HTTP_PORT=8082"))
         assertTrue(script.contains("API_PORT=8188"))
         assertTrue(script.contains("REDIS_PORT=16388"))
+        assertTrue(script.contains("CLUSTER_PORT=15433"))
         assertTrue(script.contains("IS_TESTNET=1"))
         assertTrue(script.contains("IDX='/data/ton-indexer'"))
         assertTrue(script.contains("BOOT_MARKER='/data/ton/.toolkit/bootstrap.done'"))
@@ -34,7 +35,7 @@ class TonIndexerScriptTest
     }
 
     @Test
-    fun uses_the_host_postgresql_without_docker_and_serves_the_api_on_all_interfaces()
+    fun old_layout_still_uses_the_host_postgresql_without_docker_and_serves_the_api_on_all_interfaces()
     {
         assertFalse(script.contains("docker", ignoreCase = true), "no Docker anywhere in the indexer")
         // an existing server is detected first; only then is one installed
@@ -78,13 +79,25 @@ class TonIndexerScriptTest
             assertTrue(hook.contains(unit), unit)
         }
         assertTrue(hook.contains("rm -rf /usr/bin/ton /usr/src/ton /usr/src/mytonctrl"))
+        // ton_http_api: its own virtualenv and key store, MyTonCtrl's pip packages (uninstalled while /usr/src/mytonctrl still exists)
+        assertTrue(hook.contains("rm -rf /opt/virtualenv/ton_http_api /tmp/tonlib_keystore"))
+        assertTrue(hook.contains("pip3 uninstall -y mytoncore mytonctrl mytoninstaller"))
+        assertTrue(hook.indexOf("pip3 uninstall") < hook.indexOf("rm -rf /usr/bin/ton /usr/src/ton /usr/src/mytonctrl"))
+        // the validator OS user owns the chain data: it goes only together with a wipe
+        val wipeBlock = hook.substring(hook.indexOf("if [[ \"\$WIPE\" == 1 ]]; then"), hook.indexOf("echo \"removed MyTonCtrl"))
+        assertTrue(wipeBlock.contains("userdel validator"))
+        assertEquals(1, Regex("userdel").findAll(hook).count(), "userdel appears once, inside the wipe block")
+        assertTrue(hook.contains("rpcnode-ton-hook-version: ${TonUnitBodies.REMOVE_HOOK_VERSION}\n"))
+        // the cluster branch of the new indexer layout
+        assertTrue(hook.contains("pg_dropcluster --stop"))
         assertTrue(hook.contains("if [[ -L /var/ton-work ]]; then rm -f /var/ton-work; fi"))
-        assertTrue(hook.contains("if [[ \"\$WIPE\" == 1 ]]; then rm -rf /root/.local/share/mytoncore"))
+        assertTrue(hook.contains("if [[ \"\$WIPE\" == 1 ]]; then\n    rm -rf /root/.local/share/mytoncore /root/.local/share/mytonctrl"), "user data only with a wipe")
         assertFalse(hook.contains("rm -rf /var/ton-work"), "the chain data is never deleted by the hook")
+        assertFalse(hook.contains("rm -rf /opt/virtualenv\n") || hook.contains("rm -rf /opt/virtualenv "), "only the ton_http_api virtualenv, never the shared directory")
         assertEquals(
-            3,
+            4,
             Regex("^\\s*remove_mytonctrl$", RegexOption.MULTILINE).findAll(hook).count(),
-            "MyTonCtrl is removed on every path out of the hook: no database, database unreachable, database dropped",
+            "MyTonCtrl is removed on every path out of the hook: no database, own cluster dropped, database unreachable, database dropped",
         )
         val file = Files.createTempFile("ton-hook", ".sh")
         try
@@ -147,7 +160,8 @@ class TonIndexerScriptTest
             assertEquals(ports.http, tonPorts.getValue(env)["http"], "$env http")
             assertEquals(ports.p2p, tonPorts.getValue(env)["p2p"], "$env p2p")
             assertEquals(ports.indexer, tonPorts.getValue(env)["indexer"], "$env indexer")
-            assertEquals(null, tonPorts.getValue(env)["indexer_db"], "$env: the database is the host's PostgreSQL, no catalog port")
+            assertEquals(ports.indexerPg, tonPorts.getValue(env)["indexer_pg"], "$env indexer_pg: the node's own PostgreSQL cluster")
+            assertEquals(null, tonPorts.getValue(env)["indexer_db"], "$env: no such role")
             assertEquals(ports.indexerRedis, tonPorts.getValue(env)["indexer_redis"], "$env indexer_redis")
             assertEquals(ports.publicApi, tonPorts.getValue(env)["rpc_public"], "$env rpc_public")
         }
